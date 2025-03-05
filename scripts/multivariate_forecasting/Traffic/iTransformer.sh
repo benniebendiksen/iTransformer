@@ -1,4 +1,14 @@
-export CUDA_VISIBLE_DEVICES=2
+source ~/.bashrc
+eval "$(conda shell.bash hook)"
+conda activate gpu_env_copy
+
+# Debugging: Print the active environment and Python path
+echo "Activated Conda environment: $(conda info --envs | grep \*)"
+echo "Python path: $(which python)"
+python -c "import sys; print('Python version:', sys.version)"
+python -c "import torch; print('Torch version:', torch.__version__)"
+python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available())"
+
 
 model_name=iTransformer
 
