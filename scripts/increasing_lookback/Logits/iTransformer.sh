@@ -54,7 +54,7 @@ python -u run.py \
   --patience 5 \
   --exp_name crypto \
   --target close \
-  --is_shorting 0 \
+  --is_shorting 1 \
   --precision_factor 2.0 \
   --auto_weight 1
 
