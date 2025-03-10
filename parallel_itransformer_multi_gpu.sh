@@ -44,9 +44,9 @@ run_benchmark_datasets() {
 
     echo "logits dataset completed"
 
+}
 
 
-# Function to run Crypto dataset on GPU 1
 run_logits_dataset() {
     # Set environment to use GPU 1
     export CUDA_VISIBLE_DEVICES=1
@@ -90,7 +90,6 @@ run_logits_dataset() {
     bash $MULTI_DIR/Weather/iTransformer.sh
 
     echo "All benchmark datasets completed"
-}
 }
 
 # Main execution based on SLURM array task ID

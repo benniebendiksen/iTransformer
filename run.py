@@ -87,6 +87,10 @@ if __name__ == '__main__':
     parser.add_argument('--use_norm', type=int, default=True, help='use norm and denorm')
     parser.add_argument('--partial_start_index', type=int, default=0, help='the start index of variates for partial training, '
                                                                            'you can select [partial_start_index, min(enc_in + partial_start_index, N)]')
+    parser.add_argument('--is_shorting', type=int, default=0,
+                        help='whether shorting is enabled (1 for true, 0 for false)')
+    parser.add_argument('--precision_factor', type=float, default=2.0, help='factor to adjust precision weighting')
+    parser.add_argument('--auto_weight', type=int, default=0, help='automatically adjust weighting if set to 1')
 
     args = parser.parse_args()
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
