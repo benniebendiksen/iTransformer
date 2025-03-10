@@ -94,7 +94,7 @@ run_logits_dataset() {
 if [ $SLURM_ARRAY_TASK_ID -eq 1 ]; then
     run_benchmark_datasets
 elif [ $SLURM_ARRAY_TASK_ID -eq 0 ]; then
-    run_crypto_dataset
+    run_logits_dataset
 else
     echo "Unknown task ID: $SLURM_ARRAY_TASK_ID"
     exit 1
