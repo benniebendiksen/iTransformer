@@ -32,7 +32,7 @@ model_name=iTransformer
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
-  --data_path btcusdc_pca_components_44_proper_split.csv \
+  --data_path btcusdc_pca_components_43.csv \
   --model_id crypto_96_4_noshort \
   --model $model_name \
   --data crypto \

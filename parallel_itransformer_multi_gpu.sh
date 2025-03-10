@@ -35,7 +35,7 @@ run_benchmark_datasets() {
     echo "============================================================"
 
     # Navigate to the project directory
-    cd /path/to/your/iTransformer  # REPLACE WITH YOUR ACTUAL PATH
+    cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
 
     # Define the multivariate forecasting directory
     MULTI_DIR="./scripts/multivariate_forecasting"
@@ -72,7 +72,7 @@ run_benchmark_datasets() {
 }
 
 # Function to run Crypto dataset on GPU 1
-run_crypto_dataset() {
+run_logits_dataset() {
     # Set environment to use GPU 1
     export CUDA_VISIBLE_DEVICES=1
 
@@ -81,11 +81,11 @@ run_crypto_dataset() {
     echo "============================================================"
 
     # Navigate to the project directory
-    cd /path/to/your/iTransformer  # REPLACE WITH YOUR ACTUAL PATH
+    cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
 
     # Run the BCEWithLogitsLoss model
     echo "Running logits dataset..."
-    bash ./scripts/increasing_lookback/Crypto/iTransformer.sh
+    bash ./scripts/increasing_lookback/Logits/iTransformer.sh
 
     echo "logits dataset completed"
 }
