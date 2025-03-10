@@ -28,10 +28,10 @@ echo "Using SLURM_ARRAY_TASK_ID: $SLURM_ARRAY_TASK_ID"
 # Function to run benchmark datasets on GPU 0
 run_benchmark_datasets() {
     # Set environment to use GPU 0
-    export CUDA_VISIBLE_DEVICES=1
+    export CUDA_VISIBLE_DEVICES=0
 
     echo "============================================================"
-    echo "Running benchmark datasets on GPU 1"
+    echo "Running benchmark datasets on GPU 0"
     echo "============================================================"
 
     # Navigate to the project directory
@@ -73,11 +73,11 @@ run_benchmark_datasets() {
 
 # Function to run Crypto dataset on GPU 1
 run_logits_dataset() {
-    # Set environment to use GPU 0
-    export CUDA_VISIBLE_DEVICES=0
+    # Set environment to use GPU 1
+    export CUDA_VISIBLE_DEVICES=1
 
     echo "============================================================"
-    echo "Running logits dataset on GPU 0"
+    echo "Running logits dataset on GPU 1"
     echo "============================================================"
 
     # Navigate to the project directory
@@ -91,9 +91,9 @@ run_logits_dataset() {
 }
 
 # Main execution based on SLURM array task ID
-if [ $SLURM_ARRAY_TASK_ID -eq 1 ]; then
+if [ $SLURM_ARRAY_TASK_ID -eq 0 ]; then
     run_benchmark_datasets
-elif [ $SLURM_ARRAY_TASK_ID -eq 0 ]; then
+elif [ $SLURM_ARRAY_TASK_ID -eq 1 ]; then
     run_logits_dataset
 else
     echo "Unknown task ID: $SLURM_ARRAY_TASK_ID"
