@@ -34,6 +34,27 @@ run_benchmark_datasets() {
     echo "Running benchmark datasets on GPU 0"
     echo "============================================================"
 
+
+    # Navigate to the project directory
+    cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
+
+    # Run the BCEWithLogitsLoss model
+    echo "Running logits dataset..."
+    bash ./scripts/increasing_lookback/Logits/iTransformer.sh
+
+    echo "logits dataset completed"
+
+
+
+# Function to run Crypto dataset on GPU 1
+run_logits_dataset() {
+    # Set environment to use GPU 1
+    export CUDA_VISIBLE_DEVICES=1
+
+    echo "============================================================"
+    echo "Running logits dataset on GPU 1"
+    echo "============================================================"
+
     # Navigate to the project directory
     cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
 
@@ -70,24 +91,6 @@ run_benchmark_datasets() {
 
     echo "All benchmark datasets completed"
 }
-
-# Function to run Crypto dataset on GPU 1
-run_logits_dataset() {
-    # Set environment to use GPU 1
-    export CUDA_VISIBLE_DEVICES=1
-
-    echo "============================================================"
-    echo "Running logits dataset on GPU 1"
-    echo "============================================================"
-
-    # Navigate to the project directory
-    cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
-
-    # Run the BCEWithLogitsLoss model
-    echo "Running logits dataset..."
-    bash ./scripts/increasing_lookback/Logits/iTransformer.sh
-
-    echo "logits dataset completed"
 }
 
 # Main execution based on SLURM array task ID
