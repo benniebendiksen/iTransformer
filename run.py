@@ -1,6 +1,7 @@
 import argparse
 import torch
 from experiments.exp_long_term_forecasting import Exp_Long_Term_Forecast
+from experiments.exp_crypto_forecasting import Exp_Crypto_Forecast
 from experiments.exp_long_term_forecasting_partial import Exp_Long_Term_Forecast_Partial
 import random
 import numpy as np
@@ -76,7 +77,7 @@ if __name__ == '__main__':
 
     # iTransformer
     parser.add_argument('--exp_name', type=str, required=False, default='MTSF',
-                        help='experiemnt name, options:[MTSF, partial_train]')
+                        help='experiment name, options:[MTSF, partial_train, crypto]')
     parser.add_argument('--channel_independence', type=bool, default=False, help='whether to use channel_independence mechanism')
     parser.add_argument('--inverse', action='store_true', help='inverse output data', default=False)
     parser.add_argument('--class_strategy', type=str, default='projection', help='projection/average/cls_token')
@@ -99,9 +100,11 @@ if __name__ == '__main__':
     print('Args in experiment:')
     print(args)
 
-    if args.exp_name == 'partial_train': # See Figure 8 of our paper, for the detail
+    if args.exp_name == 'crypto':
+        Exp = Exp_Crypto_Forecast
+    elif args.exp_name == 'partial_train':
         Exp = Exp_Long_Term_Forecast_Partial
-    else: # MTSF: multivariate time series forecasting
+    else:  # MTSF: multivariate time series forecasting
         Exp = Exp_Long_Term_Forecast
 
 
