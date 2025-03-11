@@ -58,38 +58,45 @@ run_logits_dataset() {
     # Navigate to the project directory
     cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
 
-    # Define the multivariate forecasting directory
-    MULTI_DIR="./scripts/multivariate_forecasting"
+    # Run the BCEWithLogitsLoss model
+    echo "Running logits_2 dataset..."
+    bash ./scripts/increasing_lookback/Logits/iTransformer2.sh
 
-    # ECL dataset
-    echo "Running ECL dataset..."
-    bash $MULTI_DIR/ECL/iTransformer.sh
-
-    # ETT dataset
-    echo "Running ETT dataset..."
-    bash $MULTI_DIR/ETT/iTransformer.sh
-
-    # Exchange dataset
-    echo "Running Exchange dataset..."
-    bash $MULTI_DIR/Exchange/iTransformer.sh
-
-    # PEMS dataset
-    echo "Running PEMS dataset..."
-    bash $MULTI_DIR/PEMS/iTransformer.sh
-
-    # Solar Energy dataset
-    echo "Running Solar Energy dataset..."
-    bash $MULTI_DIR/SolarEnergy/iTransformer.sh
-
-    # Traffic dataset
-    echo "Running Traffic dataset..."
-    bash $MULTI_DIR/Traffic/iTransformer.sh
-
-    # Weather dataset
-    echo "Running Weather dataset..."
-    bash $MULTI_DIR/Weather/iTransformer.sh
-
-    echo "All benchmark datasets completed"
+#    # Navigate to the project directory
+#    cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
+#
+#    # Define the multivariate forecasting directory
+#    MULTI_DIR="./scripts/multivariate_forecasting"
+#
+#    # ECL dataset
+#    echo "Running ECL dataset..."
+#    bash $MULTI_DIR/ECL/iTransformer.sh
+#
+#    # ETT dataset
+#    echo "Running ETT dataset..."
+#    bash $MULTI_DIR/ETT/iTransformer.sh
+#
+#    # Exchange dataset
+#    echo "Running Exchange dataset..."
+#    bash $MULTI_DIR/Exchange/iTransformer.sh
+#
+#    # PEMS dataset
+#    echo "Running PEMS dataset..."
+#    bash $MULTI_DIR/PEMS/iTransformer.sh
+#
+#    # Solar Energy dataset
+#    echo "Running Solar Energy dataset..."
+#    bash $MULTI_DIR/SolarEnergy/iTransformer.sh
+#
+#    # Traffic dataset
+#    echo "Running Traffic dataset..."
+#    bash $MULTI_DIR/Traffic/iTransformer.sh
+#
+#    # Weather dataset
+#    echo "Running Weather dataset..."
+#    bash $MULTI_DIR/Weather/iTransformer.sh
+#
+#    echo "All benchmark datasets completed"
 }
 
 # Main execution based on SLURM array task ID

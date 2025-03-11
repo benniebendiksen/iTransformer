@@ -292,6 +292,7 @@ class Dataset_Crypto(Dataset):
                  target='close', scale=True, timeenc=0, freq='15min'):
         # size [seq_len, label_len, pred_len]
         # info
+        print(f"size is: {size}")
         if size == None:
             self.seq_len = 96  # 24 hours (96 * 15 min)
             self.label_len = 48

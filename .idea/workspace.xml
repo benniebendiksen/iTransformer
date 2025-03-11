@@ -5,8 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data_provider/data_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_provider/data_loader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/parallel_itransformer_multi_gpu.sh" beforeDir="false" afterPath="$PROJECT_DIR$/parallel_itransformer_multi_gpu.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/trading_loss.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/trading_loss.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -51,6 +55,7 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/dataset/logits" />
       <recent name="$PROJECT_DIR$/dataset/crypto" />
       <recent name="$PROJECT_DIR$/dataset" />
     </key>
@@ -78,7 +83,7 @@
       <workItem from="1741213045084" duration="777000" />
       <workItem from="1741388215351" duration="12799000" />
       <workItem from="1741451995893" duration="603000" />
-      <workItem from="1741535770777" duration="13721000" />
+      <workItem from="1741535770777" duration="16577000" />
     </task>
     <servers />
   </component>

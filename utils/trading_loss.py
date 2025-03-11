@@ -66,8 +66,8 @@ class TradingBCELoss(nn.Module):
         pos_weight = n_negatives / n_positives
 
         # Print class balance information periodically (every 100 batches)
-        if np.random.random() < 0.01:  # Print info for approximately 1% of batches
-            print(f"Class balance - Positives: {n_positives}, Negatives: {n_negatives}, Weight: {pos_weight:.4f}")
+        # if np.random.random() < 0.01:  # Print info for approximately 1% of batches
+        #     print(f"Class balance - Positives: {n_positives}, Negatives: {n_negatives}, Weight: {pos_weight:.4f}")
 
         return torch.tensor([pos_weight], device=targets.device)
 
