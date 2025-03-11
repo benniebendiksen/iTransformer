@@ -58,10 +58,6 @@ python -u run.py \
   --precision_factor 2.0 \
   --auto_weight 1
 
-if [ $? -ne 0 ]; then
-    echo "ERROR: Python command failed with exit code $?"
-    # Optionally exit or continue
-fi
 
 python -u run.py \
   --is_training 1 \
@@ -72,7 +68,7 @@ python -u run.py \
   --data crypto \
   --features MS \
   --seq_len 24 \
-  --label_len 166 \
+  --label_len 48 \
   --pred_len 1 \
   --e_layers 4 \
   --enc_in 166 \

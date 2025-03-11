@@ -287,20 +287,15 @@ class Dataset_Custom(Dataset):
 
 
 class Dataset_Crypto(Dataset):
-    def __init__(self, root_path, flag='train', size=None,
-                 features='MS', data_path='btcusdc_pca_components_44_proper_split.csv',
-                 target='close', scale=True, timeenc=0, freq='15min'):
+    def __init__(self, root_path, flag, size,
+                 features, data_path,
+                 target, scale, timeenc, freq):
         # size [seq_len, label_len, pred_len]
         # info
         print(f"size is: {size}")
-        if size == None:
-            self.seq_len = 96  # 24 hours (96 * 15 min)
-            self.label_len = 48
-            self.pred_len = 4  # Predict 4 steps ahead
-        else:
-            self.seq_len = size[0]
-            self.label_len = size[1]
-            self.pred_len = size[2]
+        self.seq_len = size[0]
+        self.label_len = size[1]
+        self.pred_len = size[2]
         # init
         assert flag in ['train', 'test', 'val']
         self.set_type = flag  # Instead of numeric mapping, use the string directly
@@ -318,6 +313,21 @@ class Dataset_Crypto(Dataset):
     def __read_data__(self):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
+
+        # Check if we need to use timestamp instead of date
+        date_col = 'date'
+        if 'timestamp' in df_raw.columns and 'date' not in df_raw.columns:
+            # Use timestamp as the date column
+            date_col = 'timestamp'
+            # Create a date column for compatibility by parsing the human-readable dates
+            try:
+                # For btcusdc_1d_historical.csv with human-readable dates like "2021-01-14"
+                df_raw['date'] = pd.to_datetime(df_raw[date_col])
+                print(f"Using 'timestamp' column with human-readable dates as date column")
+            except:
+                # Fallback - just copy the column
+                df_raw['date'] = df_raw[date_col]
+                print(f"Warning: Couldn't parse 'timestamp' column as datetime, using as-is")
 
         # Check if the dataset has a 'split' column (from proper PCA preprocessing)
         has_split_column = 'split' in df_raw.columns
@@ -378,11 +388,16 @@ class Dataset_Crypto(Dataset):
             current_price = close_prices[i]
             binary_labels[i, 0] = 1.0 if future_price > current_price else 0.0
 
-        # Feature columns (all PCA components, excluding date and close)
+        # Feature columns (all columns, excluding date/timestamp and target)
         if self.features == 'M' or self.features == 'MS':
             cols = list(df_raw.columns)
             cols.remove(self.target)
-            cols.remove('date')
+            # Remove both 'date' and 'timestamp' if they exist
+            if 'date' in cols:
+                cols.remove('date')
+            if 'timestamp' in cols:
+                cols.remove('timestamp')
+
             df_data = df_raw[cols]
             active_df_data = active_data[cols]
             train_df_data = train_data[cols]
@@ -408,7 +423,22 @@ class Dataset_Crypto(Dataset):
             # For traditional split method, get timestamps from the window
             df_stamp = df_raw[['date']][border1:border2]
 
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        # Handle different date formats (human-readable vs Unix timestamp)
+        try:
+            # Check if date is already a datetime (from timestamp column)
+            if pd.api.types.is_datetime64_any_dtype(df_stamp['date']):
+                pass  # Already in datetime format
+            else:
+                # Try parsing as integer/Unix timestamp first
+                df_stamp['date'] = pd.to_datetime(df_stamp['date'], unit='s', errors='raise')
+        except (ValueError, TypeError):
+            try:
+                # Fallback to string parsing for human-readable dates
+                df_stamp['date'] = pd.to_datetime(df_stamp['date'], errors='raise')
+            except Exception as e:
+                print(f"Warning: Failed to parse date column: {e}")
+                # Create dummy dates as last resort
+                df_stamp['date'] = pd.date_range(start='2020-01-01', periods=len(df_stamp), freq='D')
         if self.timeenc == 0:
             df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
@@ -434,6 +464,19 @@ class Dataset_Crypto(Dataset):
             self.data_y = binary_labels[border1:border2]
 
         self.data_stamp = data_stamp
+
+        # Print training set info
+        if self.set_type == 'train':
+            print(f"train {len(self.data_x)}\n")
+            pos_examples = np.sum(self.data_y == 1.0)
+            total_examples = len(self.data_y)
+            pos_percentage = pos_examples / total_examples * 100
+            print(f"Class distribution in training data:")
+            print(f"Positive examples (price increases): {pos_percentage:.2f}%")
+            print(f"Negative examples (price decreases or stays): {100 - pos_percentage:.2f}%")
+            print(f"Pos_weight for BCEWithLogitsLoss: {(total_examples - pos_examples) / pos_examples:.4f}")
+            if self.data_path.endswith('_historical.csv'):
+                print("Trading strategy: Shorting enabled")
 
     def __getitem__(self, index):
         # Your existing code to get sequences
