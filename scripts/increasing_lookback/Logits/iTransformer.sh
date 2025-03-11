@@ -60,7 +60,7 @@ python -u run.py \
 
  python -u run.py \
    --is_training 1 \
-   --root_path ./dataset/crypto/ \
+   --root_path ./dataset/logits/ \
    --data_path btcusdc_pca_components_1d_48.csv \
    --model_id crypto_96_4_short \
    --model $model_name \

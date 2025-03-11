@@ -61,7 +61,7 @@ python -u run.py \
 # Alternative configuration with shorting enabled
 python -u run.py \
    --is_training 1 \
-   --root_path ./dataset/crypto/ \
+   --root_path ./dataset/logits/ \
    --data_path btcusdc_pca_components_1h_52.csv \
    --model_id crypto_96_4_short \
    --model $model_name \
@@ -89,7 +89,7 @@ python -u run.py \
 
 python -u run.py \
    --is_training 1 \
-   --root_path ./dataset/crypto/ \
+   --root_path ./dataset/logits/ \
    --data_path btcusdc_pca_components_1h_53.csv \
    --model_id crypto_96_4_short \
    --model $model_name \
@@ -117,7 +117,7 @@ python -u run.py \
 
 python -u run.py \
    --is_training 1 \
-   --root_path ./dataset/crypto/ \
+   --root_path ./dataset/logits/ \
    --data_path btcusdc_pca_components_1h_53.csv \
    --model_id crypto_96_4_short \
    --model $model_name \
@@ -145,7 +145,7 @@ python -u run.py \
 
 python -u run.py \
    --is_training 1 \
-   --root_path ./dataset/crypto/ \
+   --root_path ./dataset/logits/ \
    --data_path btcusdc_1h_historical.csv \
    --model_id crypto_96_4_short \
    --model $model_name \
