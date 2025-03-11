@@ -143,15 +143,23 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+                # Skip empty batches
+                if batch_x.size(0) == 0:
+                    continue
+
+                # Move tensors to device
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
-                # decoder input
+                # Reshape batch_y to ensure it has 3 dimensions [batch, seq, feature]
+                if batch_y.dim() == 2:
+                    batch_y = batch_y.unsqueeze(-1)
+
+                # Now we can safely index with 3 dimensions
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
-
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
@@ -210,15 +218,22 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
 
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
-                iter_count += 1
-                model_optim.zero_grad()
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+                # Skip empty batches
+                if batch_x.size(0) == 0:
+                    continue
+
+                # Move tensors to device
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
-                # decoder input
+                # Reshape batch_y to ensure it has 3 dimensions [batch, seq, feature]
+                if batch_y.dim() == 2:
+                    batch_y = batch_y.unsqueeze(-1)
+
+                # Now we can safely index with 3 dimensions
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 

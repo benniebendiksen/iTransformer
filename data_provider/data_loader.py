@@ -436,39 +436,32 @@ class Dataset_Crypto(Dataset):
         self.data_stamp = data_stamp
 
     def __getitem__(self, index):
-        # Check bounds
-        if index + self.seq_len > len(self.data_x):
-            raise IndexError("Input sequence extends beyond available data")
-
+        # Your existing code to get sequences
         s_begin = index
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
         r_end = r_begin + self.label_len + self.pred_len
 
-        # Check if target sequence extends beyond data bounds
-        if r_end > len(self.data_y):
-            raise IndexError("Target sequence extends beyond available data")
-
-        # s_begin = index
-        # s_end = s_begin + self.seq_len
-        # r_begin = s_end - self.label_len
-        # r_end = r_begin + self.label_len + self.pred_len
-
+        # Get input sequence
         seq_x = self.data_x[s_begin:s_end]
 
-        # Create target sequence with the expected shape
+        # Get target sequence
         seq_y = np.zeros((self.label_len + self.pred_len, 1))
 
-        # Fill the label part (history) if available
+        # Fill history and prediction parts
         if r_begin >= 0:
             seq_y[:self.label_len, 0] = self.data_y[r_begin:r_begin + self.label_len, 0]
 
-        # Fill the prediction part with binary labels if available
         if r_begin + self.label_len < len(self.data_y):
             seq_y[self.label_len:, 0] = self.data_y[r_begin + self.label_len:r_end, 0]
 
+        # Get timestamp features
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        # Ensure seq_y is 2D [sequence_length, 1]
+        if len(seq_y.shape) == 1:
+            seq_y = seq_y.reshape(-1, 1)
 
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 

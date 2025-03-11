@@ -55,7 +55,6 @@ python -u run.py \
   --exp_name crypto \
   --target close \
   --is_shorting 1 \
-  --precision_factor 2.0 \
   --auto_weight 1
 
 # Alternative configuration with shorting enabled
@@ -67,7 +66,7 @@ python -u run.py \
    --model $model_name \
    --data crypto \
    --features MS \
-   --seq_len 96 \
+   --seq_len 24 \
    --label_len 48 \
    --pred_len 4 \
    --e_layers 4 \
@@ -95,7 +94,7 @@ python -u run.py \
    --model $model_name \
    --data crypto \
    --features MS \
-   --seq_len 96 \
+   --seq_len 12 \
    --label_len 48 \
    --pred_len 4 \
    --e_layers 4 \

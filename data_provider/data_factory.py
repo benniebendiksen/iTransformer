@@ -4,24 +4,43 @@ import torch
 from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_Pred, Dataset_PEMS, Dataset_Solar, Dataset_Crypto
 from torch.utils.data import DataLoader
 
+
 def custom_collate_fn(batch):
-    # Filter out any samples that don't have the right dimensions
+    # Filter out any problematic samples
     valid_samples = []
-
     for sample in batch:
-        try:
-            # Check if all tensors in the sample have proper dimensions
-            if all(isinstance(x, np.ndarray) and x.size > 0 for x in sample):
-                valid_samples.append(sample)
-        except:
-            continue
+        if all(isinstance(x, (np.ndarray, torch.Tensor)) and x.size > 0 for x in sample):
+            valid_samples.append(sample)
 
-    # If we have no valid samples, return empty batch with proper structure
+    # Return empty batch with correct shapes if no valid samples
     if len(valid_samples) == 0:
-        return (torch.Tensor(), torch.Tensor(), torch.Tensor(), torch.Tensor())
+        return (
+            torch.zeros((0, 24, 44)),  # Empty batch_x with correct features
+            torch.zeros((0, 49, 1)),  # Empty batch_y with correct shape
+            torch.zeros((0, 24, 4)),  # Empty batch_x_mark (typical 4 time features)
+            torch.zeros((0, 49, 4))  # Empty batch_y_mark
+        )
 
-    # Use default collate for valid samples
-    return torch.utils.data.dataloader.default_collate(valid_samples)
+    # Standardize dimensions
+    normalized_batch = []
+    for seq_x, seq_y, seq_x_mark, seq_y_mark in valid_samples:
+        # Convert to tensors
+        if isinstance(seq_x, np.ndarray):
+            seq_x = torch.from_numpy(seq_x).float()
+        if isinstance(seq_y, np.ndarray):
+            seq_y = torch.from_numpy(seq_y).float()
+        if isinstance(seq_x_mark, np.ndarray):
+            seq_x_mark = torch.from_numpy(seq_x_mark).float()
+        if isinstance(seq_y_mark, np.ndarray):
+            seq_y_mark = torch.from_numpy(seq_y_mark).float()
+
+        # Ensure correct dimensions
+        if seq_y.dim() == 1:
+            seq_y = seq_y.unsqueeze(-1)
+
+        normalized_batch.append((seq_x, seq_y, seq_x_mark, seq_y_mark))
+
+    return torch.utils.data.dataloader.default_collate(normalized_batch)
 
 
 data_dict = {
