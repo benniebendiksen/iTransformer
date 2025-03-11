@@ -32,7 +32,7 @@ model_name=iTransformer
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
-  --data_path btcusdc_pca_components_4h_46.csv \
+  --data_path btcusdc_4h_historical.csv \
   --model_id crypto_24_4_noshort \
   --model $model_name \
   --data crypto \
@@ -41,13 +41,42 @@ python -u run.py \
   --label_len 48 \
   --pred_len 1 \
   --e_layers 4 \
-  --enc_in 46 \
-  --dec_in 46 \
+  --enc_in 165 \
+  --dec_in 165 \
   --c_out 1 \
   --des 'Crypto' \
   --d_model 512 \
   --d_ff 512 \
-  --batch_size 16 \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 8 \
+  --exp_name crypto \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1
+
+python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/ \
+  --data_path btcusdc_4h_historical.csv \
+  --model_id crypto_24_4_noshort \
+  --model $model_name \
+  --data crypto \
+  --features MS \
+  --seq_len 24 \
+  --label_len 48 \
+  --pred_len 1 \
+  --e_layers 16 \
+  --enc_in 165 \
+  --dec_in 165 \
+  --c_out 1 \
+  --des 'Crypto' \
+  --d_model 512 \
+  --d_ff 512 \
+  --batch_size 32 \
   --learning_rate 0.001 \
   --itr 5 \
   --train_epochs 50 \
