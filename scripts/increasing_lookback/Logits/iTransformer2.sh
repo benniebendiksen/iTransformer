@@ -37,7 +37,7 @@ python -u run.py \
   --model $model_name \
   --data crypto \
   --features MS \
-  --seq_len 96 \
+  --seq_len 24 \
   --label_len 48 \
   --pred_len 4 \
   --e_layers 4 \
@@ -51,7 +51,7 @@ python -u run.py \
   --learning_rate 0.001 \
   --itr 5 \
   --train_epochs 50 \
-  --patience 15 \
+  --patience 5 \
   --exp_name crypto \
   --target close \
   --is_shorting 1 \
