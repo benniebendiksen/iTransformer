@@ -41,8 +41,8 @@ python -u run.py \
   --label_len 48 \
   --pred_len 4 \
   --e_layers 4 \
-  --enc_in 44 \
-  --dec_in 44 \
+  --enc_in 41 \
+  --dec_in 41 \
   --c_out 1 \
   --des 'Crypto' \
   --d_model 512 \
@@ -70,8 +70,8 @@ python -u run.py \
    --label_len 48 \
    --pred_len 4 \
    --e_layers 4 \
-   --enc_in 44 \
-   --dec_in 44 \
+   --enc_in 52 \
+   --dec_in 52 \
    --c_out 1 \
    --des 'Crypto' \
    --d_model 512 \
@@ -98,8 +98,8 @@ python -u run.py \
    --label_len 48 \
    --pred_len 4 \
    --e_layers 4 \
-   --enc_in 44 \
-   --dec_in 44 \
+   --enc_in 53 \
+   --dec_in 53 \
    --c_out 1 \
    --des 'Crypto' \
    --d_model 512 \
@@ -126,8 +126,8 @@ python -u run.py \
    --label_len 48 \
    --pred_len 4 \
    --e_layers 4 \
-   --enc_in 44 \
-   --dec_in 44 \
+   --enc_in 53 \
+   --dec_in 53 \
    --c_out 1 \
    --des 'Crypto' \
    --d_model 512 \
