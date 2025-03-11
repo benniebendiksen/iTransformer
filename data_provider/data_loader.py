@@ -318,6 +318,14 @@ class Dataset_Crypto(Dataset):
     def __read_data__(self):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
+        if 'timestamp' in df_raw.columns:
+            df_raw = df_raw.rename(columns={'timestamp': 'date'})
+
+            # Convert 'date' column to datetime
+            df_raw['date'] = pd.to_datetime(df_raw['date'], format='%m/%d/%Y')
+
+            # Convert to Unix timestamp
+            df_raw['date'] = df_raw['date'].apply(lambda x: int(x.timestamp()))
 
         # Check if the dataset has a 'split' column (from proper PCA preprocessing)
         has_split_column = 'split' in df_raw.columns
