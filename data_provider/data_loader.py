@@ -318,15 +318,37 @@ class Dataset_Crypto(Dataset):
     def __read_data__(self):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
-        if 'timestamp' in df_raw.columns:
+
+        # Handle timestamp vs date column naming
+        if 'timestamp' in df_raw.columns and 'date' not in df_raw.columns:
             print(f"converting col name timestamp to date")
             df_raw = df_raw.rename(columns={'timestamp': 'date'})
 
-            # Convert 'date' column to datetime
-            df_raw['date'] = pd.to_datetime(df_raw['date'], format='%m/%d/%Y')
+            # For btcusdc_1d_historical.csv, the format is YYYY-MM-DD
+            try:
+                # Try to parse as datetime - no format specified to allow multiple formats
+                df_raw['date'] = pd.to_datetime(df_raw['date'])
+                print(f"Successfully parsed human-readable dates in 'date' column")
+            except Exception as e:
+                print(f"Warning: Failed to parse dates: {e}")
 
-            # Convert to Unix timestamp
-            df_raw['date'] = df_raw['date'].apply(lambda x: int(x.timestamp()))
+        # Now ensure all dates are in the correct format for processing
+        if 'date' in df_raw.columns:
+            # Check if date is not already in timestamp format (numeric)
+            if not pd.api.types.is_numeric_dtype(df_raw['date']):
+                try:
+                    # Convert to datetime if not already
+                    if not pd.api.types.is_datetime64_any_dtype(df_raw['date']):
+                        df_raw['date'] = pd.to_datetime(df_raw['date'])
+
+                    # Store a copy of human-readable dates for debugging if needed
+                    df_raw['date_readable'] = df_raw['date'].dt.strftime('%Y-%m-%d')
+
+                    # Convert to Unix timestamp (seconds since epoch)
+                    df_raw['date'] = df_raw['date'].astype('int64') // 10 ** 9
+                    print(f"Converted dates to Unix timestamps")
+                except Exception as e:
+                    print(f"Warning: Error converting dates to timestamps: {e}")
 
         # Check if the dataset has a 'split' column (from proper PCA preprocessing)
         has_split_column = 'split' in df_raw.columns
@@ -387,11 +409,19 @@ class Dataset_Crypto(Dataset):
             current_price = close_prices[i]
             binary_labels[i, 0] = 1.0 if future_price > current_price else 0.0
 
-        # Feature columns (all PCA components, excluding date and close)
+        # Feature columns (excluding date and target)
         if self.features == 'M' or self.features == 'MS':
             cols = list(df_raw.columns)
-            cols.remove(self.target)
-            cols.remove('date')
+
+            # Remove target column
+            if self.target in cols:
+                cols.remove(self.target)
+
+            # Remove all date-related columns
+            for col in ['date', 'date_readable', 'timestamp', 'close_time']:
+                if col in cols:
+                    cols.remove(col)
+
             df_data = df_raw[cols]
             active_df_data = active_data[cols]
             train_df_data = train_data[cols]
@@ -417,18 +447,26 @@ class Dataset_Crypto(Dataset):
             # For traditional split method, get timestamps from the window
             df_stamp = df_raw[['date']][border1:border2]
 
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
-        if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
-            df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
-            data_stamp = df_stamp.drop(['date'], 1).values
-        elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
-            data_stamp = data_stamp.transpose(1, 0)
+        # Convert timestamps to datetime objects for feature extraction
+        try:
+            df_stamp['date'] = pd.to_datetime(df_stamp['date'], unit='s')
+
+            if self.timeenc == 0:
+                df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
+                df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
+                df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+                df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
+                df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
+                df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
+                data_stamp = df_stamp.drop(['date'], 1).values
+            elif self.timeenc == 1:
+                data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+                data_stamp = data_stamp.transpose(1, 0)
+
+        except Exception as e:
+            print(f"Warning: Error creating timestamp features: {e}")
+            # Create dummy time features as fallback
+            data_stamp = np.zeros((len(df_stamp), 5))  # 5 time features (month, day, weekday, hour, minute)
 
         # Store data for the relevant window
         if has_split_column:
@@ -443,6 +481,19 @@ class Dataset_Crypto(Dataset):
             self.data_y = binary_labels[border1:border2]
 
         self.data_stamp = data_stamp
+
+        # Print training data info
+        if self.set_type == 'train':
+            print(f"train {len(self.data_x)}")
+            if len(self.data_y) > 0:
+                pos_examples = np.sum(self.data_y == 1.0)
+                total_examples = len(self.data_y)
+                pos_percentage = pos_examples / total_examples * 100
+                print(f"Class distribution in training data:")
+                print(f"Positive examples (price increases): {pos_percentage:.2f}%")
+                print(f"Negative examples (price decreases or stays): {100 - pos_percentage:.2f}%")
+                print(f"Pos_weight for BCEWithLogitsLoss: {(total_examples - pos_examples) / pos_examples:.4f}")
+                print(f"Trading strategy: Shorting enabled")
 
     def __getitem__(self, index):
         # Your existing code to get sequences
