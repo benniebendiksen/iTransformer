@@ -33,11 +33,11 @@ python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
   --data_path btcusdc_1d_historical.csv \
-  --model_id crypto_96_4_noshort \
+  --model_id crypto_48_1_short \
   --model $model_name \
   --data crypto \
   --features MS \
-  --seq_len 24 \
+  --seq_len 48 \
   --label_len 166 \
   --pred_len 1 \
   --e_layers 4 \
@@ -62,11 +62,11 @@ python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
   --data_path btcusdc_1d_historical.csv \
-  --model_id crypto_96_4_noshort \
+  --model_id crypto_24_1_short \
   --model $model_name \
   --data crypto \
   --features MS \
-  --seq_len 12 \
+  --seq_len 24 \
   --label_len 166 \
   --pred_len 1 \
   --e_layers 4 \
