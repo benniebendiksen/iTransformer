@@ -319,6 +319,7 @@ class Dataset_Crypto(Dataset):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
         if 'timestamp' in df_raw.columns:
+            print(f"converting col name timestamp to date")
             df_raw = df_raw.rename(columns={'timestamp': 'date'})
 
             # Convert 'date' column to datetime
