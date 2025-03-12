@@ -32,17 +32,47 @@ model_name=iTransformer
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
-  --data_path btcusdc_pca_components_1h_41.csv \
-  --model_id crypto_96_4_noshort \
+  --data_path btcusdc_1d_historical.csv \
+  --model_id crypto_48_1_short \
+  --model $model_name \
+  --data crypto \
+  --features MS \
+  --seq_len 48 \
+  --label_len 48 \
+  --pred_len 1 \
+  --e_layers 4 \
+  --enc_in 166 \
+  --dec_in 166 \
+  --c_out 1 \
+  --des 'Crypto' \
+  --d_model 1024 \
+  --d_ff 1024 \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 5 \
+  --exp_name crypto \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1
+
+
+python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/ \
+  --data_path btcusdc_1d_historical.csv \
+  --model_id crypto_24_1_short \
   --model $model_name \
   --data crypto \
   --features MS \
   --seq_len 24 \
   --label_len 48 \
-  --pred_len 4 \
+  --pred_len 1 \
   --e_layers 4 \
-  --enc_in 41 \
-  --dec_in 41 \
+  --enc_in 166 \
+  --dec_in 166 \
   --c_out 1 \
   --des 'Crypto' \
   --d_model 512 \
@@ -55,107 +85,53 @@ python -u run.py \
   --exp_name crypto \
   --target close \
   --is_shorting 1 \
+  --precision_factor 2.0 \
   --auto_weight 1
 
-# Alternative configuration with shorting enabled
-python -u run.py \
-   --is_training 1 \
-   --root_path ./dataset/logits/ \
-   --data_path btcusdc_pca_components_1h_52.csv \
-   --model_id crypto_96_4_short \
-   --model $model_name \
-   --data crypto \
-   --features MS \
-   --seq_len 24 \
-   --label_len 48 \
-   --pred_len 4 \
-   --e_layers 4 \
-   --enc_in 52 \
-   --dec_in 52 \
-   --c_out 1 \
-   --des 'Crypto' \
-   --d_model 512 \
-   --d_ff 512 \
-   --batch_size 32 \
-   --learning_rate 0.001 \
-   --itr 5 \
-   --train_epochs 15 \
-   --patience 5 \
-   --exp_name crypto \
-   --target close \
-   --is_shorting 1 \
-   --auto_weight 1
 
 python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/ \
+  --data_path btcusdc_pca_components_1d_48.csv \
+  --model_id crypto_96_4_noshort \
+  --model $model_name \
+  --data crypto \
+  --features MS \
+  --seq_len 24 \
+  --label_len 48 \
+  --pred_len 1 \
+  --e_layers 4 \
+  --enc_in 48 \
+  --dec_in 48 \
+  --c_out 1 \
+  --des 'Crypto' \
+  --d_model 512 \
+  --d_ff 512 \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 5 \
+  --exp_name crypto \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1
+
+ python -u run.py \
    --is_training 1 \
    --root_path ./dataset/logits/ \
-   --data_path btcusdc_pca_components_1h_53.csv \
+   --data_path btcusdc_pca_components_1d_48.csv \
    --model_id crypto_96_4_short \
    --model $model_name \
    --data crypto \
    --features MS \
    --seq_len 12 \
    --label_len 48 \
-   --pred_len 4 \
+   --pred_len 1 \
    --e_layers 4 \
-   --enc_in 53 \
-   --dec_in 53 \
-   --c_out 1 \
-   --des 'Crypto' \
-   --d_model 512 \
-   --d_ff 512 \
-   --batch_size 32 \
-   --learning_rate 0.001 \
-   --itr 5 \
-   --train_epochs 15 \
-   --patience 5 \
-   --exp_name crypto \
-   --target close \
-   --is_shorting 1 \
-   --auto_weight 1
-
-python -u run.py \
-   --is_training 1 \
-   --root_path ./dataset/logits/ \
-   --data_path btcusdc_pca_components_1h_53.csv \
-   --model_id crypto_96_4_short \
-   --model $model_name \
-   --data crypto \
-   --features MS \
-   --seq_len 48 \
-   --label_len 48 \
-   --pred_len 4 \
-   --e_layers 4 \
-   --enc_in 53 \
-   --dec_in 53 \
-   --c_out 1 \
-   --des 'Crypto' \
-   --d_model 512 \
-   --d_ff 512 \
-   --batch_size 32 \
-   --learning_rate 0.001 \
-   --itr 5 \
-   --train_epochs 15 \
-   --patience 5 \
-   --exp_name crypto \
-   --target close \
-   --is_shorting 1 \
-   --auto_weight 1
-
-python -u run.py \
-   --is_training 1 \
-   --root_path ./dataset/logits/ \
-   --data_path btcusdc_1h_historical.csv \
-   --model_id crypto_96_4_short \
-   --model $model_name \
-   --data crypto \
-   --features MS \
-   --seq_len 48 \
-   --label_len 48 \
-   --pred_len 4 \
-   --e_layers 4 \
-   --enc_in 44 \
-   --dec_in 44 \
+   --enc_in 48 \
+   --dec_in 48 \
    --c_out 1 \
    --des 'Crypto' \
    --d_model 512 \
