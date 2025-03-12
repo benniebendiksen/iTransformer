@@ -324,33 +324,39 @@ class Dataset_Crypto(Dataset):
             print(f"converting col name timestamp to date")
             df_raw = df_raw.rename(columns={'timestamp': 'date'})
 
-            # For btcusdc_1d_historical.csv, the format is YYYY-MM-DD
+            # For btcusdc_1d_historical.csv, parse human-readable dates
             try:
-                # Try to parse as datetime - no format specified to allow multiple formats
                 df_raw['date'] = pd.to_datetime(df_raw['date'])
                 print(f"Successfully parsed human-readable dates in 'date' column")
             except Exception as e:
                 print(f"Warning: Failed to parse dates: {e}")
 
-        # Now ensure all dates are in the correct format for processing
+        # Convert dates to Unix timestamps if needed
         if 'date' in df_raw.columns:
-            # Check if date is not already in timestamp format (numeric)
             if not pd.api.types.is_numeric_dtype(df_raw['date']):
                 try:
-                    # Convert to datetime if not already
                     if not pd.api.types.is_datetime64_any_dtype(df_raw['date']):
                         df_raw['date'] = pd.to_datetime(df_raw['date'])
 
-                    # Store a copy of human-readable dates for debugging if needed
                     df_raw['date_readable'] = df_raw['date'].dt.strftime('%Y-%m-%d')
-
-                    # Convert to Unix timestamp (seconds since epoch)
                     df_raw['date'] = df_raw['date'].astype('int64') // 10 ** 9
                     print(f"Converted dates to Unix timestamps")
                 except Exception as e:
                     print(f"Warning: Error converting dates to timestamps: {e}")
 
-        # Check if the dataset has a 'split' column (from proper PCA preprocessing)
+        # Verify target column exists
+        if self.target not in df_raw.columns:
+            print(
+                f"Warning: Target column '{self.target}' not found. Available columns: {df_raw.columns.tolist()[:10]}")
+            # For historical dataset, look for a close-like column
+            possible_targets = ['close', 'Close', 'price', 'Price']
+            for col in possible_targets:
+                if col in df_raw.columns:
+                    print(f"Using '{col}' as target instead of '{self.target}'")
+                    self.target = col
+                    break
+
+        # Check if the dataset has a 'split' column
         has_split_column = 'split' in df_raw.columns
 
         # If using the new properly generated dataset with split column
@@ -409,35 +415,54 @@ class Dataset_Crypto(Dataset):
             current_price = close_prices[i]
             binary_labels[i, 0] = 1.0 if future_price > current_price else 0.0
 
-        # Feature columns (excluding date and target)
+        # IMPORTANT MODIFICATION: Ensure target column is at the end for MS mode
         if self.features == 'M' or self.features == 'MS':
+            # Get all columns except date and target
             cols = list(df_raw.columns)
 
-            # Remove target column
+            # Remove date-related columns
+            for col in ['date', 'date_readable', 'timestamp', 'close_time', 'split']:
+                if col in cols:
+                    try:
+                        cols.remove(col)
+                    except ValueError:
+                        pass  # Column not in list
+
+            # Remove target column from feature list
             if self.target in cols:
                 cols.remove(self.target)
 
-            # Remove all date-related columns
-            for col in ['date', 'date_readable', 'timestamp', 'close_time']:
-                if col in cols:
-                    cols.remove(col)
-
+            # Create feature dataframe WITHOUT target
             df_data = df_raw[cols]
             active_df_data = active_data[cols]
             train_df_data = train_data[cols]
+
+            # Now add target as the LAST column for MS mode
+            if self.features == 'MS':
+                print(f"Ensuring target column '{self.target}' is at the end for MS mode")
+                # We'll append the target after scaling below
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
             active_df_data = active_data[[self.target]]
             train_df_data = train_data[[self.target]]
 
-        # Scale the features
+        # Scale the features (without target)
         if self.scale:
-            # Always fit scaler on training data only
             self.scaler.fit(train_df_data.values)
-            # Transform all data
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
+
+        # For MS mode, now add the target column at the end
+        if self.features == 'MS':
+            # Get the target column data
+            target_data = df_raw[self.target].values.reshape(-1, 1)
+
+            # For visualization, print some stats about target
+            print(f"Target '{self.target}' stats - mean: {np.mean(target_data):.4f}, std: {np.std(target_data):.4f}")
+
+            # Append target to scaled features
+            data = np.concatenate([data, target_data], axis=1)
 
         # Create timestamp features
         if has_split_column:
@@ -471,7 +496,14 @@ class Dataset_Crypto(Dataset):
         # Store data for the relevant window
         if has_split_column:
             # For the new split method, extract from the active dataset
-            self.data_x = self.scaler.transform(active_df_data.values)
+            if self.features == 'MS':
+                # For MS mode, we need to handle the concatenated data
+                active_x = self.scaler.transform(active_df_data.values)
+                active_target = active_data[self.target].values.reshape(-1, 1)
+                self.data_x = np.concatenate([active_x, active_target], axis=1)
+            else:
+                self.data_x = self.scaler.transform(active_df_data.values)
+
             # Get corresponding binary labels for active dataset
             active_indices = active_data.index.tolist()
             self.data_y = binary_labels[active_indices]
