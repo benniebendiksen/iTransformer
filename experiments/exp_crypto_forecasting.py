@@ -145,6 +145,7 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
                 # Skip empty batches
                 if batch_x.size(0) == 0:
+                    print(f"Skipping empty validation batch {i}")
                     continue
 
                 # Move tensors to device
@@ -355,6 +356,11 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+
+                if batch_x.size(0) == 0:
+                    print(f"Skipping empty batch {i}")
+                    continue
+
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
                 batch_x_mark = batch_x_mark.float().to(self.device)

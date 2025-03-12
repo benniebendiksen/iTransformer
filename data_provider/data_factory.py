@@ -14,11 +14,16 @@ def custom_collate_fn(batch):
 
     # Return empty batch with correct shapes if no valid samples
     if len(valid_samples) == 0:
+        # Get expected dimensions from model parameters (these should match your model)
+        # You may need to adjust these based on your specific model configuration
+        seq_len = 24  # Adjust based on your config
+        feat_dim = 41  # Adjust based on your dataset
+        label_len = 48
         return (
-            torch.zeros((0, 24, 44)),  # Empty batch_x with correct features
-            torch.zeros((0, 49, 1)),  # Empty batch_y with correct shape
-            torch.zeros((0, 24, 4)),  # Empty batch_x_mark (typical 4 time features)
-            torch.zeros((0, 49, 4))  # Empty batch_y_mark
+            torch.zeros((0, seq_len, feat_dim), dtype=torch.float32),  # batch_x
+            torch.zeros((0, label_len + 1, 1), dtype=torch.float32),   # batch_y
+            torch.zeros((0, seq_len, 5), dtype=torch.float32),         # batch_x_mark (timestamp features)
+            torch.zeros((0, label_len + 1, 5), dtype=torch.float32)    # batch_y_mark
         )
 
     # Standardize dimensions

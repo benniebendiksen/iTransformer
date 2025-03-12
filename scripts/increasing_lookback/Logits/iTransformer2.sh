@@ -67,7 +67,7 @@ python -u run.py \
   --model $model_name \
   --data crypto \
   --features MS \
-  --seq_len 24 \
+  --seq_len 96 \
   --label_len 48 \
   --pred_len 1 \
   --e_layers 4 \
@@ -97,7 +97,7 @@ python -u run.py \
   --model $model_name \
   --data crypto \
   --features MS \
-  --seq_len 24 \
+  --seq_len 48 \
   --label_len 48 \
   --pred_len 1 \
   --e_layers 4 \
@@ -126,7 +126,7 @@ python -u run.py \
    --model $model_name \
    --data crypto \
    --features MS \
-   --seq_len 12 \
+   --seq_len 96 \
    --label_len 48 \
    --pred_len 1 \
    --e_layers 4 \

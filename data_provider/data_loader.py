@@ -359,12 +359,15 @@ class Dataset_Crypto(Dataset):
         # Check if the dataset has a 'split' column
         has_split_column = 'split' in df_raw.columns
 
-        # If using the new properly generated dataset with split column
+        # If using the pca dataset, itself generated with split column
         if has_split_column:
             # Use the split column to filter data
             train_data = df_raw[df_raw['split'] == 'train']
-            val_data = df_raw[df_raw['split'] == 'val']
-            test_data = df_raw[df_raw['split'] == 'test']
+
+            # For validation and test, use the same data (anything not marked as 'train')
+            eval_data = df_raw[df_raw['split'] != 'train']
+            val_data = eval_data
+            test_data = eval_data  # Make test identical to validation
 
             # Remove the split column before feature processing
             df_raw = df_raw.drop(columns=['split'])
@@ -375,35 +378,36 @@ class Dataset_Crypto(Dataset):
             # Set the appropriate dataset based on flag
             if self.set_type == 'train':
                 active_data = train_data
-            elif self.set_type == 'val':
-                active_data = val_data
-            else:  # 'test'
-                active_data = test_data
+            else:  # 'val' or 'test'
+                active_data = eval_data
 
             # Define borders
             border1 = 0
             border2 = len(active_data)
 
         else:
-            # Original split method from before (percentage-based)
-            # Split data into train, validation, test (70%, 10%, 20%)
-            num_train = int(len(df_raw) * 0.7)
-            num_test = int(len(df_raw) * 0.2)
-            num_vali = len(df_raw) - num_train - num_test
+            # For datasets without split column, we'll create a split with validation and test being identical
 
-            border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len]
-            border2s = [num_train, num_train + num_vali, len(df_raw)]
+            # Sort by date to ensure chronological order
+            if 'date' in df_raw.columns:
+                df_raw = df_raw.sort_values(by='date')
 
-            # Map set_type to numeric index for backward compatibility
-            type_map = {'train': 0, 'val': 1, 'test': 2}
-            set_type_idx = type_map[self.set_type]
+            # Use last 15% for both validation and testing, 85% for training
+            split_point = int(len(df_raw) * 0.85)
+            train_data = df_raw.iloc[:split_point]
+            eval_data = df_raw.iloc[split_point:]  # Both validation and test data
+            val_data = eval_data
+            test_data = eval_data
 
-            border1 = border1s[set_type_idx]
-            border2 = border2s[set_type_idx]
-
-            # For traditional split, active_data is the full dataset
-            active_data = df_raw
-            train_data = df_raw.iloc[:num_train]
+            # Set the appropriate dataset based on flag
+            if self.set_type == 'train':
+                active_data = train_data
+                border1 = 0
+                border2 = len(train_data)
+            else:  # 'val' or 'test'
+                active_data = eval_data
+                border1 = 0
+                border2 = len(eval_data)
 
         # Create binary labels for price change prediction
         # For each point, 1 if price 4 steps ahead > current price, 0 otherwise

@@ -5,7 +5,7 @@
 #SBATCH -p DGXA100
 #SBATCH -A pi_funda.durupinarbabur
 #SBATCH --qos=scavenger
-#SBATCH -w chimera12
+##SBATCH -w chimera12
 #SBATCH -n 2                       # Number of cores
 #SBATCH -N 1                       # Ensure all cores are on one machine
 #SBATCH --gres=gpu:2               # Request 2 GPUs
