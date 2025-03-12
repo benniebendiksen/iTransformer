@@ -447,10 +447,58 @@ class Dataset_Crypto(Dataset):
             active_df_data = active_data[[self.target]]
             train_df_data = train_data[[self.target]]
 
-        # Scale the features (without target)
+        # Before scaling, add checks and cleanups
+        # Check for NaN or infinite values in raw data
+        if np.isnan(df_data.values).any() or np.isinf(df_data.values).any():
+            print("WARNING: Raw data contains NaN or infinite values")
+            # Replace NaN/inf with zeros
+            df_data = df_data.fillna(0)
+            active_df_data = active_df_data.fillna(0)
+            train_df_data = train_df_data.fillna(0)
+
+        # Check for features with zero variance (will cause StandardScaler to produce NaNs)
+        data_var = np.var(train_df_data.values, axis=0)
+        zero_var_features = np.where(data_var == 0)[0]
+        if len(zero_var_features) > 0:
+            print(f"WARNING: Found {len(zero_var_features)} features with zero variance")
+            # Identify zero variance columns by name
+            zero_var_cols = [df_data.columns[i] for i in zero_var_features]
+            print(f"Zero variance columns: {zero_var_cols[:10]}..." if len(
+                zero_var_cols) > 10 else f"Zero variance columns: {zero_var_cols}")
+
+            # Drop zero variance columns
+            for col in zero_var_cols:
+                if col in df_data.columns:
+                    df_data = df_data.drop(columns=[col])
+                if col in active_df_data.columns:
+                    active_df_data = active_df_data.drop(columns=[col])
+                if col in train_df_data.columns:
+                    train_df_data = train_df_data.drop(columns=[col])
+
+            print(f"After dropping zero variance features, remaining features: {df_data.shape[1]}")
+
+        # Now try to scale with a more robust approach
+        print(f"self.scale is: {self.scale}")
         if self.scale:
-            self.scaler.fit(train_df_data.values)
-            data = self.scaler.transform(df_data.values)
+            try:
+                self.scaler = StandardScaler()
+                self.scaler.fit(train_df_data.values)
+                data = self.scaler.transform(df_data.values)
+
+                # Check for NaNs after scaling
+                if np.isnan(data).any():
+                    print("WARNING: StandardScaler produced NaN values, using manual scaling instead")
+                    # Manual scaling as fallback
+                    data_mean = np.nanmean(train_df_data.values, axis=0)
+                    data_std = np.nanstd(train_df_data.values, axis=0)
+                    # Handle zero std to avoid division by zero
+                    data_std[data_std == 0] = 1.0
+                    # Manual Z-score normalization
+                    data = (df_data.values - data_mean) / data_std
+            except Exception as e:
+                print(f"ERROR: Failed to scale features: {e}")
+                # Use raw data with simple normalization as last resort
+                data = df_data.values
         else:
             data = df_data.values
 
