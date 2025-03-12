@@ -196,6 +196,16 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
 
+        # Add these diagnostic lines
+        print(f"Training dataloader length: {len(train_loader)}")
+        if len(train_loader) == 0:
+            print("WARNING: Training dataloader is empty! Check your dataset and batch size.")
+            print(f"Dataset size: {len(train_data)}, Batch size: {self.args.batch_size}")
+
+        print(f"Validation dataloader length: {len(vali_loader)}")
+        if len(vali_loader) == 0:
+            print("WARNING: Validation dataloader is empty!")
+
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
             os.makedirs(path)
@@ -281,7 +291,7 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
                             batch_metrics['accuracy'] * 100,
                             batch_metrics['precision'] * 100,
                             batch_metrics['recall'] * 100))
-                    speed = (time.time() - time_now) / iter_count
+                    speed = (time.time() - time_now) / max(iter_count, 1)
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0

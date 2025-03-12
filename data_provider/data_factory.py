@@ -88,13 +88,22 @@ def data_provider(args, flag):
     )
     print(flag, len(data_set))
 
+    if len(data_set) < batch_size:
+        print(f"WARNING: Dataset size ({len(data_set)}) is smaller than batch size ({batch_size})!")
+        if len(data_set) > 0:
+            # Adjust batch size to match dataset size
+            print(f"Adjusting batch size from {batch_size} to {len(data_set)}")
+            batch_size = len(data_set)
+        else:
+            print(f"Dataset is empty! This will cause errors in training.")
+
     data_loader = DataLoader(
         data_set,
         batch_size=batch_size,
         shuffle=shuffle_flag,
         num_workers=args.num_workers,
         drop_last=drop_last,
-        collate_fn=custom_collate_fn  # Add this line
+        collate_fn=custom_collate_fn
     )
 
     # data_loader = DataLoader(
