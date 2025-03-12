@@ -454,28 +454,28 @@ class Dataset_Crypto(Dataset):
         else:
             data = df_data.values
 
+        # ADD FEATURE NORMALIZATION VERIFICATION HERE
+        # Verify scaled features are in a reasonable range
+        print(
+            f"Scaled features stats - min: {np.min(data):.4f}, max: {np.max(data):.4f}, mean: {np.mean(data):.4f}, std: {np.std(data):.4f}")
+
+        # Check for any extreme values that could cause issues
+        if np.max(np.abs(data)) > 100:
+            print("WARNING: Very large scaled feature values detected!")
+            # Clip extreme values
+            data = np.clip(data, -10, 10)
+            print(f"After clipping - min: {np.min(data):.4f}, max: {np.max(data):.4f}")
+
         # For MS mode, now add the target column at the end
-        # Modify the __read_data__ method around line 152-180 (the MS mode handling)
         if self.features == 'MS':
             # Get the target column data
             target_data = df_raw[self.target].values.reshape(-1, 1)
 
-            # Create a separate scaler for the target column
-            self.target_scaler = StandardScaler()
-            train_target = train_data[self.target].values.reshape(-1, 1)
-            self.target_scaler.fit(train_target)
+            # For visualization, print some stats about target
+            print(f"Target '{self.target}' stats - mean: {np.mean(target_data):.4f}, std: {np.std(target_data):.4f}")
 
-            # Scale the target data
-            scaled_target = self.target_scaler.transform(target_data)
-
-            # For visualization, print stats before and after scaling
-            print(
-                f"Target '{self.target}' original stats - mean: {np.mean(target_data):.4f}, std: {np.std(target_data):.4f}")
-            print(
-                f"Target '{self.target}' scaled stats - mean: {np.mean(scaled_target):.4f}, std: {np.std(scaled_target):.4f}")
-
-            # Append scaled target to scaled features
-            data = np.concatenate([data, scaled_target], axis=1)
+            # Append target to scaled features
+            data = np.concatenate([data, target_data], axis=1)
 
         # Create timestamp features
         if has_split_column:
@@ -567,6 +567,13 @@ class Dataset_Crypto(Dataset):
         # Ensure seq_y is 2D [sequence_length, 1]
         if len(seq_y.shape) == 1:
             seq_y = seq_y.reshape(-1, 1)
+
+        # Before returning data in __getitem__
+        if np.isnan(seq_x).any() or np.isnan(seq_y).any():
+            print(f"WARNING: NaN values detected in dataset at index {index}")
+            # Replace NaNs with zeros
+            seq_x = np.nan_to_num(seq_x, nan=0.0)
+            seq_y = np.nan_to_num(seq_y, nan=0.0)
 
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 
