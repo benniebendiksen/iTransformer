@@ -441,6 +441,7 @@ class Dataset_Crypto(Dataset):
             if self.features == 'MS':
                 print(f"Ensuring target column '{self.target}' is at the end for MS mode")
                 # We'll append the target after scaling below
+
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
             active_df_data = active_data[[self.target]]
@@ -454,15 +455,27 @@ class Dataset_Crypto(Dataset):
             data = df_data.values
 
         # For MS mode, now add the target column at the end
+        # Modify the __read_data__ method around line 152-180 (the MS mode handling)
         if self.features == 'MS':
             # Get the target column data
             target_data = df_raw[self.target].values.reshape(-1, 1)
 
-            # For visualization, print some stats about target
-            print(f"Target '{self.target}' stats - mean: {np.mean(target_data):.4f}, std: {np.std(target_data):.4f}")
+            # Create a separate scaler for the target column
+            self.target_scaler = StandardScaler()
+            train_target = train_data[self.target].values.reshape(-1, 1)
+            self.target_scaler.fit(train_target)
 
-            # Append target to scaled features
-            data = np.concatenate([data, target_data], axis=1)
+            # Scale the target data
+            scaled_target = self.target_scaler.transform(target_data)
+
+            # For visualization, print stats before and after scaling
+            print(
+                f"Target '{self.target}' original stats - mean: {np.mean(target_data):.4f}, std: {np.std(target_data):.4f}")
+            print(
+                f"Target '{self.target}' scaled stats - mean: {np.mean(scaled_target):.4f}, std: {np.std(scaled_target):.4f}")
+
+            # Append scaled target to scaled features
+            data = np.concatenate([data, scaled_target], axis=1)
 
         # Create timestamp features
         if has_split_column:
