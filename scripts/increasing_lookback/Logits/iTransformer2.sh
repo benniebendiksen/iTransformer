@@ -18,14 +18,14 @@ data_path="btcusdt_pca_components_6h_50.csv"
 seq_len=192
 pred_len=4
 enc_in=50
-d_model=512
+d_model=1024
 data_file=$(basename "$data_path" .csv)
 
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
   --data_path $data_path \
-  --model_id "${data_file}_${seq_len}_${pred_len}_${d_model}" \
+  --model_id "1_${data_file}_${seq_len}_${pred_len}_${d_model}" \
   --model $model_name \
   --data crypto \
   --features MS \
@@ -52,11 +52,13 @@ python -u run.py \
 
 # Second run
 seq_len=96
+pred_len = 2
+d_model=512
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
   --data_path $data_path \
-  --model_id "${data_file}_${seq_len}_${pred_len}_${d_model}" \
+  --model_id "2_${data_file}_${seq_len}_${pred_len}_${d_model}" \
   --model $model_name \
   --data crypto \
   --features MS \
@@ -82,13 +84,13 @@ python -u run.py \
   --auto_weight 1
 
 # Third run
-seq_len=192
-pred_len=2
+seq_len=96
+pred_len=1
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
   --data_path $data_path \
-  --model_id "${data_file}_${seq_len}_${pred_len}_${d_model}" \
+  --model_id "3_${data_file}_${seq_len}_${pred_len}_${d_model}" \
   --model $model_name \
   --data crypto \
   --features MS \
@@ -119,7 +121,7 @@ python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
   --data_path $data_path \
-  --model_id "${data_file}_${seq_len}_${pred_len}_${d_model}" \
+  --model_id "4_${data_file}_${seq_len}_${pred_len}_${d_model}" \
   --model $model_name \
   --data crypto \
   --features MS \

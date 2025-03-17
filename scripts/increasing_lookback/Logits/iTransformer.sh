@@ -51,8 +51,7 @@ python -u run.py \
   --auto_weight 1
 
 # second run
-seq_len=144
-
+seq_len=192
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
@@ -86,6 +85,7 @@ python -u run.py \
 data_path="btcusdt_pca_components_12h_47.csv"
 seq_len=96
 enc_in=47
+data_file=$(basename "$data_path" .csv)
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
