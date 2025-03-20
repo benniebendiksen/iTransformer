@@ -31,6 +31,252 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
         if self.args.is_training:
             self.calculate_class_distribution()
 
+    def analyze_recency_effect(self, setting, test=0):
+        """
+        Analyzes how model performance changes with temporal distance from validation set
+        using only print statements (no visualizations)
+        """
+        test_data, test_loader = self._get_data(flag='test')
+        if test:
+            print('loading model')
+            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+
+        # Storage for all predictions and ground truth
+        all_preds = []
+        all_trues = []
+
+        print("\n===== RECENCY EFFECT ANALYSIS =====")
+        print("Collecting test set predictions...")
+
+        self.model.eval()
+        with torch.no_grad():
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+                if batch_x.size(0) == 0:
+                    continue
+
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.float().to(self.device)
+                batch_x_mark = batch_x_mark.float().to(self.device)
+                batch_y_mark = batch_y_mark.float().to(self.device)
+
+                # decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+                # encoder - decoder
+                if self.args.output_attention:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                else:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                # Process outputs for binary classification
+                outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+
+                # Convert logits to probabilities with sigmoid
+                output_probs = torch.sigmoid(outputs_last).detach().cpu().numpy()
+
+                # Get binary predictions (threshold at 0.5)
+                output_binary = (output_probs > 0.5).astype(np.float32)
+
+                # Get true labels
+                true_labels = batch_y_last.detach().cpu().numpy()
+
+                # Store individual predictions
+                for idx in range(len(output_binary)):
+                    all_preds.append(output_binary[idx][0])  # Extract scalar value
+                    all_trues.append(true_labels[idx][0])  # Extract scalar value
+
+        # Convert to numpy arrays
+        all_preds = np.array(all_preds)
+        all_trues = np.array(all_trues)
+
+        # Verify we collected predictions for the whole test set
+        print(f"Collected {len(all_preds)} predictions from test set")
+
+        # Define percentile segments to analyze
+        percentiles = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+        # Create results table
+        print("\nRecency Effect Analysis - Increasing Percentiles from Validation Boundary:")
+        print("-" * 80)
+        print(
+            f"{'Percentile':^15} | {'Samples':^10} | {'Accuracy':^10} | {'Precision':^10} | {'Recall':^10} | {'F1':^10} | {'Win Rate':^10}")
+        print("-" * 80)
+
+        # Analyze each percentile segment
+        for p in percentiles:
+            # Calculate number of samples to include
+            n_samples = int(len(all_preds) * p)
+            if n_samples == 0:
+                continue
+
+            # Select earliest n_samples (closest to validation set)
+            segment_preds = all_preds[:n_samples]
+            segment_trues = all_trues[:n_samples]
+
+            # Calculate metrics
+            accuracy = accuracy_score(segment_trues, segment_preds)
+
+            # Handle cases where there might be only one class in predictions
+            try:
+                precision = precision_score(segment_trues, segment_preds)
+            except:
+                precision = 0.0
+
+            try:
+                recall = recall_score(segment_trues, segment_preds)
+            except:
+                recall = 0.0
+
+            try:
+                f1 = f1_score(segment_trues, segment_preds)
+            except:
+                f1 = 0.0
+
+            # Calculate trading metrics
+            if self.is_shorting:
+                # For shorting strategy: we profit from both correct predictions
+                correct_positives = np.logical_and(segment_preds == 1, segment_trues == 1)
+                correct_negatives = np.logical_and(segment_preds == 0, segment_trues == 0)
+
+                # Profit comes from correct predictions in both directions
+                profitable_trades = correct_positives.sum() + correct_negatives.sum()
+                total_trades = len(segment_preds)
+            else:
+                # For no-shorting strategy: we only profit from correct positive predictions
+                profitable_trades = np.logical_and(segment_preds == 1, segment_trues == 1).sum()
+                # We lose on false positives but not on true negatives or false negatives
+                unprofitable_trades = np.logical_and(segment_preds == 1, segment_trues == 0).sum()
+                total_trades = profitable_trades + unprofitable_trades
+
+            win_rate = profitable_trades / total_trades if total_trades > 0 else 0
+
+            # Print results for this segment
+            print(
+                f"{p * 100:^15.1f}% | {n_samples:^10d} | {accuracy * 100:^10.2f}% | {precision * 100:^10.2f}% | {recall * 100:^10.2f}% | {f1 * 100:^10.2f}% | {win_rate * 100:^10.2f}%")
+
+        # Equal segment analysis: split into equal-sized portions
+        print("\nEqual Segment Analysis (from validation boundary to test end):")
+        print("-" * 80)
+        print(
+            f"{'Segment':^15} | {'Samples':^10} | {'Accuracy':^10} | {'Precision':^10} | {'Recall':^10} | {'F1':^10} | {'Win Rate':^10}")
+        print("-" * 80)
+
+        # Define number of segments (e.g., quartiles)
+        num_segments = 4
+        total_samples = len(all_preds)
+        segment_size = total_samples // num_segments
+
+        for i in range(num_segments):
+            start_idx = i * segment_size
+            end_idx = (i + 1) * segment_size if i < num_segments - 1 else total_samples
+
+            segment_preds = all_preds[start_idx:end_idx]
+            segment_trues = all_trues[start_idx:end_idx]
+
+            # Skip empty segments
+            if len(segment_preds) == 0:
+                continue
+
+            # Calculate metrics
+            accuracy = accuracy_score(segment_trues, segment_preds)
+
+            # Handle cases where there might be only one class in predictions
+            try:
+                precision = precision_score(segment_trues, segment_preds)
+            except:
+                precision = 0.0
+
+            try:
+                recall = recall_score(segment_trues, segment_preds)
+            except:
+                recall = 0.0
+
+            try:
+                f1 = f1_score(segment_trues, segment_preds)
+            except:
+                f1 = 0.0
+
+            # Calculate trading metrics
+            if self.is_shorting:
+                # For shorting strategy: we profit from both correct predictions
+                correct_positives = np.logical_and(segment_preds == 1, segment_trues == 1)
+                correct_negatives = np.logical_and(segment_preds == 0, segment_trues == 0)
+
+                # Profit comes from correct predictions in both directions
+                profitable_trades = correct_positives.sum() + correct_negatives.sum()
+                total_trades = len(segment_preds)
+            else:
+                # For no-shorting strategy: we only profit from correct positive predictions
+                profitable_trades = np.logical_and(segment_preds == 1, segment_trues == 1).sum()
+                # We lose on false positives but not on true negatives or false negatives
+                unprofitable_trades = np.logical_and(segment_preds == 1, segment_trues == 0).sum()
+                total_trades = profitable_trades + unprofitable_trades
+
+            win_rate = profitable_trades / total_trades if total_trades > 0 else 0
+
+            # Print results for this segment
+            segment_name = f"{i + 1}/{num_segments}"
+            print(
+                f"{segment_name:^15} | {len(segment_preds):^10d} | {accuracy * 100:^10.2f}% | {precision * 100:^10.2f}% | {recall * 100:^10.2f}% | {f1 * 100:^10.2f}% | {win_rate * 100:^10.2f}%")
+
+        # Statistical analysis with minimal libraries
+        # Calculate correlation between position and correctness
+        positions = np.arange(len(all_preds))
+        correctness = (all_preds == all_trues).astype(int)
+
+        # Manual correlation calculation if scipy not available
+        try:
+            from scipy.stats import pearsonr
+            correlation, p_value = pearsonr(positions, correctness)
+            significance = "Significant" if p_value < 0.05 else "Not significant"
+
+            print("\nStatistical Analysis:")
+            print(f"Correlation between distance and accuracy: {correlation:.4f}")
+            print(f"P-value: {p_value:.6f} ({significance})")
+
+            if abs(correlation) < 0.1:
+                effect_strength = "No significant"
+            elif abs(correlation) < 0.3:
+                effect_strength = "Weak"
+            elif abs(correlation) < 0.5:
+                effect_strength = "Moderate"
+            else:
+                effect_strength = "Strong"
+
+            effect_direction = "positive" if correlation > 0 else "negative"
+
+            print(f"\nRECENCY EFFECT CONCLUSION: {effect_strength} {effect_direction} recency effect detected.")
+
+            if correlation < -0.1 and p_value < 0.05:
+                print("As predictions move further from the validation set, accuracy tends to DECREASE.")
+                print("This suggests your model is experiencing a recency effect.")
+            elif correlation > 0.1 and p_value < 0.05:
+                print("Interestingly, as predictions move further from the validation set, accuracy tends to INCREASE.")
+                print("This is unusual and suggests the model may be better at predicting later periods.")
+            else:
+                print("No significant recency effect detected. The model's performance is relatively")
+                print("consistent regardless of temporal distance from the validation set.")
+        except ImportError:
+            # Fallback to simple manual correlation
+            mean_pos = np.mean(positions)
+            mean_corr = np.mean(correctness)
+            numerator = np.sum((positions - mean_pos) * (correctness - mean_corr))
+            denominator = np.sqrt(np.sum((positions - mean_pos) ** 2) * np.sum((correctness - mean_corr) ** 2))
+            correlation = numerator / denominator if denominator != 0 else 0
+
+            print("\nBasic Statistical Analysis:")
+            print(f"Correlation between distance and accuracy: {correlation:.4f}")
+
+            if correlation < -0.1:
+                print("Evidence of potential recency effect: accuracy decreases with distance from validation set")
+            elif correlation > 0.1:
+                print("Unusual pattern: accuracy increases with distance from validation set")
+            else:
+                print("No significant recency effect detected")
+
+        return
+
     def calculate_class_distribution(self):
         """Calculate and store the class distribution from the training data"""
         train_data, _ = self._get_data(flag='train')
@@ -145,7 +391,6 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
                 # Skip empty batches
                 if batch_x.size(0) == 0:
-                    print(f"Skipping empty validation batch {i}")
                     continue
 
                 # Move tensors to device
@@ -196,16 +441,6 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
         train_data, train_loader = self._get_data(flag='train')
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
-
-        # Add these diagnostic lines
-        print(f"Training dataloader length: {len(train_loader)}")
-        if len(train_loader) == 0:
-            print("WARNING: Training dataloader is empty! Check your dataset and batch size.")
-            print(f"Dataset size: {len(train_data)}, Batch size: {self.args.batch_size}")
-
-        print(f"Validation dataloader length: {len(vali_loader)}")
-        if len(vali_loader) == 0:
-            print("WARNING: Validation dataloader is empty!")
 
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
@@ -292,7 +527,7 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
                             batch_metrics['accuracy'] * 100,
                             batch_metrics['precision'] * 100,
                             batch_metrics['recall'] * 100))
-                    speed = (time.time() - time_now) / max(iter_count, 1)
+                    speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
@@ -356,11 +591,6 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
-
-                if batch_x.size(0) == 0:
-                    print(f"Skipping empty batch {i}")
-                    continue
-
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
                 batch_x_mark = batch_x_mark.float().to(self.device)
@@ -525,7 +755,7 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
         np.save(folder_path + 'true.npy', trues)
 
         # Write results to file
-        f = open("result_crypto_forecast.txt", 'a')
+        f = open("result_logits_forecast.txt", 'a')
         f.write(setting + "  \n")
         f.write(
             'Trading Strategy: {}\n'.format('Shorting enabled' if self.is_shorting else 'No shorting (holding only)'))
@@ -534,5 +764,8 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
         f.write('Trading - Win Rate: {:.2f}%, Profit Factor: {:.2f}\n'.format(win_rate * 100, profit_factor))
         f.write('\n\n')
         f.close()
+
+        print("\nPerforming recency effect analysis...")
+        self.analyze_recency_effect(setting, test=test)
 
         return

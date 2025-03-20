@@ -14,16 +14,11 @@ def custom_collate_fn(batch):
 
     # Return empty batch with correct shapes if no valid samples
     if len(valid_samples) == 0:
-        # Get expected dimensions from model parameters (these should match your model)
-        # You may need to adjust these based on your specific model configuration
-        seq_len = 24  # Adjust based on your config
-        feat_dim = 41  # Adjust based on your dataset
-        label_len = 48
         return (
-            torch.zeros((0, seq_len, feat_dim), dtype=torch.float32),  # batch_x
-            torch.zeros((0, label_len + 1, 1), dtype=torch.float32),   # batch_y
-            torch.zeros((0, seq_len, 5), dtype=torch.float32),         # batch_x_mark (timestamp features)
-            torch.zeros((0, label_len + 1, 5), dtype=torch.float32)    # batch_y_mark
+            torch.zeros((0, 24, 44)),  # Empty batch_x with correct features
+            torch.zeros((0, 49, 1)),  # Empty batch_y with correct shape
+            torch.zeros((0, 24, 4)),  # Empty batch_x_mark (typical 4 time features)
+            torch.zeros((0, 49, 4))  # Empty batch_y_mark
         )
 
     # Standardize dimensions
@@ -93,22 +88,13 @@ def data_provider(args, flag):
     )
     print(flag, len(data_set))
 
-    if len(data_set) < batch_size:
-        print(f"WARNING: Dataset size ({len(data_set)}) is smaller than batch size ({batch_size})!")
-        if len(data_set) > 0:
-            # Adjust batch size to match dataset size
-            print(f"Adjusting batch size from {batch_size} to {len(data_set)}")
-            batch_size = len(data_set)
-        else:
-            print(f"Dataset is empty! This will cause errors in training.")
-
     data_loader = DataLoader(
         data_set,
         batch_size=batch_size,
         shuffle=shuffle_flag,
         num_workers=args.num_workers,
         drop_last=drop_last,
-        collate_fn=custom_collate_fn
+        collate_fn=custom_collate_fn  # Add this line
     )
 
     # data_loader = DataLoader(

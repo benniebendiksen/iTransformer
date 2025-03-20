@@ -1,5 +1,6 @@
-# Ignore dataset folder
+# Ignored folder
 dataset/
+slurm_outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

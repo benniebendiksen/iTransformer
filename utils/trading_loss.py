@@ -94,14 +94,6 @@ class TradingBCELoss(nn.Module):
             # Apply pos_weight to the base criterion
             self.base_criterion.pos_weight = self.pos_weight
 
-        # In TradingBCELoss forward method, add:
-        if torch.isnan(predictions).any():
-            print("NaN detected in model predictions")
-            predictions = torch.nan_to_num(predictions, nan=0.0)
-
-        # Clamp predictions to prevent extreme values
-        predictions = torch.clamp(predictions, min=-20.0, max=20.0)
-
         # Calculate base BCE loss (element-wise, no reduction yet)
         base_loss = self.base_criterion(predictions, targets)
 

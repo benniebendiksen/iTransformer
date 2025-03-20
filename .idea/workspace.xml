@@ -5,13 +5,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/run_recency_analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/checkpoints/crypto_96_4_iTransformer_crypto_MS_ft96_sl48_ll4_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtCrypto_projection_0/checkpoint.pth" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/data_provider/data_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_provider/data_factory.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data_provider/data_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_provider/data_loader.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/experiments/exp_crypto_forecasting.py" beforeDir="false" afterPath="$PROJECT_DIR$/experiments/exp_crypto_forecasting.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/parallel_itransformer_multi_gpu.sh" beforeDir="false" afterPath="$PROJECT_DIR$/parallel_itransformer_multi_gpu.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/trading_loss.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/trading_loss.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -43,6 +47,7 @@
   &quot;keyToString&quot;: {
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;Shell Script.iTransformer.sh.executor&quot;: &quot;Run&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;last_opened_file_path&quot;: &quot;/Users/bendiksen/Desktop/iTransformer&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
@@ -50,7 +55,7 @@
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;sshConsole&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
@@ -60,6 +65,28 @@
       <recent name="$PROJECT_DIR$/dataset/crypto" />
       <recent name="$PROJECT_DIR$/dataset" />
     </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="iTransformer.sh" type="ShConfigurationType" temporary="true">
+      <option name="SCRIPT_TEXT" value="" />
+      <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
+      <option name="SCRIPT_PATH" value="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" />
+      <option name="SCRIPT_OPTIONS" value="" />
+      <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
+      <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$/scripts/increasing_lookback/Logits" />
+      <option name="INDEPENDENT_INTERPRETER_PATH" value="true" />
+      <option name="INTERPRETER_PATH" value="/bin/bash" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="EXECUTE_IN_TERMINAL" value="true" />
+      <option name="EXECUTE_SCRIPT_FILE" value="true" />
+      <envs />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Shell Script.iTransformer.sh" />
+      </list>
+    </recent_temporary>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>
@@ -85,6 +112,23 @@
       <workItem from="1741388215351" duration="12799000" />
       <workItem from="1741451995893" duration="603000" />
       <workItem from="1741535770777" duration="23313000" />
+      <workItem from="1742224414061" duration="6344000" />
+      <workItem from="1742233181487" duration="10914000" />
+      <workItem from="1742251660430" duration="7932000" />
+      <workItem from="1742305944425" duration="523000" />
+      <workItem from="1742306639164" duration="525000" />
+      <workItem from="1742319845746" duration="1679000" />
+      <workItem from="1742321945028" duration="507000" />
+      <workItem from="1742322520933" duration="216000" />
+      <workItem from="1742324783061" duration="375000" />
+      <workItem from="1742325648929" duration="94000" />
+      <workItem from="1742329408892" duration="1484000" />
+      <workItem from="1742334452741" duration="732000" />
+      <workItem from="1742422948085" duration="43000" />
+      <workItem from="1742424441364" duration="3471000" />
+      <workItem from="1742442857157" duration="1218000" />
+      <workItem from="1742444512766" duration="156000" />
+      <workItem from="1742488953521" duration="11781000" />
     </task>
     <servers />
   </component>
