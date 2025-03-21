@@ -290,8 +290,20 @@ class Dataset_Crypto(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='MS', data_path='btcusdc_pca_components_44_proper_split.csv',
                  target='close', scale=True, timeenc=0, freq='15min'):
-        # size [seq_len, label_len, pred_len]
-        # info
+        """
+                Dataset for cryptocurrency price forecasting with PCA components
+
+                Args:
+                    root_path: root path of the data file
+                    flag: 'train', 'test' or 'val'
+                    size: [seq_len, label_len, pred_len]
+                    features: 'M', 'MS' or 'S'
+                    data_path: data file
+                    target: target column (e.g., 'close')
+                    scale: whether to scale the data
+                    timeenc: time encoding method
+                    freq: time frequency
+        """
         print(f"size is: {size}")
         if size == None:
             self.seq_len = 96  # 24 hours (96 * 15 min)
@@ -301,10 +313,10 @@ class Dataset_Crypto(Dataset):
             self.seq_len = size[0]
             self.label_len = size[1]
             self.pred_len = size[2]
-        # init
-        assert flag in ['train', 'test', 'val']
-        self.set_type = flag  # Instead of numeric mapping, use the string directly
 
+        assert flag in ['train', 'test', 'val']
+
+        # Store parameters
         self.features = features
         self.target = target
         self.scale = scale
@@ -313,21 +325,38 @@ class Dataset_Crypto(Dataset):
 
         self.root_path = root_path
         self.data_path = data_path
+        self.flag = flag
+
+        # Only print detailed information for the training dataset to avoid redundancy
+        self.is_train = (flag == 'train')
+
         self.__read_data__()
+
+        # Print summary for training dataset only
+        if self.is_train:
+            self.__print_summary__()
 
     def __read_data__(self):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
 
-        # Check if the dataset has a 'split' column (from proper PCA preprocessing)
-        has_split_column = 'split' in df_raw.columns
+        # Store dataset properties for summary
+        self.total_rows = len(df_raw)
+        self.has_split_column = 'split' in df_raw.columns
 
-        # If using the new properly generated dataset with split column
-        if has_split_column:
+        # Process data splits
+        if self.has_split_column:
             # Use the split column to filter data
             train_data = df_raw[df_raw['split'] == 'train']
             val_data = df_raw[df_raw['split'] == 'val']
             test_data = df_raw[df_raw['split'] == 'test']
+
+            # Store split information
+            self.split_info = {
+                'train': len(train_data),
+                'val': len(val_data),
+                'test': len(test_data)
+            }
 
             # Remove the split column before feature processing
             df_raw = df_raw.drop(columns=['split'])
@@ -336,9 +365,9 @@ class Dataset_Crypto(Dataset):
             test_data = test_data.drop(columns=['split'])
 
             # Set the appropriate dataset based on flag
-            if self.set_type == 'train':
+            if self.flag == 'train':
                 active_data = train_data
-            elif self.set_type == 'val':
+            elif self.flag == 'val':
                 active_data = val_data
             else:  # 'test'
                 active_data = test_data
@@ -359,17 +388,16 @@ class Dataset_Crypto(Dataset):
 
             # Map set_type to numeric index for backward compatibility
             type_map = {'train': 0, 'val': 1, 'test': 2}
-            set_type_idx = type_map[self.set_type]
+            set_type_idx = type_map[self.flag]
 
             border1 = border1s[set_type_idx]
             border2 = border2s[set_type_idx]
 
-            # For traditional split, active_data is the full dataset
+            # Set active data
             active_data = df_raw
             train_data = df_raw.iloc[:num_train]
 
-        # Create binary labels for price change prediction
-        # For each point, 1 if price 4 steps ahead > current price, 0 otherwise
+        # Create binary labels for price change prediction (1 if price goes up, 0 if down/same)
         close_prices = df_raw[self.target].values
         binary_labels = np.zeros((len(close_prices), 1))
 
@@ -378,38 +406,65 @@ class Dataset_Crypto(Dataset):
             current_price = close_prices[i]
             binary_labels[i, 0] = 1.0 if future_price > current_price else 0.0
 
-        # Feature columns (all PCA components, excluding date and close)
+        # Calculate price movement statistics
+        self.price_stats = {
+            'positive': np.sum(binary_labels),
+            'total': len(binary_labels) - self.pred_len,
+        }
+
+        # Feature columns (all PCA components + direction; excludes date and close)
         if self.features == 'M' or self.features == 'MS':
             cols = list(df_raw.columns)
+            # Always remove close price from features
             cols.remove(self.target)
+            # Always remove date (processed separately)
             cols.remove('date')
+            print(f"{self.flag}: Removing date column")
+
+            # Save feature list for summary
+            self.feature_list = cols
+
+            # Extract appropriate data
             df_data = df_raw[cols]
             active_df_data = active_data[cols]
             train_df_data = train_data[cols]
+
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
             active_df_data = active_data[[self.target]]
             train_df_data = train_data[[self.target]]
 
+        else:
+            raise ValueError(f"Invalid features argument: {self.features}")
+
         # Scale the features
         if self.scale:
             # Always fit scaler on training data only
             self.scaler.fit(train_df_data.values)
+            # Store scaling stats
+            self.scaling_stats = {
+                'mean_range': [np.min(self.scaler.mean_), np.max(self.scaler.mean_)],
+                'std_range': [np.min(np.sqrt(self.scaler.var_)), np.max(np.sqrt(self.scaler.var_))]
+            }
             # Transform all data
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
-        # Create timestamp features
-        if has_split_column:
+        # Process timestamps
+        if self.has_split_column:
             # For the new split method, get timestamps from active dataset
             df_stamp = active_data[['date']].reset_index(drop=True)
         else:
             # For traditional split method, get timestamps from the window
             df_stamp = df_raw[['date']][border1:border2]
 
+        # Convert to datetime
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
+
+        # Create time features
         if self.timeenc == 0:
+            # Manual time encoding
             df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
             df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
@@ -417,13 +472,18 @@ class Dataset_Crypto(Dataset):
             df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
             df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
             data_stamp = df_stamp.drop(['date'], 1).values
+            self.time_encoding = 'manual'
         elif self.timeenc == 1:
+            # Automatic time features
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
+            self.time_encoding = 'auto'
+        else:
+            raise ValueError(f"Invalid timeenc argument: {self.timeenc}")
 
-        # Store data for the relevant window
-        if has_split_column:
-            # For the new split method, extract from the active dataset
+        # Store processed data
+        if self.has_split_column:
+            # For split based method, extract from the active dataset
             self.data_x = self.scaler.transform(active_df_data.values)
             # Get corresponding binary labels for active dataset
             active_indices = active_data.index.tolist()
@@ -435,8 +495,51 @@ class Dataset_Crypto(Dataset):
 
         self.data_stamp = data_stamp
 
+    def __print_summary__(self):
+        """Print a concise summary of the dataset (only called for training dataset)"""
+        print(f"\n{'=' * 20} DATASET SUMMARY {'=' * 20}")
+
+        # Basic dataset info
+        print(f"Dataset: {self.data_path}")
+        print(f"Total rows: {self.total_rows}")
+
+        # Split information
+        print(f"\nSplit distribution:")
+        for split, count in self.split_info.items():
+            print(f"  - {split}: {count} samples ({count / self.total_rows:.2%})")
+
+        # Feature configuration
+        print(f"\nFeature configuration:")
+        print(f"  - Total features: {len(self.feature_list)}")
+
+        # Price movement statistics
+        positive_ratio = self.price_stats['positive'] / self.price_stats['total']
+        print(f"\nPrice movement statistics:")
+        print(f"  - Increases: {self.price_stats['positive']} ({positive_ratio:.2%})")
+        print(
+            f"  - Decreases/No change: {self.price_stats['total'] - self.price_stats['positive']} ({1 - positive_ratio:.2%})")
+
+        # Feature scaling info
+        if self.scaling_stats:
+            print(f"\nFeature scaling statistics:")
+            print(
+                f"  - Mean range: [{self.scaling_stats['mean_range'][0]:.4f}, {self.scaling_stats['mean_range'][1]:.4f}]")
+            print(
+                f"  - Std range: [{self.scaling_stats['std_range'][0]:.4f}, {self.scaling_stats['std_range'][1]:.4f}]")
+
+        # Model parameters vs. data dimensions
+        print(f"\nModel configuration:")
+        print(f"  - Sequence length: {self.seq_len}")
+        print(f"  - Label length: {self.label_len}")
+        print(f"  - Prediction length: {self.pred_len}")
+        print(f"  - Time encoding: {self.time_encoding} ({self.data_stamp.shape[1]} features)")
+
+        # Effective samples after windowing
+        effective_samples = len(self.data_x) - self.seq_len - self.pred_len + 1
+        print(f"  - Effective samples: {effective_samples}")
+
     def __getitem__(self, index):
-        # Your existing code to get sequences
+        """Get a single sample (input sequence, target sequence, and time features)"""
         s_begin = index
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
@@ -448,10 +551,11 @@ class Dataset_Crypto(Dataset):
         # Get target sequence
         seq_y = np.zeros((self.label_len + self.pred_len, 1))
 
-        # Fill history and prediction parts
+        # Fill history part of target
         if r_begin >= 0:
             seq_y[:self.label_len, 0] = self.data_y[r_begin:r_begin + self.label_len, 0]
 
+        # Fill prediction part of target
         if r_begin + self.label_len < len(self.data_y):
             seq_y[self.label_len:, 0] = self.data_y[r_begin + self.label_len:r_end, 0]
 
@@ -466,9 +570,11 @@ class Dataset_Crypto(Dataset):
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 
     def __len__(self):
+        """Return the effective length of the dataset after accounting for sequence windows"""
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
     def inverse_transform(self, data):
+        """Inverse transform scaled data back to original scale"""
         return self.scaler.inverse_transform(data)
 
 
