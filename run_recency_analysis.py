@@ -4,7 +4,7 @@
 import argparse
 import torch
 import numpy as np
-from experiments.exp_crypto_forecasting import Exp_Crypto_Forecast
+from experiments.exp_logits_forecasting import Exp_Logits_Forecast
 import os
 import random
 
@@ -79,7 +79,7 @@ if __name__ == '__main__':
 
     # Initialize experiment
     print(f"Initializing experiment with model: {args.model}")
-    exp = Exp_Crypto_Forecast(args)
+    exp = Exp_Logits_Forecast(args)
 
     # Load model and run analysis
     print(f"Running recency effect analysis for model: {args.setting}")

@@ -51,7 +51,7 @@ data_dict = {
     'custom': Dataset_Custom,
     'PEMS': Dataset_PEMS,
     'Solar': Dataset_Solar,
-    'crypto': Dataset_Crypto,
+    'logits': Dataset_Crypto,
 }
 
 

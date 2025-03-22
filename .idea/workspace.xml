@@ -5,10 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/pca.r" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/checkpoints/1_btcusdt_pca_components_12h_55_07_05_96_2_512_iTransformer_crypto_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtCrypto_projection_1/checkpoint.pth" beforeDir="false" afterPath="$PROJECT_DIR$/checkpoints/1_btcusdt_pca_components_12h_55_07_05_96_2_512_iTransformer_crypto_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtCrypto_projection_1/checkpoint.pth" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/experiments/exp_crypto_forecasting.py" beforeDir="false" afterPath="$PROJECT_DIR$/experiments/exp_crypto_forecasting.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/result_logits_forecast.txt" beforeDir="false" afterPath="$PROJECT_DIR$/result_logits_forecast.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data_provider/data_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_provider/data_factory.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/experiments/exp_crypto_forecasting.py" beforeDir="false" afterPath="$PROJECT_DIR$/experiments/exp_logits_forecasting.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/run.py" beforeDir="false" afterPath="$PROJECT_DIR$/run.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/run_recency_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/run_recency_analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -55,6 +60,7 @@
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/dataset/logits" />
+      <recent name="$PROJECT_DIR$" />
       <recent name="$PROJECT_DIR$/dataset/crypto" />
       <recent name="$PROJECT_DIR$/dataset" />
     </key>
@@ -122,6 +128,7 @@
       <workItem from="1742442857157" duration="1218000" />
       <workItem from="1742444512766" duration="156000" />
       <workItem from="1742488953521" duration="11781000" />
+      <workItem from="1742673106636" duration="4687000" />
     </task>
     <servers />
   </component>
