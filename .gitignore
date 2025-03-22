@@ -3,6 +3,7 @@ dataset/
 slurm_outputs/
 test_results/
 results/
+checkpoints/
 
 # ignore results files
 result_logits_forecast.txt
