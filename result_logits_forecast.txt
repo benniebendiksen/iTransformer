@@ -1,0 +1,6 @@
+1_btcusdt_pca_components_12h_55_07_05_96_2_512_iTransformer_crypto_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtCrypto_projection_0  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 61.32%, Precision: 53.33%, Recall: 37.21%, F1: 43.84%
+Trading - Win Rate: 61.32%, Profit Factor: 1.59
+
+

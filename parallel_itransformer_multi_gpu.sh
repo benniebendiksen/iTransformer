@@ -2,14 +2,14 @@
 #SBATCH --job-name=iTransformer_training
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=b.bendiksen001@umb.edu
-##SBATCH -p DGXA100
-#SBATCH -p Intel6240,Intel6248
+#SBATCH -p DGXA100
+##SBATCH -p Intel6240,Intel6248
 #SBATCH -A pi_funda.durupinarbabur
 #SBATCH --qos=scavenger
 ##SBATCH -w chimera12
 #SBATCH -n 2                       # Number of cores
 ##SBATCH -N 1                       # Ensure all cores are on one machine
-##SBATCH --gres=gpu:2               # Request 2 GPUs
+#SBATCH --gres=gpu:2               # Request 2 GPUs
 #SBATCH --export=HOME              # Export HOME environment variable for miniconda access
 #SBATCH --mem=64G                  # 64GB memory
 #SBATCH -t 3-23:59:59              # near 4 days runtime
