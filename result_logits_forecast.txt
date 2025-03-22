@@ -4,3 +4,27 @@ Classification - Accuracy: 61.32%, Precision: 53.33%, Recall: 37.21%, F1: 43.84%
 Trading - Win Rate: 61.32%, Profit Factor: 1.59
 
 
+1_btcusdt_pca_components_12h_55_07_05_96_2_512_iTransformer_crypto_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtCrypto_projection_1  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 60.38%, Precision: 50.88%, Recall: 67.44%, F1: 58.00%
+Trading - Win Rate: 60.38%, Profit Factor: 1.52
+
+
+1_btcusdt_pca_components_12h_55_07_05_96_2_512_iTransformer_crypto_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtCrypto_projection_2  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 42.45%, Precision: 41.00%, Recall: 95.35%, F1: 57.34%
+Trading - Win Rate: 42.45%, Profit Factor: 0.74
+
+
+1_btcusdt_pca_components_12h_55_07_05_96_2_512_iTransformer_crypto_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtCrypto_projection_3  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 50.94%, Precision: 44.00%, Recall: 76.74%, F1: 55.93%
+Trading - Win Rate: 50.94%, Profit Factor: 1.04
+
+
+1_btcusdt_pca_components_12h_55_07_05_96_2_512_iTransformer_crypto_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtCrypto_projection_4  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 53.77%, Precision: 45.31%, Recall: 67.44%, F1: 54.21%
+Trading - Win Rate: 53.77%, Profit Factor: 1.16
+
+

@@ -120,6 +120,7 @@ class Exp_Crypto_Forecast(Exp_Long_Term_Forecast):
             # Handle cases where there might be only one class in predictions
             try:
                 precision = precision_score(segment_trues, segment_preds)
+                print(f"segment_preds: {segment_preds}")
             except:
                 precision = 0.0
 
