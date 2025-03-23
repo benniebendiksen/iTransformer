@@ -6,7 +6,9 @@
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/parallel_itransformer_multi_gpu.sh" beforeDir="false" afterPath="$PROJECT_DIR$/parallel_itransformer_multi_gpu.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/experiments/exp_logits_forecasting.py" beforeDir="false" afterPath="$PROJECT_DIR$/experiments/exp_logits_forecasting.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -121,7 +123,7 @@
       <workItem from="1742442857157" duration="1218000" />
       <workItem from="1742444512766" duration="156000" />
       <workItem from="1742488953521" duration="11781000" />
-      <workItem from="1742673106636" duration="4976000" />
+      <workItem from="1742673106636" duration="6912000" />
     </task>
     <servers />
   </component>

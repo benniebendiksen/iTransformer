@@ -92,6 +92,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         # Verify we collected predictions for the whole test set
         print(f"Collected {len(all_preds)} predictions from test set")
+        print(f"trues: {all_trues}")
+        print(f"preds: {all_preds}")
 
         # Define percentile segments to analyze
         percentiles = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
@@ -120,7 +122,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             # Handle cases where there might be only one class in predictions
             try:
                 precision = precision_score(segment_trues, segment_preds)
-                print(f"segment_preds: {segment_preds}")
             except:
                 precision = 0.0
 
