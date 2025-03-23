@@ -8,11 +8,8 @@
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/checkpoints/1_btcusdt_pca_components_55_window_1_96_2_58_iTransformer_logits_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtLogits_projection_0/checkpoint.pth" beforeDir="false" afterPath="$PROJECT_DIR$/checkpoints/1_btcusdt_pca_components_55_window_1_96_2_58_iTransformer_logits_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtLogits_projection_0/checkpoint.pth" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data_provider/data_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_provider/data_loader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/experiments/exp_basic.py" beforeDir="false" afterPath="$PROJECT_DIR$/experiments/exp_basic.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/experiments/exp_logits_forecasting.py" beforeDir="false" afterPath="$PROJECT_DIR$/experiments/exp_logits_forecasting.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/result_logits_forecast.txt" beforeDir="false" afterPath="$PROJECT_DIR$/result_logits_forecast.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/run.py" beforeDir="false" afterPath="$PROJECT_DIR$/run.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -128,7 +125,7 @@
       <workItem from="1742444512766" duration="156000" />
       <workItem from="1742488953521" duration="11781000" />
       <workItem from="1742673106636" duration="10622000" />
-      <workItem from="1742746728321" duration="6777000" />
+      <workItem from="1742746728321" duration="14257000" />
     </task>
     <servers />
   </component>

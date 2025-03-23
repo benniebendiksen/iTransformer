@@ -497,6 +497,15 @@ class Dataset_Crypto(Dataset):
             self.data_x = data[border1:border2]
             self.data_y = binary_labels[border1:border2]
 
+        # Add to Dataset_Crypto.__read_data__, after binary labels are created
+        if self.flag == 'test':
+            print("Original binary labels for test data:")
+            for i, idx in enumerate(active_indices):
+                if i < 20:  # Print first 20 for brevity
+                    print(
+                        f"Row {idx} (test dataset idx {i}): Close={close_prices[idx]:.2f}, Label={binary_labels[idx, 0]}, "
+                        f"Future Close={close_prices[idx + self.pred_len] if idx + self.pred_len < len(close_prices) else 'N/A'}")
+
         self.data_stamp = data_stamp
 
     def __print_summary__(self):
