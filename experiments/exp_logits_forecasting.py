@@ -366,10 +366,62 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         print(f"Collected {len(all_preds)} predictions from test set")
 
+
+
         # Now match these predictions with timestamps and prices
         seq_len = test_data.seq_len
         pred_len = test_data.pred_len
 
+        # Add near the beginning of calculate_returns, after loading test_df
+        print("\n===== DATASET INDEX MAPPING =====")
+        print(f"test_data object type: {type(test_data)}")
+        print(f"test_data.seq_len: {test_data.seq_len}, test_data.pred_len: {test_data.pred_len}")
+
+        if hasattr(test_data, 'active_indices'):
+            print(f"Does test_data have active_indices? Yes, length: {len(test_data.active_indices)}")
+            print(f"First 5 active indices: {test_data.active_indices[:5]}")
+        else:
+            print("test_data does not have active_indices attribute")
+
+        # Add after collecting predictions
+        print("\n===== RAW PREDICTIONS SUMMARY =====")
+        print(f"Collected {len(all_preds)} predictions:")
+        for i in range(min(5, len(all_preds))):
+            print(f"Prediction {i}: Pred={all_preds[i]}, True={all_trues[i]}, Prob={all_probs[i]:.4f}")
+        # Add detailed debugging for the price/timestamp mapping
+        print("\n===== PRICE MAPPING DETAILS =====")
+        print(f"test_df has {len(test_df) if test_df is not None else 0} rows")
+        if test_df is not None:
+            for i in range(min(5, len(all_preds))):
+                base_idx = i
+                current_idx = base_idx + seq_len
+
+                print(f"\nSample {i} mapping:")
+                print(f"  Base index in test dataset: {base_idx}")
+                print(f"  Current index (base + seq_len={seq_len}): {current_idx}")
+
+                if current_idx < len(test_df):
+                    timestamp = test_df.iloc[current_idx]['date']
+                    current_price = test_df.iloc[current_idx]['close']
+
+                    # Map this back to original dataset if possible
+                    if hasattr(test_data, 'active_indices') and base_idx < len(test_data.active_indices):
+                        orig_idx = test_data.active_indices[base_idx]
+                        orig_prediction_idx = orig_idx + seq_len
+                        print(f"  Mapped to original dataset: Base={orig_idx}, Prediction point={orig_prediction_idx}")
+
+                    print(f"  Timestamp: {timestamp}")
+                    print(f"  Current price: {current_price}")
+
+                    if current_idx + pred_len < len(test_df):
+                        future_price = test_df.iloc[current_idx + pred_len]['close']
+                        print(f"  Future price (+{pred_len} steps): {future_price}")
+                        print(f"  Price change: {((future_price - current_price) / current_price):.2%}")
+                        print(f"  True label: {all_trues[i]} (should be 1 if price went up)")
+                    else:
+                        print("  Future price: Not available (beyond dataset)")
+
+        ####
         all_timestamps = []
         all_close_prices = []
         all_future_prices = []

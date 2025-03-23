@@ -1,9 +1,19 @@
 # Ignored folder
-dataset/
 slurm_outputs/
 test_results/
 results/
 checkpoints/
+# Ignore everything in the dataset directory
+dataset/*
+
+# Exclude specific directories from being ignored
+!dataset/logits/
+!dataset/logits/pca_rolling_windows_legacy_1/
+
+# Track only the desired file
+!dataset/logits/pca_rolling_windows_legacy_1/btcusdt_pca_components_55_window_1.csv
+
+
 
 # ignore results files
 result_logits_forecast.txt

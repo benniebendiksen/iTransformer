@@ -344,6 +344,10 @@ class Dataset_Crypto(Dataset):
         self.total_rows = len(df_raw)
         self.has_split_column = 'split' in df_raw.columns
 
+        # Save a copy of the raw dataframe with split column intact for debugging
+        if self.flag == 'test' and self.has_split_column:
+            df_raw_with_split = df_raw.copy()
+
         # Process data splits
         if self.has_split_column:
             # Use the split column to filter data
@@ -359,7 +363,6 @@ class Dataset_Crypto(Dataset):
             }
 
             # Remove the split column before feature processing
-            # df_raw = df_raw.drop(columns=['split'])
             train_data = train_data.drop(columns=['split'])
             val_data = val_data.drop(columns=['split'])
             test_data = test_data.drop(columns=['split'])
@@ -408,7 +411,50 @@ class Dataset_Crypto(Dataset):
             if self.flag == "blurb":
                 print(f"{i}: future price: {future_price}, current price: {current_price}, binary label: {binary_labels[i, 0]}, split: {df_raw['split'][i]}")
 
-        df_raw = df_raw.drop(columns=['split'])
+        # Store active indices before dropping the split column
+        active_indices = active_data.index.tolist()
+        self.active_indices = active_indices  # Save as class attribute
+
+        # Debug after the active_indices section - use the saved dataframe with split column
+        if self.flag == 'test' and self.has_split_column:
+            print("\n===== TEST DATASET DEBUGGING =====")
+            print(f"Original dataframe shape: {df_raw.shape}")
+            print(f"Test data shape after filtering: {test_data.shape}")
+            print(f"First 3 rows of raw test data (original indices):")
+            test_rows = df_raw_with_split[df_raw_with_split['split'] == 'test'].head(3)
+            for i, row in test_rows.iterrows():
+                print(f"Original idx {i}: timestamp={row['date']}, close={row[self.target]}, split={row['split']}")
+
+            print(f"\nActive indices (first 5): {active_indices[:5]}")
+            print(f"Total active indices: {len(active_indices)}")
+
+            print("\nBinary labels calculation verification:")
+            for i in range(min(3, len(active_indices))):
+                idx = active_indices[i]
+                if idx + self.pred_len < len(close_prices):
+                    print(f"Test idx {i} (original idx {idx}): Current Price={close_prices[idx]}, "
+                          f"Future Price (+{self.pred_len} steps)={close_prices[idx + self.pred_len]}, "
+                          f"Label={binary_labels[idx][0]}")
+
+            print("\nSequence formation example for first test sample:")
+            print(f"Sequence length: {self.seq_len}, Label length: {self.label_len}, Pred length: {self.pred_len}")
+            print(f"For index 0 of test dataset:")
+            print(f"  Input sequence range: [0:{self.seq_len}] in test dataset (corresponds to indices "
+                  f"{active_indices[0]}:{active_indices[0] + self.seq_len} in original dataset)")
+            print(f"  Target sequence start: {self.seq_len - self.label_len} (r_begin) in test dataset")
+
+            # Check if we would have enough indices to make this prediction
+            if len(active_indices) > self.seq_len:
+                prediction_index = active_indices[0] + self.seq_len
+                print(f"  Prediction point: {self.seq_len} in test dataset (corresponds to index "
+                      f"{prediction_index} in original dataset)")
+                if prediction_index < len(close_prices):
+                    print(f"  Price at prediction point: {close_prices[prediction_index]}")
+            else:
+                print("  Not enough data for a full sequence")
+
+        if 'split' in df_raw.columns:
+            df_raw = df_raw.drop(columns=['split'])
 
         # Calculate price movement statistics
         self.price_stats = {
@@ -497,15 +543,6 @@ class Dataset_Crypto(Dataset):
             self.data_x = data[border1:border2]
             self.data_y = binary_labels[border1:border2]
 
-        # Add to Dataset_Crypto.__read_data__, after binary labels are created
-        if self.flag == 'test':
-            print("Original binary labels for test data:")
-            for i, idx in enumerate(active_indices):
-                if i < 20:  # Print first 20 for brevity
-                    print(
-                        f"Row {idx} (test dataset idx {i}): Close={close_prices[idx]:.2f}, Label={binary_labels[idx, 0]}, "
-                        f"Future Close={close_prices[idx + self.pred_len] if idx + self.pred_len < len(close_prices) else 'N/A'}")
-
         self.data_stamp = data_stamp
 
     def __print_summary__(self):
@@ -553,6 +590,22 @@ class Dataset_Crypto(Dataset):
 
     def __getitem__(self, index):
         """Get a single sample (input sequence, target sequence, and time features)"""
+        # Add debugging code at the start of __getitem__
+        if self.flag == 'test' and index < 3:  # Only for first 3 test samples
+            print(f"\n===== TEST SAMPLE {index} DETAILS =====")
+            s_begin = index
+            s_end = s_begin + self.seq_len
+            r_begin = s_end - self.label_len
+            r_end = r_begin + self.label_len + self.pred_len
+
+            print(f"s_begin: {s_begin}, s_end: {s_end}, r_begin: {r_begin}, r_end: {r_end}")
+
+            # Try to map these indices back to the original dataset
+            if hasattr(self, 'active_indices'):
+                orig_s_begin = self.active_indices[s_begin] if s_begin < len(self.active_indices) else "out of bounds"
+                orig_s_end = self.active_indices[s_end - 1] if s_end - 1 < len(self.active_indices) else "out of bounds"
+                print(f"Original dataset indices: ~{orig_s_begin} to ~{orig_s_end}")
+
         s_begin = index
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
