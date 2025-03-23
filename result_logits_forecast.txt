@@ -28,3 +28,27 @@ Classification - Accuracy: 53.77%, Precision: 45.31%, Recall: 67.44%, F1: 54.21%
 Trading - Win Rate: 53.77%, Profit Factor: 1.16
 
 
+1_btcusdt_pca_components_55_window_1_96_2_58_iTransformer_logits_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtLogits_projection_0  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 90.00%, Precision: 75.00%, Recall: 100.00%, F1: 85.71%
+Trading - Win Rate: 90.00%, Profit Factor: 9.00
+
+
+1_btcusdt_pca_components_55_window_1_96_2_58_iTransformer_logits_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtLogits_projection_0  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 90.00%, Precision: 75.00%, Recall: 100.00%, F1: 85.71%
+Trading - Win Rate: 90.00%, Profit Factor: 9.00
+
+
+1_btcusdt_pca_components_55_window_1_96_2_58_iTransformer_logits_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtLogits_projection_0  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 80.00%, Precision: 100.00%, Recall: 33.33%, F1: 50.00%
+Trading - Win Rate: 80.00%, Profit Factor: 4.00
+
+
+1_btcusdt_pca_components_55_window_1_96_2_58_iTransformer_logits_MS_ft96_sl48_ll2_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtLogits_projection_0  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 70.00%, Precision: 100.00%, Recall: 40.00%, F1: 57.14%
+Trading - Win Rate: 70.00%, Profit Factor: 2.33
+
+

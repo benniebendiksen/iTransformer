@@ -7,6 +7,7 @@ from model import Transformer, Informer, Reformer, Flowformer, Flashformer, \
 class Exp_Basic(object):
     def __init__(self, args):
         self.args = args
+        print(f"self.args is: {self.args}")
         self.model_dict = {
             'Transformer': Transformer,
             'Informer': Informer,

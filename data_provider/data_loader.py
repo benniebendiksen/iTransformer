@@ -359,7 +359,7 @@ class Dataset_Crypto(Dataset):
             }
 
             # Remove the split column before feature processing
-            df_raw = df_raw.drop(columns=['split'])
+            # df_raw = df_raw.drop(columns=['split'])
             train_data = train_data.drop(columns=['split'])
             val_data = val_data.drop(columns=['split'])
             test_data = test_data.drop(columns=['split'])
@@ -405,6 +405,10 @@ class Dataset_Crypto(Dataset):
             future_price = close_prices[i + self.pred_len]
             current_price = close_prices[i]
             binary_labels[i, 0] = 1.0 if future_price > current_price else 0.0
+            if self.flag == "blurb":
+                print(f"{i}: future price: {future_price}, current price: {current_price}, binary label: {binary_labels[i, 0]}, split: {df_raw['split'][i]}")
+
+        df_raw = df_raw.drop(columns=['split'])
 
         # Calculate price movement statistics
         self.price_stats = {

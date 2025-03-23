@@ -53,6 +53,13 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
     parser.add_argument('--embed', type=str, default='timeF',
                         help='time features encoding, options:[timeF, fixed, learned]')
+
+    # Automate the timeenc value based on the embed value during parsing
+    args, unknown_args = parser.parse_known_args()
+    timeenc_value = 0 if args.embed != 'timeF' else 1
+    parser.add_argument('--timeenc', type=int, default=timeenc_value,
+                        help='automated time encoding based on embed value (0 or 1)')
+
     parser.add_argument('--activation', type=str, default='gelu', help='activation')
     parser.add_argument('--output_attention', action='store_true', help='whether to output attention in ecoder')
     parser.add_argument('--do_predict', action='store_true', help='whether to predict unseen future data')

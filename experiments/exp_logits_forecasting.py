@@ -279,6 +279,191 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         return
 
+    def calculate_returns(self, setting, test=0):
+        """
+        Calculates theoretical returns from trading signals and prints detailed results
+        for manual verification, including timestamps, price data, predictions, and returns.
+        """
+        test_data, test_loader = self._get_data(flag='test')
+        if test:
+            print('loading model')
+            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+
+        # Storage for all predictions, ground truth, and related data
+        all_preds = []
+        all_trues = []
+        all_probs = []  # Store probabilities
+        all_close_prices = []  # Store actual close prices
+        all_timestamps = []  # Store timestamps
+
+        print("\n===== RETURN CALCULATION ANALYSIS =====")
+        print("Collecting test set predictions and price data...")
+
+        self.model.eval()
+        with torch.no_grad():
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+                if batch_x.size(0) == 0:
+                    continue
+
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.float().to(self.device)
+                batch_x_mark = batch_x_mark.float().to(self.device)
+                batch_y_mark = batch_y_mark.float().to(self.device)
+
+                # decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+                # encoder - decoder
+                if self.args.output_attention:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                else:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                # Process outputs for binary classification
+                outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+
+                # Convert logits to probabilities with sigmoid
+                output_probs = torch.sigmoid(outputs_last).detach().cpu().numpy()
+
+                # Get binary predictions (threshold at 0.5)
+                output_binary = (output_probs > 0.5).astype(np.float32)
+
+                # Get true labels
+                true_labels = batch_y_last.detach().cpu().numpy()
+
+                # Extract timestamp from batch_y_mark (only for the prediction point)
+                # The timestamp corresponds to the last point in the prediction window
+                timestamp_index = self.args.label_len + self.args.pred_len - 1
+                if timestamp_index < batch_y_mark.shape[1]:
+                    timestamp_features = batch_y_mark[0, timestamp_index, :].detach().cpu().numpy()
+
+                    # If using timeenc=0 (manual encoding), reconstruct date from features
+                    if self.args.timeenc == 0:
+                        # Assuming timestamp features are [month, day, weekday, hour, minute]
+                        month, day, _, hour, minute = timestamp_features
+                        # We don't have year in the features, so using a placeholder
+                        # In practice, you would need to derive the year from your data context
+                        timestamp = f"{2023}-{int(month):02d}-{int(day):02d} {int(hour):02d}:{int(minute * 15):02d}"
+                    else:
+                        # If using timeenc=1 (time features), you may need a different approach
+                        # This is a placeholder - you would need to adapt based on your time encoding
+                        timestamp = f"sample_{i}"
+                else:
+                    timestamp = f"sample_{i}"
+
+                # Retrieve actual close price for this point
+                # This assumes your data loader can provide access to the raw close price
+                # You may need to modify this based on your specific data structure
+                try:
+                    # Get index in the original dataset
+                    # Note: this is an approximation - you may need to adjust based on your setup
+                    dataset_idx = i + self.args.seq_len + self.args.pred_len - 1
+                    if dataset_idx < len(test_data):
+                        close_price = test_data.data_y[dataset_idx, 0]  # Assuming close is the target
+                    else:
+                        close_price = np.nan
+                except:
+                    close_price = np.nan
+
+                # Store individual predictions and related data
+                for idx in range(len(output_binary)):
+                    all_preds.append(output_binary[idx][0])  # Extract scalar value
+                    all_trues.append(true_labels[idx][0])  # Extract scalar value
+                    all_probs.append(output_probs[idx][0])  # Extract probability
+                    all_close_prices.append(close_price)  # Store close price
+                    all_timestamps.append(timestamp)  # Store timestamp
+
+        # Convert to numpy arrays
+        all_preds = np.array(all_preds)
+        all_trues = np.array(all_trues)
+        all_probs = np.array(all_probs)
+        all_close_prices = np.array(all_close_prices)
+
+        # Calculate trade returns
+        print(f"Collected {len(all_preds)} predictions from test set")
+
+        # Initialize return arrays
+        returns_per_trade = np.zeros(len(all_preds))
+
+        # Calculate theoretical returns based on trading strategy
+        for i in range(len(all_preds)):
+            pred = all_preds[i]
+            true = all_trues[i]
+
+            if self.is_shorting:
+                # For shorting strategy:
+                # If we predict up (1) and it goes up (1) -> profit (e.g., +1%)
+                # If we predict up (1) and it goes down (0) -> loss (e.g., -1%)
+                # If we predict down (0) and it goes down (0) -> profit (e.g., +1%)
+                # If we predict down (0) and it goes up (1) -> loss (e.g., -1%)
+                if (pred == 1 and true == 1) or (pred == 0 and true == 0):
+                    returns_per_trade[i] = 0.01  # Placeholder for 1% profit
+                else:
+                    returns_per_trade[i] = -0.01  # Placeholder for 1% loss
+            else:
+                # For long-only strategy:
+                # If we predict up (1) and it goes up (1) -> profit (e.g., +1%)
+                # If we predict up (1) and it goes down (0) -> loss (e.g., -1%)
+                # If we predict down (0) -> no trade, no return
+                if pred == 1:
+                    if true == 1:
+                        returns_per_trade[i] = 0.01  # Placeholder for 1% profit
+                    else:
+                        returns_per_trade[i] = -0.01  # Placeholder for 1% loss
+                else:
+                    returns_per_trade[i] = 0.0  # No trade
+
+        # Calculate cumulative returns (compounded)
+        cumulative_returns = np.cumprod(1 + returns_per_trade) - 1
+
+        # Calculate cumulative returns (uncompounded)
+        uncompounded_returns = np.cumsum(returns_per_trade)
+
+        # Print detailed results
+        print("\nDetailed Trading Results:")
+        print("-" * 100)
+        print(
+            f"{'Timestamp':<20} | {'Close Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Return':>8} | {'Cum Return':>12} | {'Uncomp Return':>15}")
+        print("-" * 100)
+
+        for i in range(len(all_preds)):
+            print(
+                f"{all_timestamps[i]:<20} | {all_close_prices[i]:<12.6f} | {all_preds[i]:<5.0f} | {all_trues[i]:<5.0f} | {all_probs[i]:<8.4f} | {returns_per_trade[i]:>8.2%} | {cumulative_returns[i]:>12.2%} | {uncompounded_returns[i]:>15.2%}")
+
+        # Print summary statistics
+        print("\nTrading Performance Summary:")
+        print("-" * 50)
+        print(f"Total trades: {len(returns_per_trade[returns_per_trade != 0])}")
+        print(f"Profitable trades: {np.sum(returns_per_trade > 0)}")
+        print(f"Unprofitable trades: {np.sum(returns_per_trade < 0)}")
+        print(f"Win rate: {np.sum(returns_per_trade > 0) / len(returns_per_trade[returns_per_trade != 0]):.2%}")
+
+        print(f"Average return per trade: {np.mean(returns_per_trade[returns_per_trade != 0]):.2%}")
+        print(f"Final cumulative return (compounded): {cumulative_returns[-1]:.2%}")
+        print(f"Final cumulative return (uncompounded): {uncompounded_returns[-1]:.2%}")
+
+        # Calculate and print additional metrics
+        if len(returns_per_trade[returns_per_trade != 0]) > 0:
+            sharpe_ratio = np.mean(returns_per_trade[returns_per_trade != 0]) / np.std(
+                returns_per_trade[returns_per_trade != 0]) * np.sqrt(252)  # Annualized
+            max_drawdown = np.max(np.maximum.accumulate(cumulative_returns) - cumulative_returns)
+
+            print(f"Sharpe Ratio (annualized): {sharpe_ratio:.2f}")
+            print(f"Maximum Drawdown: {max_drawdown:.2%}")
+
+        # Return the results for further analysis
+        return {
+            'predictions': all_preds,
+            'actual': all_trues,
+            'probabilities': all_probs,
+            'close_prices': all_close_prices,
+            'timestamps': all_timestamps,
+            'returns_per_trade': returns_per_trade,
+            'cumulative_returns': cumulative_returns,
+            'uncompounded_returns': uncompounded_returns
+        }
+
     def calculate_class_distribution(self):
         """Calculate and store the class distribution from the training data"""
         train_data, _ = self._get_data(flag='train')
@@ -769,5 +954,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         print("\nPerforming recency effect analysis...")
         self.analyze_recency_effect(setting, test=test)
+
+        print("\nCalculating trading returns...")
+        self.calculate_returns(setting, test=test)
 
         return
