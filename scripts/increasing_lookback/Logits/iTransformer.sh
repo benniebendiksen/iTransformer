@@ -20,7 +20,7 @@ model_name=iTransformer
 data_path="btcusdt_pca_components_12h_55_07_05_2.csv"
 seq_len=96
 pred_len=2
-enc_in=46
+enc_in=56
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -54,7 +54,7 @@ python -u run.py \
 data_path="btcusdt_pca_components_12h_55_07_05_2.csv"
 seq_len=192
 pred_len=2
-enc_in=46
+enc_in=56
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -86,9 +86,9 @@ python -u run.py \
   --auto_weight 1
 
 data_path="btcusdt_pca_components_12h_55_07_05_2.csv"
-seq_len=96
+seq_len=48
 pred_len=2
-enc_in=48
+enc_in=56
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
