@@ -17,7 +17,75 @@ model_name=iTransformer
 #Fourth run
 #data_path="btcusdt_pca_components_12h_55_07_05.csv"
 #data_path="btcusdt_pca_components_55_window_1.csv"
-data_path="btcusdc_pca_components_1d_48_proper_split_2.csv"
+data_path="btcusdt_pca_components_4h_48_10_10.csv"
+seq_len=96
+pred_len=6
+enc_in=49
+d_model=512
+data_file=$(basename "$data_path" .csv)
+python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/ \
+  --data_path $data_path \
+  --model_id "1_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model $model_name \
+  --data logits \
+  --features MS \
+  --seq_len $seq_len \
+  --pred_len $pred_len \
+  --e_layers 4 \
+  --enc_in $enc_in \
+  --dec_in $enc_in \
+  --c_out 1 \
+  --des 'Logits' \
+  --d_model $d_model \
+  --d_ff $d_model \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 5 \
+  --exp_name logits \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1
+
+data_path="btcusdt_pca_components_4h_48_10_10.csv"
+seq_len=192
+pred_len=6
+enc_in=49
+d_model=512
+data_file=$(basename "$data_path" .csv)
+python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/ \
+  --data_path $data_path \
+  --model_id "1_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model $model_name \
+  --data logits \
+  --features MS \
+  --seq_len $seq_len \
+  --pred_len $pred_len \
+  --e_layers 4 \
+  --enc_in $enc_in \
+  --dec_in $enc_in \
+  --c_out 1 \
+  --des 'Logits' \
+  --d_model $d_model \
+  --d_ff $d_model \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 5 \
+  --exp_name logits \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1
+
+data_path="btcusdt_pca_components_4h_48_10_10.csv"
 seq_len=96
 pred_len=1
 enc_in=49
@@ -51,10 +119,10 @@ python -u run.py \
   --precision_factor 2.0 \
   --auto_weight 1
 
-data_path="btcusdc_pca_components_1d_48_proper_split_2.csv"
+data_path="btcusdt_pca_components_4h_48_05_02.csv"
 seq_len=96
-pred_len=1
-enc_in=51
+pred_len=6
+enc_in=49
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -85,17 +153,17 @@ python -u run.py \
   --precision_factor 2.0 \
   --auto_weight 1
 
-data_path="btcusdt_pca_components_1d_44_10_07.csv"
+data_path="btcusdt_pca_components_4h_48_05_02.csv"
 seq_len=96
 pred_len=1
-enc_in=44
+enc_in=49
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
   --data_path $data_path \
-  --model_id "2_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model_id "1_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
   --model $model_name \
   --data logits \
   --features MS \
