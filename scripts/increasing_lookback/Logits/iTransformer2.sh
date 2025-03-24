@@ -40,7 +40,7 @@ python -u run.py \
   --learning_rate 0.001 \
   --itr 5 \
   --train_epochs 50 \
-  --patience 10 \
+  --patience 5 \
   --exp_name logits \
   --target close \
   --is_shorting 1 \
@@ -74,7 +74,7 @@ python -u run.py \
   --learning_rate 0.001 \
   --itr 5 \
   --train_epochs 50 \
-  --patience 10 \
+  --patience 5 \
   --exp_name logits \
   --target close \
   --is_shorting 1 \
@@ -108,7 +108,7 @@ python -u run.py \
   --learning_rate 0.001 \
   --itr 5 \
   --train_epochs 50 \
-  --patience 10 \
+  --patience 5 \
   --exp_name logits \
   --target close \
   --is_shorting 1 \

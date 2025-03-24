@@ -713,21 +713,23 @@ class Dataset_Crypto(Dataset):
         r_end = r_begin + self.label_len + self.pred_len
 
         # Debug output for test samples
-        if self.flag == 'test' and index < 10:  # Only for first 10 test samples
-            print(f"\n===== TEST SAMPLE {index} =====")
-            print(f"Sequence range: {s_begin}:{s_end}, target range: {r_begin}:{r_end}")
+        #TODO: HANDLE THIS
 
-            # Include sequence mapping info if available
-            if hasattr(self, 'sequence_indices') and index in self.sequence_indices:
-                seq_info = self.sequence_indices[index]
-                print(
-                    f"Original indices: seq={seq_info['orig_start_idx']}:{seq_info['orig_start_idx'] + self.seq_len}, "
-                    f"pred_idx={seq_info['pred_idx']}")
-                print(
-                    f"Price at pred_idx: {seq_info['pred_price']}, Future price (+{self.pred_len}): {seq_info['future_price']}, "
-                    f"Change: {seq_info['price_change']:.2f}%")
-                print(f"Label from dataset: {seq_info['label']}")
-                print(f"Prediction label to be returned: {seq_info['label']}")
+        # if self.flag == 'test' and index < 10:  # Only for first 10 test samples
+        #     print(f"\n===== TEST SAMPLE {index} =====")
+        #     print(f"Sequence range: {s_begin}:{s_end}, target range: {r_begin}:{r_end}")
+        #
+        #     # Include sequence mapping info if available
+        #     if hasattr(self, 'sequence_indices') and index in self.sequence_indices:
+        #         seq_info = self.sequence_indices[index]
+        #         print(
+        #             f"Original indices: seq={seq_info['orig_start_idx']}:{seq_info['orig_start_idx'] + self.seq_len}, "
+        #             f"pred_idx={seq_info['pred_idx']}")
+        #         print(
+        #             f"Price at pred_idx: {seq_info['pred_price']}, Future price (+{self.pred_len}): {seq_info['future_price']}, "
+        #             f"Change: {seq_info['price_change']:.2f}%")
+        #         print(f"Label from dataset: {seq_info['label']}")
+        #         print(f"Prediction label to be returned: {seq_info['label']}")
 
         # Get input sequence
         seq_x = self.data_x[s_begin:s_end]
