@@ -15,7 +15,7 @@ model_name=iTransformer
 
 
 #Fourth run
-data_path="btcusdt_pca_components_12h_55_07_05.csv"
+data_path="btcusdc_pca_components_1d_48_proper_split_2.csv"
 #data_path="btcusdt_pca_components_55_window_1.csv"
 seq_len=96
 pred_len=2
