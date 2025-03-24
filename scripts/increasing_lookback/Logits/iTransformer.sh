@@ -42,7 +42,7 @@ python -u run.py \
   --batch_size 32 \
   --learning_rate 0.001 \
   --itr 5 \
-  --train_epochs 1 \
+  --train_epochs 50 \
   --patience 10 \
   --exp_name logits \
   --target close \
@@ -60,7 +60,7 @@ python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/pca_rolling_windows/ \
   --data_path $data_path \
-  --model_id "1_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model_id "2_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
   --model $model_name \
   --data logits \
   --features MS \
@@ -94,7 +94,7 @@ python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/pca_rolling_windows/ \
   --data_path $data_path \
-  --model_id "1_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model_id "3_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
   --model $model_name \
   --data logits \
   --features MS \
@@ -112,6 +112,109 @@ python -u run.py \
   --itr 5 \
   --train_epochs 50 \
   --patience 2 \
+  --exp_name logits \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1
+
+#Fifth run
+data_path="btcusdt_pca_components_55_window_4.csv"
+seq_len=96
+pred_len=2
+enc_in=58
+d_model=512
+data_file=$(basename "$data_path" .csv)
+python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/pca_rolling_windows/ \
+  --data_path $data_path \
+  --model_id "4_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model $model_name \
+  --data logits \
+  --features MS \
+  --seq_len $seq_len \
+  --pred_len $pred_len \
+  --e_layers 4 \
+  --enc_in $enc_in \
+  --dec_in $enc_in \
+  --c_out 1 \
+  --des 'Logits' \
+  --d_model $d_model \
+  --d_ff $d_model \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 10 \
+  --exp_name logits \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1
+
+data_path="btcusdt_pca_components_55_window_5.csv"
+seq_len=96
+pred_len=2
+enc_in=58
+d_model=512
+data_file=$(basename "$data_path" .csv)
+python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/pca_rolling_windows/ \
+  --data_path $data_path \
+  --model_id "5_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model $model_name \
+  --data logits \
+  --features MS \
+  --seq_len $seq_len \
+  --pred_len $pred_len \
+  --e_layers 4 \
+  --enc_in $enc_in \
+  --dec_in $enc_in \
+  --c_out 1 \
+  --des 'Logits' \
+  --d_model $d_model \
+  --d_ff $d_model \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 10 \
+  --exp_name logits \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1
+
+data_path="btcusdt_pca_components_55_window_6.csv"
+seq_len=96
+pred_len=2
+enc_in=58
+d_model=512
+data_file=$(basename "$data_path" .csv)
+python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/pca_rolling_windows/ \
+  --data_path $data_path \
+  --model_id "6_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model $model_name \
+  --data logits \
+  --features MS \
+  --seq_len $seq_len \
+  --pred_len $pred_len \
+  --e_layers 4 \
+  --enc_in $enc_in \
+  --dec_in $enc_in \
+  --c_out 1 \
+  --des 'Logits' \
+  --d_model $d_model \
+  --d_ff $d_model \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 10 \
   --exp_name logits \
   --target close \
   --is_shorting 1 \

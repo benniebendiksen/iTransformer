@@ -47,50 +47,80 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         all_preds = []
         all_trues = []
 
-        print("\n===== RECENCY EFFECT ANALYSIS =====")
-        print("Collecting test set predictions...")
+        # Debug info about test_data
+        print("\n===== TEST DATA INSPECTION =====")
+        print(f"test_data type: {type(test_data)}")
+        print(f"Has 'active_indices': {hasattr(test_data, 'active_indices')}")
+        print(f"Has 'sequence_indices': {hasattr(test_data, 'sequence_indices')}")
+        if hasattr(test_data, 'sequence_indices'):
+            print(f"sequence_indices length: {len(test_data.sequence_indices)}")
+        # Prepare for collecting predictions
+        all_preds = []
+        all_trues = []
+        all_probs = []
+        all_sample_indices = []
+        all_metadata = []
 
+        print("\n===== COLLECTING PREDICTIONS WITH SEQUENCE TRACKING =====")
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
-                if batch_x.size(0) == 0:
-                    continue
+            # Process each sample separately to ensure correct indexing
+            for i in range(len(test_data)):
+                # Get a single sample
+                batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
 
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.float().to(self.device)
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
+                # Add batch dimension
+                batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
+                batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
+                batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
+                batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
 
-                # decoder input
+                # Decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
-                # encoder - decoder
+                # Make prediction
                 if self.args.output_attention:
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                 else:
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                # Process outputs for binary classification
+                # Process outputs
                 outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
 
-                # Convert logits to probabilities with sigmoid
-                output_probs = torch.sigmoid(outputs_last).detach().cpu().numpy()
+                # Get prediction
+                output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+                output_binary = (output_prob > 0.5).astype(np.float32)
+                true_label = batch_y_last.detach().cpu().numpy()[0, 0]
 
-                # Get binary predictions (threshold at 0.5)
-                output_binary = (output_probs > 0.5).astype(np.float32)
+                # Store results
+                all_preds.append(output_binary)
+                all_trues.append(true_label)
+                all_probs.append(output_prob)
+                all_sample_indices.append(i)
 
-                # Get true labels
-                true_labels = batch_y_last.detach().cpu().numpy()
+                # Store metadata if available
+                meta = None
+                if hasattr(test_data, 'sequence_indices') and i in test_data.sequence_indices:
+                    meta = test_data.sequence_indices[i]
+                elif hasattr(test_data, 'sample_metadata') and i < len(test_data.sample_metadata):
+                    meta = test_data.sample_metadata[i]
+                all_metadata.append(meta)
 
-                # Store individual predictions
-                for idx in range(len(output_binary)):
-                    all_preds.append(output_binary[idx][0])  # Extract scalar value
-                    all_trues.append(true_labels[idx][0])  # Extract scalar value
+                # Debug output for first few samples
+                if i < 10:
+                    print(f"Sample {i}: Pred={output_binary:.1f}, True={true_label:.1f}, Prob={output_prob:.4f}")
+                    if meta:
+                        orig_idx = meta.get('orig_start_idx') or meta.get('orig_idx')
+                        label = meta.get('label')
+                        print(f"  Metadata: orig_idx={orig_idx}, stored_label={label}")
 
         # Convert to numpy arrays
         all_preds = np.array(all_preds)
         all_trues = np.array(all_trues)
+        all_probs = np.array(all_probs)
+
+        print(f"Collected {len(all_preds)} predictions from test set")
 
         # Verify we collected predictions for the whole test set
         print(f"Collected {len(all_preds)} predictions from test set")
@@ -285,6 +315,13 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         """
         Calculates theoretical returns from trading signals and prints detailed results
         for manual verification, including timestamps, price data, predictions, and returns.
+
+        This enhanced version calculates returns for multiple trading strategies:
+        - Long-only: Only take long positions when predicting price increase
+        - Short-only: Only take short positions when predicting price decrease
+        - Both: Take long positions for predicted increases and short positions for predicted decreases
+
+        Returns are calculated based on actual price changes, not placeholders.
         """
         test_data, test_loader = self._get_data(flag='test')
         if test:
@@ -312,328 +349,804 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print(f"Error loading original CSV: {e}")
             test_df = None
 
-        # Collect model predictions
+        # Debug info about test_data
+        print("\n===== TEST DATA INSPECTION =====")
+        print(f"test_data type: {type(test_data)}")
+        print(f"Has 'active_indices': {hasattr(test_data, 'active_indices')}")
+        print(f"Has 'sequence_indices': {hasattr(test_data, 'sequence_indices')}")
+        if hasattr(test_data, 'sequence_indices'):
+            print(f"sequence_indices length: {len(test_data.sequence_indices)}")
+        if hasattr(test_data, 'active_indices'):
+            print(f"active_indices length: {len(test_data.active_indices)}")
+            print(f"First 5 active indices: {test_data.active_indices[:5]}")
+
+        # Add integrity check
+        if hasattr(test_data, 'verify_indices_integrity'):
+            print("\n===== VERIFYING TEST DATA INDICES INTEGRITY =====")
+            indices_valid = test_data.verify_indices_integrity()
+            print(f"Test data indices integrity: {'Valid' if indices_valid else 'COMPROMISED'}")
+
+        # Prepare for collecting predictions
         all_preds = []
         all_trues = []
         all_probs = []
+        all_metadata = []
 
-        print("\n===== RETURN CALCULATION ANALYSIS =====")
-        print("Collecting test set predictions...")
-
+        print("\n===== COLLECTING PREDICTIONS WITH SEQUENCE TRACKING =====")
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
-                if batch_x.size(0) == 0:
-                    continue
+            # Process each sample separately to ensure correct indexing
+            for i in range(len(test_data)):
+                # Get a single sample
+                batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
 
+                # Add batch dimension
+                batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
+                batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
+                batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
+                batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
 
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.float().to(self.device)
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
-
-                # decoder input
+                # Decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
-                # encoder - decoder
+                # Make prediction
                 if self.args.output_attention:
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                 else:
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                # Process outputs for binary classification
+                # Process outputs
                 outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
 
-                # Convert logits to probabilities with sigmoid
-                output_probs = torch.sigmoid(outputs_last).detach().cpu().numpy()
+                # Get prediction
+                output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+                output_binary = (output_prob > 0.5).astype(np.float32)
+                true_label = batch_y_last.detach().cpu().numpy()[0, 0]
 
-                # Get binary predictions (threshold at 0.5)
-                output_binary = (output_probs > 0.5).astype(np.float32)
+                # Store results
+                all_preds.append(output_binary)
+                all_trues.append(true_label)
+                all_probs.append(output_prob)
 
-                print(f"DEBUG: For sample {i}, output_binary={output_binary}, batch_y_last={batch_y_last}")
+                # Store metadata if available
+                meta = None
+                if hasattr(test_data, 'sequence_indices') and i in test_data.sequence_indices:
+                    meta = test_data.sequence_indices[i]
+                all_metadata.append(meta)
 
-                # Get true labels
-                true_labels = batch_y_last.detach().cpu().numpy()
-
-                # Store predictions
-                for idx in range(len(output_binary)):
-                    all_preds.append(output_binary[idx][0])
-                    all_trues.append(true_labels[idx][0])
-                    # Add in calculate_returns where the "True" column values are set:
-                    print(f"DEBUG: For sample {i}, batch_y_last={batch_y_last}, converted to True={all_trues[i]}")
-                    all_probs.append(output_probs[idx][0])
+                # Debug output for first few samples
+                if i < 10:
+                    print(f"Sample {i}: Pred={output_binary:.1f}, True={true_label:.1f}, Prob={output_prob:.4f}")
+                    if meta:
+                        print(
+                            f"  Metadata: orig_idx={meta['orig_start_idx']}, pred_price={meta['pred_price']:.2f}, future_price={meta['future_price']:.2f}, label={meta['label']}")
 
         # Convert to numpy arrays
         all_preds = np.array(all_preds)
         all_trues = np.array(all_trues)
         all_probs = np.array(all_probs)
 
-        # In calculate_returns, after collecting all_preds, all_trues:
-        if hasattr(test_data, 'sample_metadata'):
-            print("\nLabel Verification with Detailed Metadata:")
-            print("-" * 140)
-            print(
-                f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
-            print("-" * 140)
-
-            for i, meta in enumerate(test_data.sample_metadata):
-                if i >= len(all_trues):
-                    break
-
-                price_change = ((meta['future_price'] - meta['pred_price']) / meta['pred_price']) * 100.0
-                calculated_direction = "up" if meta['future_price'] > meta['pred_price'] else "down/same"
-                stored_label = meta['label']
-                model_true = all_trues[i]
-                match = "✓" if stored_label == model_true else "✗"
-
-                print(
-                    f"{i:<8} | {meta['orig_idx']:<8} | {meta['pred_idx']:<8} | {meta['pred_price']:<12.2f} | {meta['future_price']:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5}")
-
-            # Show summary statistics
-            matches = sum(
-                1 for i, meta in enumerate(test_data.sample_metadata[:len(all_trues)]) if meta['label'] == all_trues[i])
-            total = min(len(test_data.sample_metadata), len(all_trues))
-            print(f"\nLabel Match Rate: {matches}/{total} ({matches / total * 100:.2f}%)")
-
         print(f"Collected {len(all_preds)} predictions from test set")
 
+        # Show detailed label verification
+        print("\nLabel Verification with Detailed Metadata:")
+        print("-" * 140)
+        print(
+            f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
+        print("-" * 140)
 
+        for i, meta in enumerate(all_metadata):
+            if i >= len(all_trues) or meta is None:
+                continue
 
-        # Now match these predictions with timestamps and prices
-        seq_len = test_data.seq_len
-        pred_len = test_data.pred_len
+            orig_idx = meta['orig_start_idx']
+            pred_idx = meta['pred_idx']
+            pred_price = meta['pred_price']
+            future_price = meta['future_price']
+            price_change = meta['price_change']
+            stored_label = meta['label']
+            model_true = all_trues[i]
+            match = "✓" if abs(stored_label - model_true) < 0.01 else "✗"
 
-        # Add near the beginning of calculate_returns, after loading test_df
-        print("\n===== DATASET INDEX MAPPING =====")
-        print(f"test_data object type: {type(test_data)}")
-        print(f"test_data.seq_len: {test_data.seq_len}, test_data.pred_len: {test_data.pred_len}")
+            print(
+                f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5}")
 
-        if hasattr(test_data, 'active_indices'):
-            print(f"Does test_data have active_indices? Yes, length: {len(test_data.active_indices)}")
-            print(f"First 5 active indices: {test_data.active_indices[:5]}")
-        else:
-            print("test_data does not have active_indices attribute")
+        # Show summary statistics
+        matches = sum(
+            1 for i, meta in enumerate(all_metadata)
+            if meta is not None and i < len(all_trues) and
+            abs(meta['label'] - all_trues[i]) < 0.01)
+        total = len([meta for meta in all_metadata if meta is not None])
+        print(f"\nLabel Match Rate: {matches}/{total} ({matches / total * 100:.2f}%)")
 
-        # Add after collecting predictions
-        print("\n===== RAW PREDICTIONS SUMMARY =====")
-        print(f"Collected {len(all_preds)} predictions:")
-        for i in range(min(5, len(all_preds))):
-            print(f"Prediction {i}: Pred={all_preds[i]}, True={all_trues[i]}, Prob={all_probs[i]:.4f}")
-        # Add detailed debugging for the price/timestamp mapping
-        print("\n===== PRICE MAPPING DETAILS =====")
-        print(f"test_df has {len(test_df) if test_df is not None else 0} rows")
-        if test_df is not None:
-            for i in range(min(5, len(all_preds))):
-                base_idx = i
-                current_idx = base_idx + seq_len
+        # Extract actual price changes from metadata
+        actual_changes = []
+        timestamps = []
+        prices = []
 
-                print(f"\nSample {i} mapping:")
-                print(f"  Base index in test dataset: {base_idx}")
-                print(f"  Current index (base + seq_len={seq_len}): {current_idx}")
-
-                if current_idx < len(test_df):
-                    timestamp = test_df.iloc[current_idx]['date']
-                    current_price = test_df.iloc[current_idx]['close']
-
-                    # Map this back to original dataset if possible
-                    if hasattr(test_data, 'active_indices') and base_idx < len(test_data.active_indices):
-                        orig_idx = test_data.active_indices[base_idx]
-                        orig_prediction_idx = orig_idx + seq_len
-                        print(f"  Mapped to original dataset: Base={orig_idx}, Prediction point={orig_prediction_idx}")
-
-                    print(f"  Timestamp: {timestamp}")
-                    print(f"  Current price: {current_price}")
-
-                    if current_idx + pred_len < len(test_df):
-                        future_price = test_df.iloc[current_idx + pred_len]['close']
-                        print(f"  Future price (+{pred_len} steps): {future_price}")
-                        print(f"  Price change: {((future_price - current_price) / current_price):.2%}")
-                        print(f"  True label: {all_trues[i]} (should be 1 if price went up)")
-                    else:
-                        print("  Future price: Not available (beyond dataset)")
-
-        ####
-        all_timestamps = []
-        all_close_prices = []
-        all_future_prices = []
-
-        # For each prediction point, adjust the index mapping
-        for i in range(len(all_preds)):
-            base_idx = i
-            # Use the active_indices attribute to map to original dataset if available
-            if hasattr(test_data, 'active_indices') and base_idx < len(test_data.active_indices):
-                orig_idx = test_data.active_indices[base_idx]
-                current_idx = orig_idx + seq_len
+        for i, meta in enumerate(all_metadata):
+            if meta is not None:
+                # Extract actual price change as decimal (not percentage)
+                actual_changes.append(meta['price_change'] / 100.0)
+                # Extract timestamp if available from test_df
+                orig_idx = meta['orig_start_idx']
+                pred_idx = meta['pred_idx']
+                if test_df is not None and pred_idx < len(test_df):
+                    timestamp = test_df.iloc[pred_idx]['date']
+                else:
+                    timestamp = f"sample_{i}"
+                timestamps.append(timestamp)
+                prices.append(meta['pred_price'])
             else:
-                current_idx = base_idx + seq_len
+                actual_changes.append(0.0)
+                timestamps.append(f"sample_{i}")
+                prices.append(np.nan)
 
-            # Get timestamp and price data using the correct indices
-            if current_idx < len(test_df):
-                timestamp = test_df.iloc[current_idx]['date']
-                current_price = test_df.iloc[current_idx]['close']
+        # Convert to numpy array
+        actual_changes = np.array(actual_changes)
 
-                # Get future price correctly
-                if current_idx + pred_len < len(test_df):
-                    future_price = test_df.iloc[current_idx + pred_len]['close']
-                    # Verify alignment
-                    expected_label = 1.0 if future_price > current_price else 0.0
-                    # Print verification
-                    print(
-                        f"Idx {i}: True label={all_trues[i]}, Calculated label={expected_label}, Current={current_price}, Future={future_price}")
-
-        # For each prediction point, get the corresponding data from the test dataset
-        if test_df is not None:
-            for i in range(len(all_preds)):
-                base_idx = i  # Sample index in the dataset
-                current_idx = base_idx + seq_len  # Index where prediction is made
-
-                if current_idx < len(test_df):
-                    # Get timestamp and current price
-                    timestamp = test_df.iloc[current_idx]['date']
-                    current_price = test_df.iloc[current_idx]['close']
-
-                    # Get future price if available (for validation only)
-                    if current_idx + pred_len < len(test_df):
-                        future_price = test_df.iloc[current_idx + pred_len]['close']
-                    else:
-                        future_price = np.nan
-
-                    all_timestamps.append(timestamp)
-                    all_close_prices.append(current_price)
-                    all_future_prices.append(future_price)
-                else:
-                    all_timestamps.append(f"sample_{i}")
-                    all_close_prices.append(np.nan)
-                    all_future_prices.append(np.nan)
-        else:
-            # If no test_df, use placeholders
-            all_timestamps = [f"sample_{i}" for i in range(len(all_preds))]
-            all_close_prices = [np.nan] * len(all_preds)
-            all_future_prices = [np.nan] * len(all_preds)
-
-        # Calculate returns using the TRUE LABELS from the model
-        # Do NOT recalculate from prices, as they might not match with how labels were generated
-        returns_per_trade = np.zeros(len(all_preds))
-
+        # Calculate returns for different trading strategies
+        # 1. Long-only strategy (take long positions only when predicting price increases)
+        long_only_returns = np.zeros(len(all_preds))
         for i in range(len(all_preds)):
-            pred = all_preds[i]
-            true = all_trues[i]  # Use the true label that the model was trained with
+            if all_preds[i] == 1:  # Predicted price increase, take long position
+                long_only_returns[i] = actual_changes[i]  # Gain/lose based on actual price change
 
-            # Calculate return (use a fixed placeholder percentage if prices not available)
-            return_pct = 0.01 if true == 1 else -0.01
+        # 2. Short-only strategy (take short positions only when predicting price decreases)
+        short_only_returns = np.zeros(len(all_preds))
+        for i in range(len(all_preds)):
+            if all_preds[i] == 0:  # Predicted price decrease, take short position
+                short_only_returns[i] = -actual_changes[i]  # Gain when price falls, lose when price rises
 
-            # If we have actual prices, use them for display but not for return calculation
-            if i < len(all_future_prices) and not np.isnan(all_close_prices[i]) and not np.isnan(all_future_prices[i]):
-                # Just for validation - don't use this for returns calculation
-                actual_change = (all_future_prices[i] - all_close_prices[i]) / all_close_prices[i]
-                # Uncomment to debug:
-                # print(f"Index {i}: Label={true}, Actual change: {actual_change:.2%}")
+        # 3. Combined strategy (take long for predicted increases, short for predicted decreases)
+        combined_returns = np.zeros(len(all_preds))
+        for i in range(len(all_preds)):
+            if all_preds[i] == 1:  # Predicted price increase, take long position
+                combined_returns[i] = actual_changes[i]
+            else:  # Predicted price decrease, take short position
+                combined_returns[i] = -actual_changes[i]
 
-            if self.is_shorting:
-                # For shorting strategy
-                if (pred == 1 and true == 1) or (pred == 0 and true == 0):
-                    # Correct prediction
-                    returns_per_trade[i] = abs(return_pct)
-                else:
-                    # Incorrect prediction
-                    returns_per_trade[i] = -abs(return_pct)
+        # Calculate metrics for each strategy
+        strategy_names = ["Long-Only", "Short-Only", "Combined (Long+Short)"]
+        strategy_returns = [long_only_returns, short_only_returns, combined_returns]
+
+        # Helper function to calculate trading metrics
+        def calculate_trading_metrics(returns):
+            if len(returns) == 0:
+                return {
+                    'trades': 0,
+                    'profitable_trades': 0,
+                    'unprofitable_trades': 0,
+                    'win_rate': 0.0,
+                    'avg_return': 0.0,
+                    'cumulative_return': 0.0,
+                    'uncompounded_return': 0.0,
+                    'sharpe_ratio': 0.0,
+                    'max_drawdown': 0.0
+                }
+
+            # Calculate standard metrics
+            trades = np.sum(returns != 0)
+            profitable_trades = np.sum(returns > 0)
+            unprofitable_trades = np.sum(returns < 0)
+            win_rate = profitable_trades / trades if trades > 0 else 0.0
+            avg_return = np.mean(returns[returns != 0]) if trades > 0 else 0.0
+
+            # Calculate cumulative (compounded) returns
+            cumulative_returns = np.cumprod(1 + returns) - 1
+            final_cumulative_return = cumulative_returns[-1] if len(cumulative_returns) > 0 else 0.0
+
+            # Calculate uncompounded returns
+            uncompounded_return = np.sum(returns)
+
+            # Calculate Sharpe Ratio (annualized)
+            # Assumes returns are per-period (e.g., hourly or daily)
+            # For annualization, adjust based on your data frequency
+            ann_factor = 252  # Typical trading days in a year for daily data
+            if trades > 1:
+                returns_std = np.std(returns, ddof=1)
+                sharpe_ratio = (np.mean(returns) / (returns_std + 1e-10)) * np.sqrt(ann_factor)
             else:
-                # For long-only strategy
-                if pred == 1:
-                    returns_per_trade[i] = return_pct
-                else:
-                    returns_per_trade[i] = 0.0  # No trade
+                sharpe_ratio = 0.0
 
-        # Calculate cumulative returns
-        cumulative_returns = np.cumprod(1 + returns_per_trade) - 1
-        uncompounded_returns = np.cumsum(returns_per_trade)
+            # Calculate Maximum Drawdown
+            if len(cumulative_returns) > 0:
+                peak = np.maximum.accumulate(cumulative_returns)
+                drawdown = peak - cumulative_returns
+                max_drawdown = np.max(drawdown) if len(drawdown) > 0 else 0.0
+            else:
+                max_drawdown = 0.0
 
-        # Modify the existing print section to add original index information
-        print("\nDetailed Trading Results with Original Indices:")
+            return {
+                'trades': trades,
+                'profitable_trades': profitable_trades,
+                'unprofitable_trades': unprofitable_trades,
+                'win_rate': win_rate,
+                'avg_return': avg_return,
+                'cumulative_return': final_cumulative_return,
+                'uncompounded_return': uncompounded_return,
+                'sharpe_ratio': sharpe_ratio,
+                'max_drawdown': max_drawdown
+            }
+
+        # Calculate metrics for each strategy
+        strategy_metrics = [calculate_trading_metrics(returns) for returns in strategy_returns]
+
+        # Print results for each strategy
+        print("\n===== COMPARING TRADING STRATEGIES =====")
+        for name, returns, metrics in zip(strategy_names, strategy_returns, strategy_metrics):
+            print(f"\n{name} Strategy Results:")
+            print("-" * 50)
+            print(f"Total trades: {metrics['trades']}")
+            print(f"Profitable trades: {metrics['profitable_trades']}")
+            print(f"Unprofitable trades: {metrics['unprofitable_trades']}")
+            print(f"Win rate: {metrics['win_rate']:.2%}")
+            print(f"Average return per trade: {metrics['avg_return']:.4%}")
+            print(f"Final cumulative return (compounded): {metrics['cumulative_return']:.4%}")
+            print(f"Final total return (uncompounded): {metrics['uncompounded_return']:.4%}")
+            print(f"Sharpe Ratio (annualized): {metrics['sharpe_ratio']:.4f}")
+            print(f"Maximum Drawdown: {metrics['max_drawdown']:.4%}")
+
+        # Print detailed trading results for the combined strategy
+        print("\nDetailed Trading Results (Combined Strategy):")
         print("-" * 120)
         print(
-            f"{'Timestamp':<20} | {'Unix Time':<12} | {'Orig Idx':<8} | {'Close Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Return':>8} | {'Cum Return':>12}")
+            f"{'Sample':<8} | {'Timestamp':<20} | {'Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Actual Chg':<10} | {'Return':>8} | {'Cum Return':>12}")
         print("-" * 120)
+
+        # Calculate cumulative returns for display
+        cum_returns = np.cumprod(1 + combined_returns) - 1
 
         for i in range(len(all_preds)):
             # Format timestamp for display
-            if isinstance(all_timestamps[i], pd.Timestamp):
-                # ts_str = all_timestamps[i].strftime('%Y-%m-%d %H:%M')
-                ts_str = str(all_timestamps[i])
-                # Get original unix timestamp if possible
-                unix_time = int(all_timestamps[i].timestamp()) if hasattr(all_timestamps[i], 'timestamp') else 'N/A'
+            if isinstance(timestamps[i], pd.Timestamp):
+                ts_str = str(timestamps[i])
             else:
-                ts_str = str(all_timestamps[i])
-                unix_time = 'N/A'
-
-            # Get original index if available
-            orig_idx = 'N/A'
-            if hasattr(test_data, 'active_indices') and (i + seq_len) < len(test_data.active_indices):
-                orig_idx = test_data.active_indices[i] + seq_len
+                ts_str = str(timestamps[i])
 
             print(
-                f"{ts_str:<20} | {unix_time:<12} | {orig_idx:<8} | {all_close_prices[i]:<12.2f} | {all_preds[i]:<5.0f} | "
-                f"{all_trues[i]:<5.0f} | {all_probs[i]:<8.4f} | {returns_per_trade[i]:>8.2%} | {cumulative_returns[i]:>12.2%}")
-
-            # Validate labels against original data if possible
-            if i < 10 and test_df is not None and orig_idx != 'N/A' and orig_idx - test_data.pred_len >= 0:
-                try:
-                    base_idx = orig_idx - seq_len
-                    if base_idx < len(test_df) and (base_idx + test_data.pred_len) < len(test_df):
-                        current_price = test_df.iloc[base_idx]['close']
-                        future_price = test_df.iloc[base_idx + test_data.pred_len]['close']
-                        expected_label = 1.0 if future_price > current_price else 0.0
-                        print(f"    VALIDATION: Base idx={base_idx}, Current price={current_price}, "
-                              f"Future price(+{test_data.pred_len})={future_price}, "
-                              f"Expected label={expected_label}, Actual label={all_trues[i]}")
-                        if expected_label != all_trues[i]:
-                            print(f"    *** LABEL MISMATCH DETECTED ***")
-                except Exception as e:
-                    print(f"    Error validating label: {e}")
-        # Print trading performance summary
-        print("\nTrading Performance Summary:")
-        print("-" * 50)
-
-        # Count trades (non-zero returns)
-        trades = returns_per_trade != 0
-        trade_count = np.sum(trades)
-
-        print(f"Total trades: {trade_count}")
-        print(f"Profitable trades: {np.sum(returns_per_trade > 0)}")
-        print(f"Unprofitable trades: {np.sum(returns_per_trade < 0)}")
-
-        if trade_count > 0:
-            win_rate = np.sum(returns_per_trade > 0) / trade_count
-            print(f"Win rate: {win_rate:.2%}")
-            print(f"Average return per trade: {np.mean(returns_per_trade[trades]):.2%}")
-        else:
-            print("Win rate: N/A (no trades)")
-            print("Average return per trade: N/A (no trades)")
-
-        print(f"Final cumulative return (compounded): {cumulative_returns[-1]:.2%}")
-        print(f"Final cumulative return (uncompounded): {uncompounded_returns[-1]:.2%}")
-
-        # Calculate additional metrics
-        if trade_count > 0:
-            sharpe_ratio = np.mean(returns_per_trade[trades]) / (np.std(returns_per_trade[trades]) + 1e-10) * np.sqrt(
-                252)  # Annualized
-            max_drawdown = np.max(np.maximum.accumulate(cumulative_returns) - cumulative_returns)
-
-            print(f"Sharpe Ratio (annualized): {sharpe_ratio:.2f}")
-            print(f"Maximum Drawdown: {max_drawdown:.2%}")
+                f"{i:<8} | {ts_str:<20} | {prices[i]:<12.2f} | {all_preds[i]:<5.0f} | "
+                f"{all_trues[i]:<5.0f} | {all_probs[i]:<8.4f} | {actual_changes[i] * 100:>10.2f}% | {combined_returns[i]:>8.4%} | {cum_returns[i]:>12.4%}")
 
         # Return the results for further analysis
         return {
             'predictions': all_preds,
             'actual': all_trues,
             'probabilities': all_probs,
-            'close_prices': all_close_prices,
-            'timestamps': all_timestamps,
-            'returns_per_trade': returns_per_trade,
-            'cumulative_returns': cumulative_returns,
-            'uncompounded_returns': uncompounded_returns
+            'actual_changes': actual_changes,
+            'timestamps': timestamps,
+            'prices': prices,
+            'strategies': {
+                'long_only': {
+                    'returns': long_only_returns,
+                    'cumulative_returns': np.cumprod(1 + long_only_returns) - 1,
+                    'metrics': strategy_metrics[0]
+                },
+                'short_only': {
+                    'returns': short_only_returns,
+                    'cumulative_returns': np.cumprod(1 + short_only_returns) - 1,
+                    'metrics': strategy_metrics[1]
+                },
+                'combined': {
+                    'returns': combined_returns,
+                    'cumulative_returns': cum_returns,
+                    'metrics': strategy_metrics[2]
+                }
+            }
         }
+
+    # def calculate_returns(self, setting, test=0):
+    #     """
+    #     Calculates theoretical returns from trading signals and prints detailed results
+    #     for manual verification, including timestamps, price data, predictions, and returns.
+    #     """
+    #     test_data, test_loader = self._get_data(flag='test')
+    #     if test:
+    #         print('loading model')
+    #         self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+    #
+    #     # Load original dataset to get timestamps and prices
+    #     try:
+    #         print(f"Loading original data from {os.path.join(test_data.root_path, test_data.data_path)}")
+    #         original_df = pd.read_csv(os.path.join(test_data.root_path, test_data.data_path))
+    #
+    #         # Filter to test data
+    #         if 'split' in original_df.columns:
+    #             test_df = original_df[original_df['split'] == 'test'].reset_index(drop=True)
+    #             print(f"Found {len(test_df)} test samples in the dataset")
+    #         else:
+    #             # Fallback to default splitting
+    #             test_df = None
+    #
+    #         # Convert timestamp
+    #         if test_df is not None and 'date' in test_df.columns:
+    #             if pd.api.types.is_integer_dtype(test_df['date']):
+    #                 test_df['date'] = pd.to_datetime(test_df['date'], unit='s')
+    #     except Exception as e:
+    #         print(f"Error loading original CSV: {e}")
+    #         test_df = None
+    #
+    #     # Debug info about test_data
+    #     print("\n===== TEST DATA INSPECTION =====")
+    #     print(f"test_data type: {type(test_data)}")
+    #     print(f"Has 'active_indices': {hasattr(test_data, 'active_indices')}")
+    #     print(f"Has 'sequence_indices': {hasattr(test_data, 'sequence_indices')}")
+    #     if hasattr(test_data, 'sequence_indices'):
+    #         print(f"sequence_indices length: {len(test_data.sequence_indices)}")
+    #
+    #     # Prepare for collecting predictions
+    #     all_preds = []
+    #     all_trues = []
+    #     all_probs = []
+    #     all_sample_indices = []
+    #     all_metadata = []
+    #
+    #     print("\n===== COLLECTING PREDICTIONS WITH SEQUENCE TRACKING =====")
+    #     self.model.eval()
+    #     with torch.no_grad():
+    #         # Process each sample separately to ensure correct indexing
+    #         for i in range(len(test_data)):
+    #             # Get a single sample
+    #             batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
+    #
+    #             # Add batch dimension
+    #             batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
+    #             batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
+    #             batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
+    #             batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
+    #
+    #             # Decoder input
+    #             dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+    #             dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+    #
+    #             # Make prediction
+    #             if self.args.output_attention:
+    #                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+    #             else:
+    #                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+    #
+    #             # Process outputs
+    #             outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+    #
+    #             # Get prediction
+    #             output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+    #             output_binary = (output_prob > 0.5).astype(np.float32)
+    #             true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+    #
+    #             # Store results
+    #             all_preds.append(output_binary)
+    #             all_trues.append(true_label)
+    #             all_probs.append(output_prob)
+    #             all_sample_indices.append(i)
+    #
+    #             # Store metadata if available
+    #             meta = None
+    #             if hasattr(test_data, 'sequence_indices') and i in test_data.sequence_indices:
+    #                 meta = test_data.sequence_indices[i]
+    #             elif hasattr(test_data, 'sample_metadata') and i < len(test_data.sample_metadata):
+    #                 meta = test_data.sample_metadata[i]
+    #             all_metadata.append(meta)
+    #
+    #             # Debug output for first few samples
+    #             if i < 10:
+    #                 print(f"Sample {i}: Pred={output_binary:.1f}, True={true_label:.1f}, Prob={output_prob:.4f}")
+    #                 if meta:
+    #                     orig_idx = meta.get('orig_start_idx') or meta.get('orig_idx')
+    #                     label = meta.get('label')
+    #                     print(f"  Metadata: orig_idx={orig_idx}, stored_label={label}")
+    #
+    #     # Convert to numpy arrays
+    #     all_preds = np.array(all_preds)
+    #     all_trues = np.array(all_trues)
+    #     all_probs = np.array(all_probs)
+    #
+    #     print(f"Collected {len(all_preds)} predictions from test set")
+    #
+    #     # In calculate_returns, after collecting all_preds, all_trues:
+    #     # Add this at the end of __read_data__ in Dataset_Crypto class (data_provider/data_loader.py)
+    #     # Around line 825, right after the sample_metadata creation
+    #
+    #     print(f"\n===== DATASET INITIALIZATION (Flag: {self.flag}) =====")
+    #     print(f"Sample metadata created with {len(self.sample_metadata)} entries")
+    #     if hasattr(self, 'active_indices'):
+    #         print(f"active_indices length: {len(self.active_indices)}")
+    #         print(f"First 5 active indices: {self.active_indices[:5]}")
+    #         print(f"Last 5 active indices: {self.active_indices[-5:]}")
+    #     print("Saved original active_indices for verification")
+    #     self._original_active_indices = self.active_indices.copy() if hasattr(self, 'active_indices') else None
+    #
+    #     # Add this function to Dataset_Crypto class (data_provider/data_loader.py)
+    #     def verify_indices_integrity(self):
+    #         """Verify that active_indices has not been modified since initialization"""
+    #         if not hasattr(self, '_original_active_indices'):
+    #             print("WARNING: No original active indices saved for verification")
+    #             return False
+    #
+    #         if not hasattr(self, 'active_indices'):
+    #             print("WARNING: No active_indices attribute found")
+    #             return False
+    #
+    #         if len(self._original_active_indices) != len(self.active_indices):
+    #             print(
+    #                 f"ERROR: active_indices length changed! Original: {len(self._original_active_indices)}, Current: {len(self.active_indices)}")
+    #             return False
+    #
+    #         # Check first 5 and last 5 elements
+    #         check_first = all(self._original_active_indices[i] == self.active_indices[i] for i in
+    #                           range(min(5, len(self.active_indices))))
+    #         check_last = all(self._original_active_indices[-(i + 1)] == self.active_indices[-(i + 1)] for i in
+    #                          range(min(5, len(self.active_indices))))
+    #
+    #         if not check_first or not check_last:
+    #             print("ERROR: active_indices values have changed!")
+    #             print(f"Original first 5: {self._original_active_indices[:5]}")
+    #             print(f"Current first 5: {self.active_indices[:5]}")
+    #             print(f"Original last 5: {self._original_active_indices[-5:]}")
+    #             print(f"Current last 5: {self.active_indices[-5:]}")
+    #             return False
+    #
+    #         return True
+    #
+    #     # Add this function call at the beginning of calculate_returns in Exp_Logits_Forecast (experiments/exp_logits_forecasting.py)
+    #     # Around line 376, right after getting test_data, test_loader
+    #
+    #     # Add integrity check
+    #     if hasattr(test_data, 'verify_indices_integrity'):
+    #         print("\n===== VERIFYING TEST DATA INDICES INTEGRITY =====")
+    #         indices_valid = test_data.verify_indices_integrity()
+    #         print(f"Test data indices integrity: {'Valid' if indices_valid else 'COMPROMISED'}")
+    #
+    #     # Modify the prediction collection loop in calculate_returns to ensure consistent index mapping
+    #     # Replace the existing collection loop (around line 419) with this version:
+    #
+    #     # Prepare for collecting predictions
+    #     all_preds = []
+    #     all_trues = []
+    #     all_probs = []
+    #     all_sample_indices = []
+    #     all_metadata = []
+    #
+    #     print("\n===== COLLECTING PREDICTIONS WITH STRICT INDEX TRACKING =====")
+    #     self.model.eval()
+    #     with torch.no_grad():
+    #         for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+    #             if batch_x.size(0) == 0:
+    #                 continue
+    #
+    #             batch_x = batch_x.float().to(self.device)
+    #             batch_y = batch_y.float().to(self.device)
+    #             batch_x_mark = batch_x_mark.float().to(self.device)
+    #             batch_y_mark = batch_y_mark.float().to(self.device)
+    #
+    #             # decoder input
+    #             dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+    #             dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+    #
+    #             # encoder - decoder
+    #             if self.args.output_attention:
+    #                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+    #             else:
+    #                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+    #
+    #             # Process outputs for binary classification
+    #             outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+    #
+    #             # Convert logits to probabilities with sigmoid
+    #             output_probs = torch.sigmoid(outputs_last).detach().cpu().numpy()
+    #
+    #             # Get binary predictions (threshold at 0.5)
+    #             output_binary = (output_probs > 0.5).astype(np.float32)
+    #
+    #             # Get true labels (keep as tensor for now)
+    #             true_labels = batch_y_last.detach().cpu().numpy()
+    #
+    #             # For each sample in batch, record with its index
+    #             for idx in range(len(output_binary)):
+    #                 orig_sample_idx = i * test_loader.batch_size + idx
+    #
+    #                 # Verify we're within bounds of the dataset
+    #                 if orig_sample_idx < len(test_data):
+    #                     # Store sample index for reference
+    #                     all_sample_indices.append(orig_sample_idx)
+    #
+    #                     # Store predictions and true values
+    #                     all_preds.append(output_binary[idx][0])
+    #                     all_trues.append(true_labels[idx][0])
+    #                     all_probs.append(output_probs[idx][0])
+    #
+    #                     # Debug print for the first 10 samples
+    #                     if len(all_preds) <= 10:
+    #                         print(
+    #                             f"Sample {orig_sample_idx}: Pred={output_binary[idx][0]:.1f}, True={true_labels[idx][0]:.1f}, Prob={output_probs[idx][0]:.4f}")
+    #
+    #                         # Get the metadata for this sample if available
+    #                         if hasattr(test_data, 'sample_metadata') and orig_sample_idx < len(
+    #                                 test_data.sample_metadata):
+    #                             meta = test_data.sample_metadata[orig_sample_idx]
+    #                             print(
+    #                                 f"  Metadata: orig_idx={meta['orig_idx']}, pred_idx={meta['pred_idx']}, label={meta['label']}")
+    #
+    #     # Convert to numpy arrays
+    #     all_preds = np.array(all_preds)
+    #     all_trues = np.array(all_trues)
+    #     all_probs = np.array(all_probs)
+    #     all_sample_indices = np.array(all_sample_indices)
+    #
+    #     print(f"Collected {len(all_preds)} predictions from test set")
+    #     print(f"Sample indices range: {all_sample_indices[0]} to {all_sample_indices[-1]}")
+    #
+    #     # Now in the "Label Verification with Detailed Metadata" section, make sure to use the correct indices
+    #
+    #     if hasattr(test_data, 'sample_metadata'):
+    #         print("\nLabel Verification with Detailed Metadata:")
+    #         print("-" * 140)
+    #         print(
+    #             f"{'Sample':<8} | {'Orig Start':<10} | {'Pred Idx':<10} | {'Future Idx':<10} | {'Stored Label':<12} | {'Model Label':<12} | {'Match':<6}")
+    #         print("-" * 140)
+    #
+    #         for i, meta in enumerate(all_metadata):
+    #             if i >= len(all_trues) or meta is None:
+    #                 continue
+    #
+    #             orig_start = meta.get('orig_start_idx') or meta.get('orig_idx') or 'N/A'
+    #             pred_idx = meta.get('pred_idx') or 'N/A'
+    #             future_idx = meta.get('future_idx') or 'N/A'
+    #             stored_label = meta.get('label')
+    #             model_label = all_trues[i]
+    #
+    #             # Check for match, allowing for small floating point differences
+    #             match = "✓" if stored_label is not None and abs(stored_label - model_label) < 0.01 else "✗"
+    #
+    #             print(
+    #                 f"{i:<8} | {orig_start:<10} | {pred_idx:<10} | {future_idx:<10} | {stored_label:<12} | {model_label:<12.1f} | {match:<6}")
+    #
+    #         # Show summary statistics
+    #         matches = sum(
+    #             1 for i, meta in enumerate(all_metadata)
+    #             if meta is not None and 'label' in meta and
+    #             abs(meta['label'] - all_trues[i]) < 0.01)
+    #         total = len([meta for meta in all_metadata if meta is not None and 'label' in meta])
+    #         print(f"\nLabel Match Rate: {matches}/{total} ({matches / total * 100:.2f}%)")
+    #
+    #     print(f"Collected {len(all_preds)} predictions from test set")
+    #
+    #
+    #
+    #     # Now match these predictions with timestamps and prices
+    #     seq_len = test_data.seq_len
+    #     pred_len = test_data.pred_len
+    #
+    #     # Add near the beginning of calculate_returns, after loading test_df
+    #     print("\n===== DATASET INDEX MAPPING =====")
+    #     print(f"test_data object type: {type(test_data)}")
+    #     print(f"test_data.seq_len: {test_data.seq_len}, test_data.pred_len: {test_data.pred_len}")
+    #
+    #     if hasattr(test_data, 'active_indices'):
+    #         print(f"Does test_data have active_indices? Yes, length: {len(test_data.active_indices)}")
+    #         print(f"First 5 active indices: {test_data.active_indices[:5]}")
+    #     else:
+    #         print("test_data does not have active_indices attribute")
+    #
+    #     # Add after collecting predictions
+    #     print("\n===== RAW PREDICTIONS SUMMARY =====")
+    #     print(f"Collected {len(all_preds)} predictions:")
+    #     for i in range(min(5, len(all_preds))):
+    #         print(f"Prediction {i}: Pred={all_preds[i]}, True={all_trues[i]}, Prob={all_probs[i]:.4f}")
+    #     # Add detailed debugging for the price/timestamp mapping
+    #     print("\n===== PRICE MAPPING DETAILS =====")
+    #     print(f"test_df has {len(test_df) if test_df is not None else 0} rows")
+    #     if test_df is not None:
+    #         for i in range(min(5, len(all_preds))):
+    #             base_idx = i
+    #             current_idx = base_idx + seq_len
+    #
+    #             print(f"\nSample {i} mapping:")
+    #             print(f"  Base index in test dataset: {base_idx}")
+    #             print(f"  Current index (base + seq_len={seq_len}): {current_idx}")
+    #
+    #             if current_idx < len(test_df):
+    #                 timestamp = test_df.iloc[current_idx]['date']
+    #                 current_price = test_df.iloc[current_idx]['close']
+    #
+    #                 # Map this back to original dataset if possible
+    #                 if hasattr(test_data, 'active_indices') and base_idx < len(test_data.active_indices):
+    #                     orig_idx = test_data.active_indices[base_idx]
+    #                     orig_prediction_idx = orig_idx + seq_len
+    #                     print(f"  Mapped to original dataset: Base={orig_idx}, Prediction point={orig_prediction_idx}")
+    #
+    #                 print(f"  Timestamp: {timestamp}")
+    #                 print(f"  Current price: {current_price}")
+    #
+    #                 if current_idx + pred_len < len(test_df):
+    #                     future_price = test_df.iloc[current_idx + pred_len]['close']
+    #                     print(f"  Future price (+{pred_len} steps): {future_price}")
+    #                     print(f"  Price change: {((future_price - current_price) / current_price):.2%}")
+    #                     print(f"  True label: {all_trues[i]} (should be 1 if price went up)")
+    #                 else:
+    #                     print("  Future price: Not available (beyond dataset)")
+    #
+    #     ####
+    #     all_timestamps = []
+    #     all_close_prices = []
+    #     all_future_prices = []
+    #
+    #     # For each prediction point, adjust the index mapping
+    #     for i in range(len(all_preds)):
+    #         base_idx = i
+    #         # Use the active_indices attribute to map to original dataset if available
+    #         if hasattr(test_data, 'active_indices') and base_idx < len(test_data.active_indices):
+    #             orig_idx = test_data.active_indices[base_idx]
+    #             current_idx = orig_idx + seq_len
+    #         else:
+    #             current_idx = base_idx + seq_len
+    #
+    #         # Get timestamp and price data using the correct indices
+    #         if current_idx < len(test_df):
+    #             timestamp = test_df.iloc[current_idx]['date']
+    #             current_price = test_df.iloc[current_idx]['close']
+    #
+    #             # Get future price correctly
+    #             if current_idx + pred_len < len(test_df):
+    #                 future_price = test_df.iloc[current_idx + pred_len]['close']
+    #                 # Verify alignment
+    #                 expected_label = 1.0 if future_price > current_price else 0.0
+    #                 # Print verification
+    #                 print(
+    #                     f"Idx {i}: True label={all_trues[i]}, Calculated label={expected_label}, Current={current_price}, Future={future_price}")
+    #
+    #     # For each prediction point, get the corresponding data from the test dataset
+    #     if test_df is not None:
+    #         for i in range(len(all_preds)):
+    #             base_idx = i  # Sample index in the dataset
+    #             current_idx = base_idx + seq_len  # Index where prediction is made
+    #
+    #             if current_idx < len(test_df):
+    #                 # Get timestamp and current price
+    #                 timestamp = test_df.iloc[current_idx]['date']
+    #                 current_price = test_df.iloc[current_idx]['close']
+    #
+    #                 # Get future price if available (for validation only)
+    #                 if current_idx + pred_len < len(test_df):
+    #                     future_price = test_df.iloc[current_idx + pred_len]['close']
+    #                 else:
+    #                     future_price = np.nan
+    #
+    #                 all_timestamps.append(timestamp)
+    #                 all_close_prices.append(current_price)
+    #                 all_future_prices.append(future_price)
+    #             else:
+    #                 all_timestamps.append(f"sample_{i}")
+    #                 all_close_prices.append(np.nan)
+    #                 all_future_prices.append(np.nan)
+    #     else:
+    #         # If no test_df, use placeholders
+    #         all_timestamps = [f"sample_{i}" for i in range(len(all_preds))]
+    #         all_close_prices = [np.nan] * len(all_preds)
+    #         all_future_prices = [np.nan] * len(all_preds)
+    #
+    #     # Calculate returns using the TRUE LABELS from the model
+    #     # Do NOT recalculate from prices, as they might not match with how labels were generated
+    #     returns_per_trade = np.zeros(len(all_preds))
+    #
+    #     for i in range(len(all_preds)):
+    #         pred = all_preds[i]
+    #         true = all_trues[i]  # Use the true label that the model was trained with
+    #
+    #         # Calculate return (use a fixed placeholder percentage if prices not available)
+    #         return_pct = 0.01 if true == 1 else -0.01
+    #
+    #         # If we have actual prices, use them for display but not for return calculation
+    #         if i < len(all_future_prices) and not np.isnan(all_close_prices[i]) and not np.isnan(all_future_prices[i]):
+    #             # Just for validation - don't use this for returns calculation
+    #             actual_change = (all_future_prices[i] - all_close_prices[i]) / all_close_prices[i]
+    #             # Uncomment to debug:
+    #             # print(f"Index {i}: Label={true}, Actual change: {actual_change:.2%}")
+    #
+    #         if self.is_shorting:
+    #             # For shorting strategy
+    #             if (pred == 1 and true == 1) or (pred == 0 and true == 0):
+    #                 # Correct prediction
+    #                 returns_per_trade[i] = abs(return_pct)
+    #             else:
+    #                 # Incorrect prediction
+    #                 returns_per_trade[i] = -abs(return_pct)
+    #         else:
+    #             # For long-only strategy
+    #             if pred == 1:
+    #                 returns_per_trade[i] = return_pct
+    #             else:
+    #                 returns_per_trade[i] = 0.0  # No trade
+    #
+    #     # Calculate cumulative returns
+    #     cumulative_returns = np.cumprod(1 + returns_per_trade) - 1
+    #     uncompounded_returns = np.cumsum(returns_per_trade)
+    #
+    #     # Modify the existing print section to add original index information
+    #     print("\nDetailed Trading Results with Original Indices:")
+    #     print("-" * 120)
+    #     print(
+    #         f"{'Timestamp':<20} | {'Unix Time':<12} | {'Orig Idx':<8} | {'Close Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Return':>8} | {'Cum Return':>12}")
+    #     print("-" * 120)
+    #
+    #     for i in range(len(all_preds)):
+    #         # Format timestamp for display
+    #         if isinstance(all_timestamps[i], pd.Timestamp):
+    #             # ts_str = all_timestamps[i].strftime('%Y-%m-%d %H:%M')
+    #             ts_str = str(all_timestamps[i])
+    #             # Get original unix timestamp if possible
+    #             unix_time = int(all_timestamps[i].timestamp()) if hasattr(all_timestamps[i], 'timestamp') else 'N/A'
+    #         else:
+    #             ts_str = str(all_timestamps[i])
+    #             unix_time = 'N/A'
+    #
+    #         # Get original index if available
+    #         orig_idx = 'N/A'
+    #         if hasattr(test_data, 'active_indices') and (i + seq_len) < len(test_data.active_indices):
+    #             orig_idx = test_data.active_indices[i] + seq_len
+    #
+    #         print(
+    #             f"{ts_str:<20} | {unix_time:<12} | {orig_idx:<8} | {all_close_prices[i]:<12.2f} | {all_preds[i]:<5.0f} | "
+    #             f"{all_trues[i]:<5.0f} | {all_probs[i]:<8.4f} | {returns_per_trade[i]:>8.2%} | {cumulative_returns[i]:>12.2%}")
+    #
+    #         # Validate labels against original data if possible
+    #         if i < 10 and test_df is not None and orig_idx != 'N/A' and orig_idx - test_data.pred_len >= 0:
+    #             try:
+    #                 base_idx = orig_idx - seq_len
+    #                 if base_idx < len(test_df) and (base_idx + test_data.pred_len) < len(test_df):
+    #                     current_price = test_df.iloc[base_idx]['close']
+    #                     future_price = test_df.iloc[base_idx + test_data.pred_len]['close']
+    #                     expected_label = 1.0 if future_price > current_price else 0.0
+    #                     print(f"    VALIDATION: Base idx={base_idx}, Current price={current_price}, "
+    #                           f"Future price(+{test_data.pred_len})={future_price}, "
+    #                           f"Expected label={expected_label}, Actual label={all_trues[i]}")
+    #                     if expected_label != all_trues[i]:
+    #                         print(f"    *** LABEL MISMATCH DETECTED ***")
+    #             except Exception as e:
+    #                 print(f"    Error validating label: {e}")
+    #     # Print trading performance summary
+    #     print("\nTrading Performance Summary:")
+    #     print("-" * 50)
+    #
+    #     # Count trades (non-zero returns)
+    #     trades = returns_per_trade != 0
+    #     trade_count = np.sum(trades)
+    #
+    #     print(f"Total trades: {trade_count}")
+    #     print(f"Profitable trades: {np.sum(returns_per_trade > 0)}")
+    #     print(f"Unprofitable trades: {np.sum(returns_per_trade < 0)}")
+    #
+    #     if trade_count > 0:
+    #         win_rate = np.sum(returns_per_trade > 0) / trade_count
+    #         print(f"Win rate: {win_rate:.2%}")
+    #         print(f"Average return per trade: {np.mean(returns_per_trade[trades]):.2%}")
+    #     else:
+    #         print("Win rate: N/A (no trades)")
+    #         print("Average return per trade: N/A (no trades)")
+    #
+    #     print(f"Final cumulative return (compounded): {cumulative_returns[-1]:.2%}")
+    #     print(f"Final cumulative return (uncompounded): {uncompounded_returns[-1]:.2%}")
+    #
+    #     # Calculate additional metrics
+    #     if trade_count > 0:
+    #         sharpe_ratio = np.mean(returns_per_trade[trades]) / (np.std(returns_per_trade[trades]) + 1e-10) * np.sqrt(
+    #             252)  # Annualized
+    #         max_drawdown = np.max(np.maximum.accumulate(cumulative_returns) - cumulative_returns)
+    #
+    #         print(f"Sharpe Ratio (annualized): {sharpe_ratio:.2f}")
+    #         print(f"Maximum Drawdown: {max_drawdown:.2%}")
+    #
+    #     # Return the results for further analysis
+    #     return {
+    #         'predictions': all_preds,
+    #         'actual': all_trues,
+    #         'probabilities': all_probs,
+    #         'close_prices': all_close_prices,
+    #         'timestamps': all_timestamps,
+    #         'returns_per_trade': returns_per_trade,
+    #         'cumulative_returns': cumulative_returns,
+    #         'uncompounded_returns': uncompounded_returns
+    #     }
 
     def calculate_class_distribution(self):
         """Calculate and store the class distribution from the training data"""
@@ -949,7 +1462,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         test_data, test_loader = self._get_data(flag='test')
 
         # Directly check the raw label values in test_data
-        print("\n==== DIRECT LABEL CHECK ====")
+        #TODO HANDLE COMMENTED OUt PRNT STMTS
+        # print("\n==== DIRECT LABEL CHECK ====")
         for i in range(min(20, len(test_data))):
             sample_idx = i
             orig_idx = test_data.active_indices[i] if hasattr(test_data, 'active_indices') else None
@@ -967,8 +1481,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 except Exception as e:
                     expected_label = f"Error: {e}"
 
-            print(
-                f"Sample {i}: orig_idx={orig_idx}, pred_idx={pred_idx}, raw_label={raw_label}, expected={expected_label}")
+            # print(
+            #     f"Sample {i}: orig_idx={orig_idx}, pred_idx={pred_idx}, raw_label={raw_label}, expected={expected_label}")
 
 
 
@@ -1169,6 +1683,67 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         self.calculate_returns(setting, test=test)
 
         return
+
+    def test_with_direct_sample_processing(self, setting, test=0):
+        """
+        Modified test method that processes each sample individually to ensure correct labels.
+        This avoids batch-related indexing issues with DataLoader.
+        """
+        test_data, _ = self._get_data(flag='test')  # We won't use the loader
+
+        if test:
+            print('loading model')
+            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+
+        preds = []
+        trues = []
+        probs = []
+
+        self.model.eval()
+        with torch.no_grad():
+            # Process one sample at a time
+            for i in range(len(test_data)):
+                # Get the sample
+                batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
+
+                # Add batch dimension
+                batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
+                batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
+                batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
+                batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
+
+                # Decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+                # Make prediction
+                if self.args.output_attention:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                else:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                # Process outputs
+                outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+
+                # Get prediction
+                output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()
+                output_binary = (output_prob > 0.5).astype(np.float32)
+                true_label = batch_y_last.detach().cpu().numpy()
+
+                # Store results
+                preds.append(output_binary)
+                trues.append(true_label)
+                probs.append(output_prob)
+
+        # Concatenate all samples
+        preds = np.concatenate(preds, axis=0)
+        probs = np.concatenate(probs, axis=0)
+        trues = np.concatenate(trues, axis=0)
+
+        # Continue with existing metrics calculation...
+        # Rest of the test method would be the same
+
+        return preds, trues, probs
 
     def verify_test_labels(self, setting, test=0):
         """
