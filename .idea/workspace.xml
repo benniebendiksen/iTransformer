@@ -5,8 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/itransformer_3.sh" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -122,7 +123,7 @@
       <workItem from="1742444512766" duration="156000" />
       <workItem from="1742488953521" duration="11781000" />
       <workItem from="1742673106636" duration="10622000" />
-      <workItem from="1742746728321" duration="38625000" />
+      <workItem from="1742746728321" duration="39436000" />
     </task>
     <servers />
   </component>
