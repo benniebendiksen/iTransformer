@@ -15,7 +15,7 @@
 #SBATCH -t 3-23:59:59              # near 4 days runtime
 #SBATCH --output=slurm_outputs/itransformer_%A_%a.out
 #SBATCH --error=slurm_outputs/itransformer_%A_%a.err
-#SBATCH --array=0-1                # 0 = benchmark datasets, 1 = logits dataset
+#SBATCH --array=0                # 0 = benchmark datasets, 1 = logits dataset
 
 . /etc/profile
 eval "$(conda shell.bash hook)"
