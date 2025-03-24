@@ -404,12 +404,36 @@ class Dataset_Crypto(Dataset):
         close_prices = df_raw[self.target].values
         binary_labels = np.zeros((len(close_prices), 1))
 
-        for i in range(len(close_prices) - self.pred_len):
-            future_price = close_prices[i + self.pred_len]
-            current_price = close_prices[i]
-            binary_labels[i, 0] = 1.0 if future_price > current_price else 0.0
-            if self.flag == "blurb":
-                print(f"{i}: future price: {future_price}, current price: {current_price}, binary label: {binary_labels[i, 0]}, split: {df_raw['split'][i]}")
+        # For each potential sequence starting point
+        for i in range(len(close_prices) - self.seq_len - self.pred_len):
+            # Calculate prediction point index
+            pred_idx = i + self.seq_len
+
+            # Get prices at prediction point and future point
+            pred_price = close_prices[pred_idx]
+            future_price = close_prices[pred_idx + self.pred_len]
+
+            # Set label based on future price direction from prediction point
+            binary_labels[i, 0] = 1.0 if future_price > pred_price else 0.0
+
+            # Add debug output for test samples
+            if self.flag == 'test' and 'split' in df_raw.columns and df_raw['split'].iloc[i] == 'test':
+                print(f"Test idx {i} (original idx {i}): "
+                      f"Base idx={i}, Pred idx={pred_idx}, "
+                      f"Pred Price={pred_price}, "
+                      f"Future Price (+{self.pred_len} steps from pred point)={future_price}, "
+                      f"Label={binary_labels[i][0]}")
+
+        # # Create binary labels for price change prediction (1 if price goes up, 0 if down/same)
+        # close_prices = df_raw[self.target].values
+        # binary_labels = np.zeros((len(close_prices), 1))
+        #
+        # for i in range(len(close_prices) - self.pred_len):
+        #     future_price = close_prices[i + self.pred_len]
+        #     current_price = close_prices[i]
+        #     binary_labels[i, 0] = 1.0 if future_price > current_price else 0.0
+        #     if self.flag == "blurb":
+        #         print(f"{i}: future price: {future_price}, current price: {current_price}, binary label: {binary_labels[i, 0]}, split: {df_raw['split'][i]}")
 
         # Store active indices before dropping the split column
         active_indices = active_data.index.tolist()
@@ -432,8 +456,8 @@ class Dataset_Crypto(Dataset):
             for i in range(min(3, len(active_indices))):
                 idx = active_indices[i]
                 if idx + self.pred_len < len(close_prices):
-                    print(f"Test idx {i} (original idx {idx}): Current Price={close_prices[idx]}, "
-                          f"Future Price (+{self.pred_len} steps)={close_prices[idx + self.pred_len]}, "
+                    print(f"Test idx {i} (original idx {idx}): End of Sequence Price={close_prices[idx + self.seq_len]}, "
+                          f"Future Price (+{self.pred_len} steps)={close_prices[idx + self.seq_len + self.pred_len]}, "
                           f"Label={binary_labels[idx][0]}")
 
             print("\nSequence formation example for first test sample:")
@@ -452,6 +476,21 @@ class Dataset_Crypto(Dataset):
                     print(f"  Price at prediction point: {close_prices[prediction_index]}")
             else:
                 print("  Not enough data for a full sequence")
+
+        # Debug binary label creation
+        if self.flag == 'test':
+            print("\n===== BINARY LABEL CREATION DEBUGGING =====")
+            print("First 15 binary labels with corresponding prices:")
+            for i in range(min(15, len(close_prices) - self.pred_len)):
+                if self.has_split_column and 'split' in df_raw.columns and df_raw['split'].iloc[i] == 'test':
+                    current_price = close_prices[i]
+                    future_price = close_prices[i + self.pred_len]
+                    label = binary_labels[i, 0]
+                    timestamp = df_raw['date'].iloc[i]
+                    print(f"Original idx {i}: timestamp={timestamp}, current_price={current_price}, "
+                          f"future_price(+{self.pred_len})={future_price}, "
+                          f"direction={'up' if future_price > current_price else 'down/same'}, "
+                          f"label={label}, expected_label={1.0 if future_price > current_price else 0.0}")
 
         if 'split' in df_raw.columns:
             df_raw = df_raw.drop(columns=['split'])
@@ -590,26 +629,41 @@ class Dataset_Crypto(Dataset):
 
     def __getitem__(self, index):
         """Get a single sample (input sequence, target sequence, and time features)"""
-        # Add debugging code at the start of __getitem__
-        if self.flag == 'test' and index < 3:  # Only for first 3 test samples
-            print(f"\n===== TEST SAMPLE {index} DETAILS =====")
-            s_begin = index
-            s_end = s_begin + self.seq_len
-            r_begin = s_end - self.label_len
-            r_end = r_begin + self.label_len + self.pred_len
-
-            print(f"s_begin: {s_begin}, s_end: {s_end}, r_begin: {r_begin}, r_end: {r_end}")
-
-            # Try to map these indices back to the original dataset
-            if hasattr(self, 'active_indices'):
-                orig_s_begin = self.active_indices[s_begin] if s_begin < len(self.active_indices) else "out of bounds"
-                orig_s_end = self.active_indices[s_end - 1] if s_end - 1 < len(self.active_indices) else "out of bounds"
-                print(f"Original dataset indices: ~{orig_s_begin} to ~{orig_s_end}")
 
         s_begin = index
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
         r_end = r_begin + self.label_len + self.pred_len
+
+        # debugging code
+        if self.flag == 'test' and index < 10:  # Only for first 10 test samples
+            print(f"\n===== TEST SAMPLE LABEL EXTRACTION (idx {index}) =====")
+            print(f"Sequence range: {s_begin}:{s_end}, target start: {r_begin}, target end: {r_end}")
+
+            # Map to original indices
+            if hasattr(self, 'active_indices'):
+                orig_s_begin = self.active_indices[s_begin] if s_begin < len(self.active_indices) else "N/A"
+                orig_s_end = self.active_indices[s_end - 1] if s_end - 1 < len(self.active_indices) else "N/A"
+                orig_pred_idx = orig_s_begin + self.seq_len
+
+                # Get actual prices if available
+                if s_begin + self.seq_len < len(self.active_indices) and s_begin + self.seq_len + self.pred_len < len(
+                        self.active_indices):
+                    try:
+                        original_df = pd.read_csv(os.path.join(self.root_path, self.data_path))
+                        pred_price = original_df.iloc[orig_pred_idx][self.target]
+                        future_price = original_df.iloc[orig_pred_idx + self.pred_len][self.target]
+                        price_change = (future_price - pred_price) / pred_price * 100.0
+                        print(f"Original indices: seq={orig_s_begin}:{orig_s_end}, pred_idx={orig_pred_idx}")
+                        print(
+                            f"Price at pred_idx: {pred_price}, Future price (+{self.pred_len}): {future_price}, Change: {price_change:.2f}%")
+                        print(f"Label from dataset: {self.data_y[s_begin][0]}")
+                    except:
+                        print(f"Original indices: seq={orig_s_begin}:{orig_s_end}, pred_idx={orig_pred_idx}")
+                else:
+                    print(f"Original indices: seq={orig_s_begin}:{orig_s_end}")
+
+            print(f"Prediction label to be returned: {self.data_y[s_begin][0]}")
 
         # Get input sequence
         seq_x = self.data_x[s_begin:s_end]

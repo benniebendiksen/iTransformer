@@ -357,6 +357,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 for idx in range(len(output_binary)):
                     all_preds.append(output_binary[idx][0])
                     all_trues.append(true_labels[idx][0])
+                    # Add in calculate_returns where the "True" column values are set:
+                    print(f"DEBUG: For sample {i}, batch_y_last={batch_y_last}, converted to True={all_trues[i]}")
                     all_probs.append(output_probs[idx][0])
 
         # Convert to numpy arrays
@@ -426,6 +428,30 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         all_close_prices = []
         all_future_prices = []
 
+        # For each prediction point, adjust the index mapping
+        for i in range(len(all_preds)):
+            base_idx = i
+            # Use the active_indices attribute to map to original dataset if available
+            if hasattr(test_data, 'active_indices') and base_idx < len(test_data.active_indices):
+                orig_idx = test_data.active_indices[base_idx]
+                current_idx = orig_idx + seq_len
+            else:
+                current_idx = base_idx + seq_len
+
+            # Get timestamp and price data using the correct indices
+            if current_idx < len(test_df):
+                timestamp = test_df.iloc[current_idx]['date']
+                current_price = test_df.iloc[current_idx]['close']
+
+                # Get future price correctly
+                if current_idx + pred_len < len(test_df):
+                    future_price = test_df.iloc[current_idx + pred_len]['close']
+                    # Verify alignment
+                    expected_label = 1.0 if future_price > current_price else 0.0
+                    # Print verification
+                    print(
+                        f"Idx {i}: True label={all_trues[i]}, Calculated label={expected_label}, Current={current_price}, Future={future_price}")
+
         # For each prediction point, get the corresponding data from the test dataset
         if test_df is not None:
             for i in range(len(all_preds)):
@@ -493,23 +519,48 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         cumulative_returns = np.cumprod(1 + returns_per_trade) - 1
         uncompounded_returns = np.cumsum(returns_per_trade)
 
-        # Print detailed results
-        print("\nDetailed Trading Results:")
-        print("-" * 100)
+        # Modify the existing print section to add original index information
+        print("\nDetailed Trading Results with Original Indices:")
+        print("-" * 120)
         print(
-            f"{'Timestamp':<20} | {'Close Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Return':>8} | {'Cum Return':>12} | {'Uncomp Return':>15}")
-        print("-" * 100)
+            f"{'Timestamp':<20} | {'Unix Time':<12} | {'Orig Idx':<8} | {'Close Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Return':>8} | {'Cum Return':>12}")
+        print("-" * 120)
 
         for i in range(len(all_preds)):
             # Format timestamp for display
             if isinstance(all_timestamps[i], pd.Timestamp):
-                ts_str = all_timestamps[i].strftime('%Y-%m-%d %H:%M')
+                # ts_str = all_timestamps[i].strftime('%Y-%m-%d %H:%M')
+                ts_str = str(all_timestamps[i])
+                # Get original unix timestamp if possible
+                unix_time = int(all_timestamps[i].timestamp()) if hasattr(all_timestamps[i], 'timestamp') else 'N/A'
             else:
                 ts_str = str(all_timestamps[i])
+                unix_time = 'N/A'
+
+            # Get original index if available
+            orig_idx = 'N/A'
+            if hasattr(test_data, 'active_indices') and (i + seq_len) < len(test_data.active_indices):
+                orig_idx = test_data.active_indices[i] + seq_len
 
             print(
-                f"{ts_str:<20} | {all_close_prices[i]:<12.2f} | {all_preds[i]:<5.0f} | {all_trues[i]:<5.0f} | {all_probs[i]:<8.4f} | {returns_per_trade[i]:>8.2%} | {cumulative_returns[i]:>12.2%} | {uncompounded_returns[i]:>15.2%}")
+                f"{ts_str:<20} | {unix_time:<12} | {orig_idx:<8} | {all_close_prices[i]:<12.2f} | {all_preds[i]:<5.0f} | "
+                f"{all_trues[i]:<5.0f} | {all_probs[i]:<8.4f} | {returns_per_trade[i]:>8.2%} | {cumulative_returns[i]:>12.2%}")
 
+            # Validate labels against original data if possible
+            if i < 10 and test_df is not None and orig_idx != 'N/A' and orig_idx - test_data.pred_len >= 0:
+                try:
+                    base_idx = orig_idx - seq_len
+                    if base_idx < len(test_df) and (base_idx + test_data.pred_len) < len(test_df):
+                        current_price = test_df.iloc[base_idx]['close']
+                        future_price = test_df.iloc[base_idx + test_data.pred_len]['close']
+                        expected_label = 1.0 if future_price > current_price else 0.0
+                        print(f"    VALIDATION: Base idx={base_idx}, Current price={current_price}, "
+                              f"Future price(+{test_data.pred_len})={future_price}, "
+                              f"Expected label={expected_label}, Actual label={all_trues[i]}")
+                        if expected_label != all_trues[i]:
+                            print(f"    *** LABEL MISMATCH DETECTED ***")
+                except Exception as e:
+                    print(f"    Error validating label: {e}")
         # Print trading performance summary
         print("\nTrading Performance Summary:")
         print("-" * 50)
@@ -611,6 +662,19 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         # The last prediction corresponds to the relative price change 4 timesteps ahead
         outputs_last = outputs[:, -1, :]
         batch_y_last = batch_y[:, -1, :]
+
+        # Debug output processing
+        if outputs.shape[0] < 5:  # Only for small batches to avoid clutter
+            print("\n===== OUTPUT PROCESSING DEBUG =====")
+            print(f"Original batch_y shape: {batch_y.shape}")
+            print(
+                f"After slicing: batch_y[:, -self.args.pred_len:, f_dim:] shape: {batch_y[:, -self.args.pred_len:, f_dim:].shape}")
+            print(f"Final batch_y_last shape: {batch_y_last.shape}")
+
+            # Show values for first few samples
+            for i in range(min(3, outputs.shape[0])):
+                print(f"Sample {i}: outputs_last={outputs_last[i].detach().cpu().numpy()}, "
+                      f"batch_y_last={batch_y_last[i].detach().cpu().numpy()}")
 
         return outputs_last, batch_y_last, outputs, batch_y
 
@@ -1049,3 +1113,129 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         self.calculate_returns(setting, test=test)
 
         return
+
+    def verify_test_labels(self, setting, test=0):
+        """
+        Directly verifies the labels in the test dataset against the original data
+        """
+        test_data, _ = self._get_data(flag='test')
+        print("\n===== DIRECT LABEL VERIFICATION =====")
+
+        # Load original dataset
+        try:
+            original_df = pd.read_csv(os.path.join(test_data.root_path, test_data.data_path))
+            print(f"Loaded original dataset: {len(original_df)} rows")
+
+            # Test set filtering
+            if 'split' in original_df.columns:
+                test_df = original_df[original_df['split'] == 'test'].reset_index(drop=True)
+                print(f"Test data: {len(test_df)} rows")
+            else:
+                test_df = None
+                print("No 'split' column found in dataset")
+
+            # Access binary labels from test_data if available
+            if hasattr(test_data, 'data_y') and hasattr(test_data, 'active_indices'):
+                print("\nVerifying first 20 test samples:")
+                print(
+                    f"{'Index':<8} | {'Orig Idx':<8} | {'Base+Seq':<8} | {'Timestamp':<20} | {'Current Price':<14} | {'Future Price':<14} | {'Expected Label':<14} | {'Actual Label':<12} | {'Match':<5}")
+                print("-" * 120)
+
+                # Add this to verify_test_labels:
+                for i in range(min(10, len(test_data.data_y))):
+                    print(f"Test sample {i}: Label in dataset = {test_data.data_y[i][0]}")
+
+                for i in range(min(20, len(test_data.active_indices))):
+                    # Get original index
+                    orig_idx = test_data.active_indices[i]
+
+                    # Get prediction point index
+                    pred_idx = orig_idx + test_data.seq_len
+
+                    # Get actual label from test_data
+                    actual_label = test_data.data_y[i][0] if i < len(test_data.data_y) else 'N/A'
+
+
+                    if test_df is not None and orig_idx < len(test_df) and orig_idx + test_data.pred_len < len(test_df):
+                        # Get timestamp
+                        timestamp = test_df.iloc[orig_idx]['date']
+                        if pd.api.types.is_integer_dtype(type(timestamp)):
+                            timestamp = pd.to_datetime(timestamp, unit='s')
+                        ts_str = timestamp.strftime('%Y-%m-%d %H:%M') if isinstance(timestamp, pd.Timestamp) else str(
+                            timestamp)
+
+                        # Get prices
+                        current_price = test_df.iloc[orig_idx]['close']
+                        future_price = test_df.iloc[orig_idx + test_data.pred_len]['close']
+
+                        # Calculate expected label
+                        expected_label = 1.0 if future_price > current_price else 0.0
+
+                        # Check match
+                        match = "✓" if expected_label == actual_label else "✗"
+
+                        print(
+                            f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {ts_str:<20} | {current_price:<14.2f} | {future_price:<14.2f} | {expected_label:<14.1f} | {actual_label:<12} | {match:<5}")
+                    else:
+                        print(
+                            f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {'N/A':<20} | {'N/A':<14} | {'N/A':<14} | {'N/A':<14} | {actual_label:<12} | {'N/A':<5}")
+
+        except Exception as e:
+            print(f"Error during verification: {e}")
+            import traceback
+            traceback.print_exc()
+
+        return
+
+    def verify_labels(self, setting):
+        """
+        Verify that labels in test data match the actual price movements from prediction point
+        """
+        test_data, _ = self._get_data(flag='test')
+
+        print("\n===== LABEL VERIFICATION =====")
+        # Load original dataset
+        try:
+            original_df = pd.read_csv(os.path.join(test_data.root_path, test_data.data_path))
+            print(f"Loaded original dataset with {len(original_df)} rows")
+
+            # Test set filtering
+            if 'split' in original_df.columns:
+                test_df = original_df[original_df['split'] == 'test'].reset_index(drop=True)
+                print(f"Test data: {len(test_df)} rows")
+            else:
+                test_df = None
+                print("No 'split' column found in dataset")
+
+            # Verify first 10 test samples
+            print("\nVerifying first 10 test labels:")
+            print("-" * 120)
+            print(
+                f"{'Sample':<10} | {'Base Idx':<10} | {'Pred Idx':<10} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Label':<8} | {'Correct':<8}")
+            print("-" * 120)
+
+            for i in range(min(10, len(test_data.active_indices))):
+                base_idx = test_data.active_indices[i]
+                pred_idx = base_idx + test_data.seq_len
+
+                if pred_idx < len(original_df) and pred_idx + test_data.pred_len < len(original_df):
+                    pred_price = original_df.iloc[pred_idx][test_data.target]
+                    future_price = original_df.iloc[pred_idx + test_data.pred_len][test_data.target]
+                    price_change = (future_price - pred_price) / pred_price * 100.0
+                    expected_label = 1.0 if future_price > pred_price else 0.0
+
+                    # Get actual label from dataset
+                    actual_label = test_data.data_y[i][0] if i < len(test_data.data_y) else 'N/A'
+
+                    correct = "✓" if expected_label == actual_label else "✗"
+                    print(
+                        f"{i:<10} | {base_idx:<10} | {pred_idx:<10} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {actual_label:<8} | {correct:<8}")
+                else:
+                    print(
+                        f"{i:<10} | {base_idx:<10} | {pred_idx:<10} | {'N/A':<12} | {'N/A':<12} | {'N/A':<10} | {'N/A':<8} | {'N/A':<8}")
+
+        except Exception as e:
+            print(f"Error during verification: {e}")
+            import traceback
+            traceback.print_exc()
+
