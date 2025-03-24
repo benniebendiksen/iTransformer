@@ -61,7 +61,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         all_sample_indices = []
         all_metadata = []
 
-        print("\n===== COLLECTING PREDICTIONS WITH SEQUENCE TRACKING =====")
+        # print("\n===== COLLECTING PREDICTIONS WITH SEQUENCE TRACKING =====")
         self.model.eval()
         with torch.no_grad():
             # Process each sample separately to ensure correct indexing
@@ -108,12 +108,14 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 all_metadata.append(meta)
 
                 # Debug output for first few samples
-                if i < 10:
-                    print(f"Sample {i}: Pred={output_binary:.1f}, True={true_label:.1f}, Prob={output_prob:.4f}")
-                    if meta:
-                        orig_idx = meta.get('orig_start_idx') or meta.get('orig_idx')
-                        label = meta.get('label')
-                        print(f"  Metadata: orig_idx={orig_idx}, stored_label={label}")
+                #TODO: HANDLE THIS DEBUG CASE
+
+                # if i < 10:
+                #     print(f"Sample {i}: Pred={output_binary:.1f}, True={true_label:.1f}, Prob={output_prob:.4f}")
+                #     if meta:
+                #         orig_idx = meta.get('orig_start_idx') or meta.get('orig_idx')
+                #         label = meta.get('label')
+                #         print(f"  Metadata: orig_idx={orig_idx}, stored_label={label}")
 
         # Convert to numpy arrays
         all_preds = np.array(all_preds)
@@ -124,8 +126,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         # Verify we collected predictions for the whole test set
         print(f"Collected {len(all_preds)} predictions from test set")
-        print(f"trues: {all_trues}")
-        print(f"preds: {all_preds}")
+        # print(f"trues: {all_trues}")
+        # print(f"preds: {all_preds}")
 
         # Define percentile segments to analyze
         percentiles = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
@@ -430,27 +432,28 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         print(f"Collected {len(all_preds)} predictions from test set")
 
         # Show detailed label verification
-        print("\nLabel Verification with Detailed Metadata:")
-        print("-" * 140)
-        print(
-            f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
-        print("-" * 140)
-
-        for i, meta in enumerate(all_metadata):
-            if i >= len(all_trues) or meta is None:
-                continue
-
-            orig_idx = meta['orig_start_idx']
-            pred_idx = meta['pred_idx']
-            pred_price = meta['pred_price']
-            future_price = meta['future_price']
-            price_change = meta['price_change']
-            stored_label = meta['label']
-            model_true = all_trues[i]
-            match = "✓" if abs(stored_label - model_true) < 0.01 else "✗"
-
-            print(
-                f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5}")
+        # TODO: handle this debug case
+        # print("\nLabel Verification with Detailed Metadata:")
+        # print("-" * 140)
+        # print(
+        #     f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
+        # print("-" * 140)
+        #
+        # for i, meta in enumerate(all_metadata):
+        #     if i >= len(all_trues) or meta is None:
+        #         continue
+        #
+        #     orig_idx = meta['orig_start_idx']
+        #     pred_idx = meta['pred_idx']
+        #     pred_price = meta['pred_price']
+        #     future_price = meta['future_price']
+        #     price_change = meta['price_change']
+        #     stored_label = meta['label']
+        #     model_true = all_trues[i]
+        #     match = "✓" if abs(stored_label - model_true) < 0.01 else "✗"
+        #
+        #     print(
+        #         f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5}")
 
         # Show summary statistics
         matches = sum(
