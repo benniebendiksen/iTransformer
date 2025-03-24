@@ -60,18 +60,21 @@ def data_provider(args, flag):
     timeenc = 0 if args.embed != 'timeF' else 1
 
     if flag == 'test':
+        print(f"No SHUFFLING under flag {flag}...")
         shuffle_flag = False
         drop_last = True
         batch_size = 1  # bsz=1 for evaluation
         freq = args.freq
     elif flag == 'pred':
+        print(f"No SHUFFLING under flag {flag}...")
         shuffle_flag = False
         drop_last = False
         batch_size = 1
         freq = args.freq
         Data = Dataset_Pred
     else:
-        shuffle_flag = True
+        print(f"SHUFFLING under flag {flag}...")
+        shuffle_flag = False
         drop_last = True
         batch_size = args.batch_size  # bsz for train and valid
         freq = args.freq

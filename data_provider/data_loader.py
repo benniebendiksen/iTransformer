@@ -417,12 +417,14 @@ class Dataset_Crypto(Dataset):
             binary_labels[i, 0] = 1.0 if future_price > pred_price else 0.0
 
             # Add debug output for test samples
-            if self.flag == 'test' and 'split' in df_raw.columns and df_raw['split'].iloc[i] == 'test':
-                print(f"Test idx {i} (original idx {i}): "
-                      f"Base idx={i}, Pred idx={pred_idx}, "
-                      f"Pred Price={pred_price}, "
-                      f"Future Price (+{self.pred_len} steps from pred point)={future_price}, "
-                      f"Label={binary_labels[i][0]}")
+            # if self.flag == 'test' and 'split' in df_raw.columns and df_raw['split'].iloc[i] == 'test':
+            #     print(f"Test idx {i} (original idx {i}): "
+            #           f"Base idx={i}, Pred idx={pred_idx}, "
+            #           f"Pred Price={pred_price}, "
+            #           f"Future Price (+{self.pred_len} steps from pred point)={future_price}, "
+            #           f"Label={binary_labels[i][0]}")
+
+
 
         # # Create binary labels for price change prediction (1 if price goes up, 0 if down/same)
         # close_prices = df_raw[self.target].values
@@ -438,6 +440,27 @@ class Dataset_Crypto(Dataset):
         # Store active indices before dropping the split column
         active_indices = active_data.index.tolist()
         self.active_indices = active_indices  # Save as class attribute
+
+        # Add this after binary_labels creation in __read_data__
+        self.sample_metadata = []
+        for i in range(len(self.active_indices)):
+            orig_idx = self.active_indices[i]
+            pred_idx = orig_idx + self.seq_len
+
+            if pred_idx < len(close_prices) and pred_idx + self.pred_len < len(close_prices):
+                pred_price = close_prices[pred_idx]
+                future_price = close_prices[pred_idx + self.pred_len]
+                label = binary_labels[orig_idx, 0]  # Get the label that was calculated
+
+                self.sample_metadata.append({
+                    'sample_idx': i,
+                    'orig_idx': orig_idx,
+                    'pred_idx': pred_idx,
+                    'pred_price': pred_price,
+                    'future_price': future_price,
+                    'label': label,
+                    'timestamp': df_raw['date'].iloc[pred_idx] if 'date' in df_raw.columns else None
+                })
 
         # Debug after the active_indices section - use the saved dataframe with split column
         if self.flag == 'test' and self.has_split_column:

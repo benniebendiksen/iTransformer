@@ -42,8 +42,8 @@ python -u run.py \
   --batch_size 32 \
   --learning_rate 0.001 \
   --itr 5 \
-  --train_epochs 50 \
-  --patience 1 \
+  --train_epochs 1 \
+  --patience 10 \
   --exp_name logits \
   --target close \
   --is_shorting 1 \

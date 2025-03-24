@@ -326,6 +326,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 if batch_x.size(0) == 0:
                     continue
 
+
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
                 batch_x_mark = batch_x_mark.float().to(self.device)
@@ -350,6 +351,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 # Get binary predictions (threshold at 0.5)
                 output_binary = (output_probs > 0.5).astype(np.float32)
 
+                print(f"DEBUG: For sample {i}, output_binary={output_binary}, batch_y_last={batch_y_last}")
+
                 # Get true labels
                 true_labels = batch_y_last.detach().cpu().numpy()
 
@@ -365,6 +368,33 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         all_preds = np.array(all_preds)
         all_trues = np.array(all_trues)
         all_probs = np.array(all_probs)
+
+        # In calculate_returns, after collecting all_preds, all_trues:
+        if hasattr(test_data, 'sample_metadata'):
+            print("\nLabel Verification with Detailed Metadata:")
+            print("-" * 140)
+            print(
+                f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
+            print("-" * 140)
+
+            for i, meta in enumerate(test_data.sample_metadata):
+                if i >= len(all_trues):
+                    break
+
+                price_change = ((meta['future_price'] - meta['pred_price']) / meta['pred_price']) * 100.0
+                calculated_direction = "up" if meta['future_price'] > meta['pred_price'] else "down/same"
+                stored_label = meta['label']
+                model_true = all_trues[i]
+                match = "✓" if stored_label == model_true else "✗"
+
+                print(
+                    f"{i:<8} | {meta['orig_idx']:<8} | {meta['pred_idx']:<8} | {meta['pred_price']:<12.2f} | {meta['future_price']:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5}")
+
+            # Show summary statistics
+            matches = sum(
+                1 for i, meta in enumerate(test_data.sample_metadata[:len(all_trues)]) if meta['label'] == all_trues[i])
+            total = min(len(test_data.sample_metadata), len(all_trues))
+            print(f"\nLabel Match Rate: {matches}/{total} ({matches / total * 100:.2f}%)")
 
         print(f"Collected {len(all_preds)} predictions from test set")
 
@@ -664,17 +694,17 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         batch_y_last = batch_y[:, -1, :]
 
         # Debug output processing
-        if outputs.shape[0] < 5:  # Only for small batches to avoid clutter
-            print("\n===== OUTPUT PROCESSING DEBUG =====")
-            print(f"Original batch_y shape: {batch_y.shape}")
-            print(
-                f"After slicing: batch_y[:, -self.args.pred_len:, f_dim:] shape: {batch_y[:, -self.args.pred_len:, f_dim:].shape}")
-            print(f"Final batch_y_last shape: {batch_y_last.shape}")
-
-            # Show values for first few samples
-            for i in range(min(3, outputs.shape[0])):
-                print(f"Sample {i}: outputs_last={outputs_last[i].detach().cpu().numpy()}, "
-                      f"batch_y_last={batch_y_last[i].detach().cpu().numpy()}")
+        # if outputs.shape[0] < 5:  # Only for small batches to avoid clutter
+        #     print("\n===== OUTPUT PROCESSING DEBUG =====")
+        #     print(f"Original batch_y shape: {batch_y.shape}")
+        #     print(
+        #         f"After slicing: batch_y[:, -self.args.pred_len:, f_dim:] shape: {batch_y[:, -self.args.pred_len:, f_dim:].shape}")
+        #     print(f"Final batch_y_last shape: {batch_y_last.shape}")
+        #
+        #     # Show values for first few samples
+        #     for i in range(min(3, outputs.shape[0])):
+        #         print(f"Sample {i}: outputs_last={outputs_last[i].detach().cpu().numpy()}, "
+        #               f"batch_y_last={batch_y_last[i].detach().cpu().numpy()}")
 
         return outputs_last, batch_y_last, outputs, batch_y
 
@@ -917,6 +947,32 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
     def test(self, setting, test=0):
         test_data, test_loader = self._get_data(flag='test')
+
+        # Directly check the raw label values in test_data
+        print("\n==== DIRECT LABEL CHECK ====")
+        for i in range(min(20, len(test_data))):
+            sample_idx = i
+            orig_idx = test_data.active_indices[i] if hasattr(test_data, 'active_indices') else None
+            pred_idx = orig_idx + test_data.seq_len if orig_idx is not None else None
+            raw_label = test_data.data_y[i][0] if i < len(test_data.data_y) else None
+
+            expected_label = None
+            if orig_idx is not None and pred_idx is not None:
+                # Calculate expected label from raw data
+                try:
+                    original_df = pd.read_csv(os.path.join(test_data.root_path, test_data.data_path))
+                    pred_price = original_df.iloc[pred_idx][test_data.target]
+                    future_price = original_df.iloc[pred_idx + test_data.pred_len][test_data.target]
+                    expected_label = 1.0 if future_price > pred_price else 0.0
+                except Exception as e:
+                    expected_label = f"Error: {e}"
+
+            print(
+                f"Sample {i}: orig_idx={orig_idx}, pred_idx={pred_idx}, raw_label={raw_label}, expected={expected_label}")
+
+
+
+
         if test:
             print('loading model')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
