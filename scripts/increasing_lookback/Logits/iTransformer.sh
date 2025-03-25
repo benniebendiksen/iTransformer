@@ -16,10 +16,10 @@ model_name=iTransformer
 
 #Fourth run
 # data_path="btcusdt_pca_components_55_window_1.csv"
-data_path="btcusdt_pca_components_12h_55_07_03.csv"
+data_path="btcusdt_pca_components_12h_60_07_05.csv"
 seq_len=96
 pred_len=1
-enc_in=58
+enc_in=63
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -50,10 +50,10 @@ python -u run.py \
   --precision_factor 2.0 \
   --auto_weight 1
 
-data_path="btcusdt_pca_components_12h_55_07_03.csv"
+data_path="btcusdt_pca_components_12h_60_07_05.csv"
 seq_len=96
 pred_len=2
-enc_in=58
+enc_in=63
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
