@@ -1205,22 +1205,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
         # For binary classification, we only care about the last timestep prediction
-        # The last prediction corresponds to the relative price change 4 timesteps ahead
         outputs_last = outputs[:, -1, :]
         batch_y_last = batch_y[:, -1, :]
-
-        # Debug output processing
-        # if outputs.shape[0] < 5:  # Only for small batches to avoid clutter
-        #     print("\n===== OUTPUT PROCESSING DEBUG =====")
-        #     print(f"Original batch_y shape: {batch_y.shape}")
-        #     print(
-        #         f"After slicing: batch_y[:, -self.args.pred_len:, f_dim:] shape: {batch_y[:, -self.args.pred_len:, f_dim:].shape}")
-        #     print(f"Final batch_y_last shape: {batch_y_last.shape}")
-        #
-        #     # Show values for first few samples
-        #     for i in range(min(3, outputs.shape[0])):
-        #         print(f"Sample {i}: outputs_last={outputs_last[i].detach().cpu().numpy()}, "
-        #               f"batch_y_last={batch_y_last[i].detach().cpu().numpy()}")
 
         return outputs_last, batch_y_last, outputs, batch_y
 
@@ -1449,7 +1435,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     test_loss,
                     test_metrics['accuracy'], test_metrics['precision'], test_metrics['recall'], test_metrics['f1']))
 
-            early_stopping(vali_loss, self.model, path)
+            # Pass both validation loss and training loss to early stopping
+            early_stopping(vali_loss, self.model, path, train_loss)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break

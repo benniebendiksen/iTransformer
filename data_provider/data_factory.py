@@ -4,8 +4,36 @@ import torch
 from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_Pred, Dataset_PEMS, Dataset_Solar, Dataset_Crypto
 from torch.utils.data import DataLoader
 
-
 def custom_collate_fn(batch):
+    """
+    Custom collate function for time series forecasting data.
+
+    Processes batches of time series data, ensuring consistent formatting and dimensions.
+    Each sample in the batch should contain 4 components:
+
+    Parameters:
+    -----------
+    batch : list
+        A list of samples where each sample is a tuple of 4 components:
+        - seq_x: Input sequence data with shape (96, 61)
+          96 time steps with 61 features per step
+        - seq_y: Target sequence data with shape (49, 1)
+          49 time steps forecasting a single target variable
+        - seq_x_mark: Temporal features for input data with shape (96, 4)
+          Time encodings for each of the 96 input time steps (4 temporal features)
+        - seq_y_mark: Temporal features for target data with shape (49, 4)
+          Time encodings for each of the 49 target time steps (4 temporal features)
+
+    Returns:
+    --------
+    tuple
+        A tuple of 4 batched tensors:
+        - batch_x: Input data tensor with shape (batch_size, 96, 61)
+        - batch_y: Target data tensor with shape (batch_size, 49, 1)
+        - batch_x_mark: Input temporal features tensor with shape (batch_size, 96, 4)
+        - batch_y_mark: Target temporal features tensor with shape (batch_size, 49, 4)
+
+    """
     # Filter out any problematic samples
     valid_samples = []
     for sample in batch:
@@ -74,7 +102,7 @@ def data_provider(args, flag):
         Data = Dataset_Pred
     else:
         print(f"SHUFFLING under flag {flag}...")
-        shuffle_flag = False
+        shuffle_flag = True
         drop_last = True
         batch_size = args.batch_size  # bsz for train and valid
         freq = args.freq
