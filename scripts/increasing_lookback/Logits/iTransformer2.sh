@@ -54,7 +54,7 @@ python -u run.py \
 
 data_path="btcusdt_pca_components_12h_60_07_05.csv"
 seq_len=96
-pred_len=2
+pred_len=1
 enc_in=65
 d_model=512
 data_file=$(basename "$data_path" .csv)

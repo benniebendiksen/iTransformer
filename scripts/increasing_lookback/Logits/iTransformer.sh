@@ -52,7 +52,7 @@ python -u run.py \
 
 data_path="btcusdt_pca_components_12h_60_07_05.csv"
 seq_len=96
-pred_len=2
+pred_len=1
 enc_in=63
 d_model=512
 data_file=$(basename "$data_path" .csv)
@@ -83,6 +83,7 @@ python -u run.py \
   --is_shorting 1 \
   --precision_factor 2.0 \
   --auto_weight 1 \
+  --freq 12h
 
 #
 #data_path="btcusdt_pca_components_55_window_3.csv"
