@@ -1436,7 +1436,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     test_metrics['accuracy'], test_metrics['precision'], test_metrics['recall'], test_metrics['f1']))
 
             # Pass both validation loss and training loss to early stopping
-            early_stopping(vali_loss, self.model, path, train_loss)
+            # early_stopping(vali_loss, self.model, path, train_loss)
+            early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
