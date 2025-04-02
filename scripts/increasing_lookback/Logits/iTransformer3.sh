@@ -13,13 +13,10 @@ python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available(
 
 model_name=iTransformer
 
-
-#Fourth run
-data_path="btcusdc_pca_components_1d_48_proper_split_2.csv"
-#data_path="btcusdt_pca_components_55_window_1.csv"
+data_path="btcusdt_pca_components_12h_60_07_05.csv"
 seq_len=96
-pred_len=2
-enc_in=56
+pred_len=1
+enc_in=65
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -43,9 +40,10 @@ python -u run.py \
   --learning_rate 0.001 \
   --itr 5 \
   --train_epochs 50 \
-  --patience 10 \
+  --patience 7 \
   --exp_name logits \
   --target close \
   --is_shorting 1 \
   --precision_factor 2.0 \
-  --auto_weight 1
+  --auto_weight 1 \
+  --freq 12h

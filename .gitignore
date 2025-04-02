@@ -8,6 +8,10 @@ dataset/
 # ignore results files
 result_logits_forecast.txt
 
+btc_usdt_binance_components_60_07_05_preds.xlsx
+
+transformer_results_combined.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

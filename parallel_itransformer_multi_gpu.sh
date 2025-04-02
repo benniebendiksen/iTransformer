@@ -2,20 +2,20 @@
 #SBATCH --job-name=iTransformer_training
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=b.bendiksen001@umb.edu
-##SBATCH -p DGXA100
-#SBATCH -p Intel6240,Intel6248
+#SBATCH -p DGXA100
+##SBATCH -p Intel6240,Intel6248
 #SBATCH -A pi_funda.durupinarbabur
 #SBATCH --qos=scavenger
 ##SBATCH -w chimera12
 #SBATCH -n 2                       # Number of cores
 ##SBATCH -N 1                       # Ensure all cores are on one machine
-##SBATCH --gres=gpu:2               # Request 2 GPUs
+#SBATCH --gres=gpu:2               # Request 2 GPUs
 #SBATCH --export=HOME              # Export HOME environment variable for miniconda access
 #SBATCH --mem=64G                  # 64GB memory
 #SBATCH -t 3-23:59:59              # near 4 days runtime
 #SBATCH --output=slurm_outputs/itransformer_%A_%a.out
 #SBATCH --error=slurm_outputs/itransformer_%A_%a.err
-#SBATCH --array=0-1                # 0 = benchmark datasets, 1 = logits dataset
+#SBATCH --array=0-2                # 0 = benchmark datasets, 1 = logits dataset
 
 . /etc/profile
 eval "$(conda shell.bash hook)"
@@ -100,11 +100,30 @@ run_logits_dataset() {
 #    echo "All benchmark datasets completed"
 }
 
+run_logits_dataset_2() {
+
+    echo "============================================================"
+    echo "Running logits dataset on GPU 2"
+    echo "============================================================"
+
+    # Navigate to the project directory
+    cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
+
+    # Run the BCEWithLogitsLoss model
+    echo "Running logits_3 dataset..."
+    bash ./scripts/increasing_lookback/Logits/iTransformer3.sh
+
+}
+
+
+
 # Main execution based on SLURM array task ID
 if [ $SLURM_ARRAY_TASK_ID -eq 0 ]; then
     run_benchmark_datasets
 elif [ $SLURM_ARRAY_TASK_ID -eq 1 ]; then
     run_logits_dataset
+elif [ $SLURM_ARRAY_TASK_ID -eq 1 ]; then
+    run_logits_dataset_2
 else
     echo "Unknown task ID: $SLURM_ARRAY_TASK_ID"
     run_benchmark_datasets

@@ -1182,6 +1182,17 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print(f"Precision factor for non-shorting strategy: {self.precision_factor}")
         print()
 
+        # print test label distribution
+        test_data, _ = self._get_data(flag='test')
+        test_labels = []
+        for i in range(len(test_data)):
+            _, batch_y, _, _ = test_data[i]
+            label = batch_y[-1, 0]
+            test_labels.append(label)
+        test_labels = np.array(test_labels)
+        pos_ratio = np.mean(test_labels)
+        print(f"Test set - Positive examples: {pos_ratio:.2%}, Negative: {(1 - pos_ratio):.2%}")
+
     def _select_criterion(self):
         # Use our custom trading loss
         if self.class_distribution is not None and not self.auto_weight:
