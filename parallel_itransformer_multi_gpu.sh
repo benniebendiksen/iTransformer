@@ -122,11 +122,10 @@ if [ $SLURM_ARRAY_TASK_ID -eq 0 ]; then
     run_benchmark_datasets
 elif [ $SLURM_ARRAY_TASK_ID -eq 1 ]; then
     run_logits_dataset
-elif [ $SLURM_ARRAY_TASK_ID -eq 1 ]; then
+elif [ $SLURM_ARRAY_TASK_ID -eq 2 ]; then
     run_logits_dataset_2
 else
     echo "Unknown task ID: $SLURM_ARRAY_TASK_ID"
-    run_benchmark_datasets
 fi
 
 echo "Job completed at $(date)"

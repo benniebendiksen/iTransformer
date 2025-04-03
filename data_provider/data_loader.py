@@ -308,7 +308,7 @@ class Dataset_Crypto(Dataset):
         if size == None:
             self.seq_len = 96  # 24 hours (96 * 15 min)
             self.label_len = 48
-            self.pred_len = 4  # Predict 4 steps ahead
+            self.pred_len = 1  # Predict 1 step ahead
         else:
             self.seq_len = size[0]
             self.label_len = size[1]
@@ -551,6 +551,7 @@ class Dataset_Crypto(Dataset):
             # Automatic time features
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
+            print(f"the shape of data_stamp is: {data_stamp.shape}")
             self.time_encoding = 'auto'
         else:
             raise ValueError(f"Invalid timeenc argument: {self.timeenc}")

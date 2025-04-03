@@ -5,16 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/parse.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/inference.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data_provider/data_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_provider/data_loader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/dataset/logits/pca_rolling_windows/btcusdt_pca_components_55_window_1.csv" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/experiments/exp_logits_forecasting.py" beforeDir="false" afterPath="$PROJECT_DIR$/experiments/exp_logits_forecasting.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/parallel_itransformer_multi_gpu.sh" beforeDir="false" afterPath="$PROJECT_DIR$/parallel_itransformer_multi_gpu.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -136,7 +131,9 @@
       <workItem from="1743258444647" duration="851000" />
       <workItem from="1743480886845" duration="3691000" />
       <workItem from="1743530939395" duration="26000" />
-      <workItem from="1743537232746" duration="6569000" />
+      <workItem from="1743537232746" duration="12263000" />
+      <workItem from="1743624270600" duration="15000" />
+      <workItem from="1743648239375" duration="1651000" />
     </task>
     <servers />
   </component>
