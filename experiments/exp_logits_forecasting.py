@@ -577,25 +577,25 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         strategy_metrics = [calculate_trading_metrics(returns) for returns in strategy_returns]
 
         # Print results for each strategy
-        print("\n===== COMPARING TRADING STRATEGIES =====")
+        print("\n===== COMPARISONS =====")
         for name, returns, metrics in zip(strategy_names, strategy_returns, strategy_metrics):
             print(f"\n{name} Strategy Results:")
             print("-" * 50)
-            print(f"Total trades: {metrics['trades']}")
-            print(f"Profitable trades: {metrics['profitable_trades']}")
-            print(f"Unprofitable trades: {metrics['unprofitable_trades']}")
-            print(f"Win rate: {metrics['win_rate']:.2%}")
-            print(f"Average return per trade: {metrics['avg_return']:.4%}")
-            print(f"Final cumulative return (compounded): {metrics['cumulative_return']:.4%}")
-            print(f"Final total return (uncompounded): {metrics['uncompounded_return']:.4%}")
+            print(f"Total predictions: {metrics['trades']}")
+            print(f"Successful prediction: {metrics['profitable_trades']}")
+            print(f"Unsuccessful predictions: {metrics['unprofitable_trades']}")
+            print(f"Success rate: {metrics['win_rate']:.2%}")
+            print(f"Average percent change per prediction: {metrics['avg_return']:.4%}")
+            print(f"Final cumulative percent change (compounded): {metrics['cumulative_return']:.4%}")
+            print(f"Final total percent change (uncompounded): {metrics['uncompounded_return']:.4%}")
             print(f"Sharpe Ratio (annualized): {metrics['sharpe_ratio']:.4f}")
             print(f"Maximum Drawdown: {metrics['max_drawdown']:.4%}")
 
         # Print detailed trading results for the combined strategy
-        print("\nDetailed Trading Results (Combined Strategy):")
+        print("\nDetailed Analysis (Combined):")
         print("-" * 120)
         print(
-            f"{'Sample':<8} | {'Timestamp':<20} | {'Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Actual Chg':<10} | {'Return':>8} | {'Cum Return':>12}")
+            f"{'Sample':<8} | {'Timestamp':<20} | {'Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Actual Chg':<10} | {'Percent Change':>8} | {'Cum Percent Change':>12}")
         print("-" * 120)
 
         # Calculate cumulative returns for display
@@ -665,7 +665,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         print(f"Positive examples (price increases): {positive_ratio:.2%}")
         print(f"Negative examples (price decreases or stays): {negative_ratio:.2%}")
         print(f"Pos_weight for BCEWithLogitsLoss: {self.class_distribution['pos_weight']:.4f}")
-        print(f"Trading strategy: {'Shorting enabled' if self.is_shorting else 'No shorting (holding only)'}")
+        print(f"Strategy: {'Shorting enabled' if self.is_shorting else 'No shorting (holding only)'}")
         if not self.is_shorting:
             print(f"Precision factor for non-shorting strategy: {self.precision_factor}")
         print()
@@ -1078,21 +1078,9 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         print(f'  True Negatives (correctly predicted price decreases): {TN}')
         print(f'  False Positives (incorrectly predicted price increases): {FP}')
         print(f'  False Negatives (incorrectly predicted price decreases): {FN}')
+        print(f'  Total Predictions: {TP + TN + FP + FN}')
 
-        print('\nTrading Interpretation:')
-        if self.is_shorting:
-            print(f'  Profitable Long Trades: {TP} (from true positives)')
-            print(f'  Profitable Short Trades: {TN} (from true negatives)')
-            print(f'  Unprofitable Long Trades: {FP} (from false positives)')
-            print(f'  Unprofitable Short Trades: {FN} (from false negatives)')
-            print(f'  Total Trades: {TP + TN + FP + FN}')
-        else:
-            print(f'  Profitable Long Trades: {TP} (from true positives)')
-            print(f'  Unprofitable Long Trades: {FP} (from false positives)')
-            print(f'  Ignored Signals (no position taken): {TN + FN} (all negative predictions)')
-            print(f'  Total Trades: {TP + FP}')
-
-        # Calculate trading performance metrics
+        # Calculate domain specific performance metrics
         if self.is_shorting:
             # For shorting strategy: we profit from both correct predictions
             correct_positives = np.logical_and(preds == 1, trues == 1)
@@ -1128,12 +1116,12 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         print('  Accuracy: {:.2f}%, Precision: {:.2f}%, Recall: {:.2f}%, F1: {:.2f}%'.format(
             accuracy * 100, precision * 100, recall * 100, f1 * 100))
 
-        print('\nTrading Performance:')
-        print('  Strategy: {}'.format('Shorting enabled' if self.is_shorting else 'No shorting (holding only)'))
-        print('  Profitable Trades: {}, Unprofitable Trades: {}, Total Trades: {}'.format(
+        print('\nPerformance Results:')
+        print('  Strategy: {}'.format('Short enabled' if self.is_shorting else 'No shorting (holding only)'))
+        print('  Successful Predictions: {}, Unsuccessful Predictions: {}, Total Predictions: {}'.format(
             profitable_trades, unprofitable_trades, total_trades))
-        print('  Win Rate: {:.2f}%'.format(win_rate * 100))
-        print('  Profit Factor: {:.2f}'.format(profit_factor))
+        print('  Accuracy: {:.2f}%'.format(win_rate * 100))
+        print('  P Factor: {:.2f}'.format(profit_factor))
 
         # Save results
         folder_path = './results/' + setting + '/'
@@ -1164,20 +1152,20 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         np.save(folder_path + 'true.npy', trues)
 
         # Write results to file
-        f = open("result_logits_forecast.txt", 'a')
-        f.write(setting + "  \n")
-        f.write(
-            'Trading Strategy: {}\n'.format('Shorting enabled' if self.is_shorting else 'No shorting (holding only)'))
-        f.write('Classification - Accuracy: {:.2f}%, Precision: {:.2f}%, Recall: {:.2f}%, F1: {:.2f}%\n'.format(
-            accuracy * 100, precision * 100, recall * 100, f1 * 100))
-        f.write('Trading - Win Rate: {:.2f}%, Profit Factor: {:.2f}\n'.format(win_rate * 100, profit_factor))
-        f.write('\n\n')
-        f.close()
+        # f = open("result_logits_forecast.txt", 'a')
+        # f.write(setting + "  \n")
+        # f.write(
+        #     'Trading Strategy: {}\n'.format('Shorting enabled' if self.is_shorting else 'No shorting (holding only)'))
+        # f.write('Classification - Accuracy: {:.2f}%, Precision: {:.2f}%, Recall: {:.2f}%, F1: {:.2f}%\n'.format(
+        #     accuracy * 100, precision * 100, recall * 100, f1 * 100))
+        # f.write('Trading - Win Rate: {:.2f}%, Profit Factor: {:.2f}\n'.format(win_rate * 100, profit_factor))
+        # f.write('\n\n')
+        # f.close()
 
         print("\nPerforming recency effect analysis...")
         self.analyze_recency_effect(setting, test=test)
 
-        print("\nCalculating trading returns...")
+        print("\nAnalyzing performance...")
         self.calculate_returns(setting, test=test)
 
         return

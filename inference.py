@@ -12,73 +12,95 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 def parse_args():
     parser = argparse.ArgumentParser(description='iTransformer Inference Script')
 
-    # Model and data parameters
+    # Basic config (required from bash)
+    parser.add_argument('--is_training', type=int, required=False, default=0, help='status')
+    parser.add_argument('--model_id', type=str, default='1_btcusdt_pca_components_12h_60_07_05_96_1_65', help='model id')
+    parser.add_argument('--model', type=str, default='iTransformer', help='model name')
+
+    # Data loader
     parser.add_argument('--data', type=str, default='logits', help='dataset type')
     parser.add_argument('--root_path', type=str, default='./dataset/logits/', help='root path of the data file')
     parser.add_argument('--data_path', type=str, default='btcusdt_pca_components_12h_60_07_05.csv', help='data file')
     parser.add_argument('--features', type=str, default='MS', help='forecasting task, options:[M, S, MS]')
     parser.add_argument('--target', type=str, default='close', help='target feature in S or MS task')
     parser.add_argument('--freq', type=str, default='12h', help='freq for time features encoding')
+    parser.add_argument('--checkpoints', type=str, default=None, help='location of model checkpoints')
 
-    # Model configuration
-    parser.add_argument('--model', type=str, default='iTransformer', help='model name')
-    parser.add_argument('--model_id', type=str, default='1_btcusdt_pca_components_12h_60_07_05_96_1_65',
-                        help='model id')
-    parser.add_argument('--checkpoint', type=str, default=None, help='specific checkpoint file (default: best model)')
+    # Forecasting task
     parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
-    parser.add_argument('--label_len', type=int, default=48, help='start token length')
+    parser.add_argument('--label_len', type=int, default=1, help='start token length (not used in iTransformer)')
     parser.add_argument('--pred_len', type=int, default=1, help='prediction sequence length')
+
+    # Model definition
     parser.add_argument('--enc_in', type=int, default=65, help='encoder input size')
-    parser.add_argument('--dec_in', type=int, default=65, help='decoder input size')
+    parser.add_argument('--dec_in', type=int, default=10, help='decoder input size')
     parser.add_argument('--c_out', type=int, default=1, help='output size')
     parser.add_argument('--d_model', type=int, default=512, help='dimension of model')
     parser.add_argument('--n_heads', type=int, default=8, help='num of heads')
     parser.add_argument('--e_layers', type=int, default=4, help='num of encoder layers')
     parser.add_argument('--d_layers', type=int, default=1, help='num of decoder layers')
     parser.add_argument('--d_ff', type=int, default=512, help='dimension of fcn')
+    parser.add_argument('--moving_avg', type=int, default=25, help='moving average window')
     parser.add_argument('--factor', type=int, default=1, help='attn factor')
-    parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
-    parser.add_argument('--embed', type=str, default='timeF',
-                        help='time features encoding, options:[timeF, fixed, learned]')
-    parser.add_argument('--activation', type=str, default='gelu', help='activation')
-    parser.add_argument('--output_attention', action='store_true', help='whether to output attention in encoder')
-    parser.add_argument('--use_norm', type=int, default=1, help='use norm and denorm')
-    parser.add_argument('--class_strategy', type=str, default='projection', help='projection/average/cls_token')
+    parser.add_argument('--distil', action='store_false', default=True, help='use distilling in encoder')
+    parser.add_argument('--dropout', type=float, default=0.1, help='dropout rate')
+    parser.add_argument('--embed', type=str, default='timeF', help='time features encoding')
+    parser.add_argument('--activation', type=str, default='gelu', help='activation function')
+    parser.add_argument('--output_attention', action='store_true', help='output attention weights')
+    parser.add_argument('--do_predict', action='store_true', help='predict unseen data')
 
-    # Trading parameters
-    parser.add_argument('--is_shorting', type=int, default=1,
-                        help='whether shorting is enabled (1 for true, 0 for false)')
-    parser.add_argument('--precision_factor', type=float, default=2.0, help='factor to adjust precision weighting')
-    parser.add_argument('--auto_weight', type=int, default=1, help='automatically adjust weighting if set to 1')
-
-    # Other configurations
-    parser.add_argument('--distil', action='store_false', help='whether to use distilling in encoder', default=True)
-    parser.add_argument('--use_gpu', type=bool, default=True, help='use gpu')
-    parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
-    parser.add_argument('--use_multi_gpu', action='store_true', help='use multiple gpus', default=False)
-    parser.add_argument('--devices', type=str, default='0', help='device ids of multiple gpus')
-    parser.add_argument('--output_path', type=str, default='./inference_results/', help='output path for results')
+    # Optimization
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
-    parser.add_argument('--batch_size', type=int, default=32, help='batch size for inference')
+    parser.add_argument('--itr', type=int, default=1, help='experiment iterations')
+    parser.add_argument('--train_epochs', type=int, default=50, help='train epochs')
+    parser.add_argument('--batch_size', type=int, default=32, help='batch size')
+    parser.add_argument('--patience', type=int, default=7, help='early stopping patience')
+    parser.add_argument('--learning_rate', type=float, default=0.001, help='learning rate')
+    parser.add_argument('--des', type=str, default='Logits', help='experiment description')
+    parser.add_argument('--loss', type=str, default='MSE', help='loss function')
+    parser.add_argument('--lradj', type=str, default='type1', help='lr schedule type')
+    parser.add_argument('--use_amp', action='store_true', default=False, help='mixed precision training')
+
+    # GPU
+    parser.add_argument('--use_gpu', type=bool, default=True, help='use GPU')
+    parser.add_argument('--gpu', type=int, default=0, help='GPU device id')
+    parser.add_argument('--use_multi_gpu', action='store_true', default=False, help='use multiple GPUs')
+    parser.add_argument('--devices', type=str, default='0', help='GPU devices')
+
+    # iTransformer specific
     parser.add_argument('--exp_name', type=str, default='logits', help='experiment name')
+    parser.add_argument('--channel_independence', type=bool, default=False, help='channel independence mechanism')
+    parser.add_argument('--inverse', action='store_true', default=False, help='inverse output data')
+    parser.add_argument('--class_strategy', type=str, default='projection', help='projection/average/cls_token')
+    parser.add_argument('--target_root_path', type=str, default='./data/electricity/', help='target data root')
+    parser.add_argument('--target_data_path', type=str, default='electricity.csv', help='target data file')
+    parser.add_argument('--efficient_training', type=bool, default=False, help='partial training mode')
+    parser.add_argument('--use_norm', type=int, default=1, help='use norm/denorm')
+    parser.add_argument('--partial_start_index', type=int, default=0, help='start index for partial training')
+
+    parser.add_argument('--is_shorting', type=int, default=0, help='enable shorting')
+    parser.add_argument('--precision_factor', type=float, default=2.0, help='precision weighting factor')
+    parser.add_argument('--auto_weight', type=int, default=0, help='auto weighting logic')
 
     # Set timeenc based on embed
     args, _ = parser.parse_known_args()
     timeenc_value = 0 if args.embed != 'timeF' else 1
-    parser.add_argument('--timeenc', type=int, default=timeenc_value, help='time encoding method')
+    parser.add_argument('--timeenc', type=int, default=timeenc_value, help='time encoding')
 
+    # Final parse
     args = parser.parse_args()
-    args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
 
+    # GPU setup
+    args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
     if args.use_gpu and args.use_multi_gpu:
         args.devices = args.devices.replace(' ', '')
-        device_ids = args.devices.split(',')
-        args.device_ids = [int(id_) for id_ in device_ids]
+        args.device_ids = [int(id_) for id_ in args.devices.split(',')]
         args.gpu = args.device_ids[0]
 
-    print('Inference args:')
+    print('Args:')
     print(args)
     return args
+
 
 
 def setup_experiment(args):
@@ -89,8 +111,8 @@ def setup_experiment(args):
 
 def load_model(exp, args, setting):
     """Load the trained model from the checkpoints dir"""
-    if args.checkpoint:
-        checkpoint_path = args.checkpoint
+    if args.checkpoints:
+        checkpoint_path = args.checkpoints
     else:
         checkpoint_path = os.path.join('./checkpoints', setting, 'checkpoint.pth')
 
@@ -353,6 +375,9 @@ def save_results(preds, trues, probs, timestamps, original_indices, metrics, ret
 
 
 def main():
+    # Add model configuration args to the parser, here
+
+
     # Parse arguments
     args = parse_args()
 

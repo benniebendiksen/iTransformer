@@ -226,3 +226,9 @@ Classification - Accuracy: 30.00%, Precision: 20.00%, Recall: 25.00%, F1: 22.22%
 Trading - Win Rate: 30.00%, Profit Factor: 0.43
 
 
+1_btcusdt_pca_components_12h_60_07_05_60_window_1_96_1_65_iTransformer_logits_MS_ft96_sl1_ll1_pl512_dm8_nh4_el1_dl512_df1_fctimeF_ebTrue_dtLogits_projection_0  
+Trading Strategy: Shorting enabled
+Classification - Accuracy: 70.00%, Precision: 66.67%, Recall: 80.00%, F1: 72.73%
+Trading - Win Rate: 70.00%, Profit Factor: 2.33
+
+

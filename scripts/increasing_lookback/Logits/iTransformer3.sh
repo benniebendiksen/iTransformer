@@ -29,7 +29,7 @@ python -u run.py \
   --features MS \
   --seq_len $seq_len \
   --pred_len $pred_len \
-  --e_layers 4 \
+  --e_layers 2 \
   --enc_in $enc_in \
   --dec_in $enc_in \
   --c_out 1 \
