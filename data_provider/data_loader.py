@@ -304,7 +304,7 @@ class Dataset_Crypto(Dataset):
                     timeenc: time encoding method
                     freq: time frequency
         """
-        print(f"size is: {size}")
+        # size is: [96, 1, 1]
         if size == None:
             self.seq_len = 96  # 24 hours (96 * 15 min)
             self.label_len = 48

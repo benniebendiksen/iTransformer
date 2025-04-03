@@ -126,6 +126,7 @@ elif [ $SLURM_ARRAY_TASK_ID -eq 2 ]; then
     run_logits_dataset_2
 else
     echo "Unknown task ID: $SLURM_ARRAY_TASK_ID"
+    run_logits_dataset_2
 fi
 
 echo "Job completed at $(date)"

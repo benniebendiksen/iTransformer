@@ -700,16 +700,17 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
     def _process_outputs(self, outputs, batch_y):
         # Process outputs and targets for binary classification
         f_dim = -1 if self.args.features == 'MS' else 0
+        # outputs shape: torch.Size([32, 1, 1])
+        # batch_y shape: torch.Size([32, 2, 1])
         outputs = outputs[:, -self.args.pred_len:, f_dim:]
-        print(f"Outputs shape 1: {outputs.shape}, batch_y shape: {batch_y.shape}")
+        # batch_y shape: torch.Size([32, 1, 1])
         batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-        print(f"batch_y shape 1: {batch_y.shape}")
 
         # For binary classification, we only care about the last timestep prediction
+        # outputs_last shape: torch.Size([32, 1])
         outputs_last = outputs[:, -1, :]
+        # batch_y_last shape: torch.Size([32, 1]). Values of form [0.] or [1.]
         batch_y_last = batch_y[:, -1, :]
-        print(f"Outputs shape 2: {outputs_last.shape}, batch_y shape 2: {batch_y_last.shape}")
-        print(f"batch_y shape 2: {batch_y_last}")
 
         return outputs_last, batch_y_last, outputs, batch_y
 
@@ -865,9 +866,10 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     with torch.cuda.amp.autocast():
                         if self.args.output_attention:
                             outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                            print(f"Outputs if shape: {outputs.shape}")
                         else:
                             outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                            print(f"Outputs 0 shape: {outputs.shape}")
+                            print(f"Outputs else shape: {outputs.shape}")
 
                         # Process outputs for binary classification
                         outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)

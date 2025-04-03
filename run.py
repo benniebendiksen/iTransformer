@@ -33,8 +33,8 @@ if __name__ == '__main__':
 
     # forecasting task
     parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
-    parser.add_argument('--label_len', type=int, default=48, help='start token length') # no longer needed in inverted Transformers
-    parser.add_argument('--pred_len', type=int, default=96, help='prediction sequence length')
+    parser.add_argument('--label_len', type=int, default=1, help='start token length') # no longer needed in inverted Transformers
+    parser.add_argument('--pred_len', type=int, default=1, help='prediction sequence length')
 
     # model define
     parser.add_argument('--enc_in', type=int, default=7, help='encoder input size')
