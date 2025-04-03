@@ -35,6 +35,7 @@ python -u run.py \
   --c_out 1 \
   --des 'Logits' \
   --d_model $d_model \
+  --d_ff $d_model \
   --batch_size 32 \
   --learning_rate 0.001 \
   --itr 5 \
@@ -45,4 +46,5 @@ python -u run.py \
   --is_shorting 1 \
   --precision_factor 2.0 \
   --auto_weight 1 \
-  --freq 12h
+  --freq 12h \
+  --dropout 0.4

@@ -29,7 +29,7 @@ python -u run.py \
   --features MS \
   --seq_len $seq_len \
   --pred_len $pred_len \
-  --e_layers 2 \
+  --e_layers 4 \
   --enc_in $enc_in \
   --dec_in $enc_in \
   --c_out 1 \
@@ -46,4 +46,5 @@ python -u run.py \
   --is_shorting 1 \
   --precision_factor 2.0 \
   --auto_weight 1 \
-  --freq 12h
+  --freq 12h \
+  --dropout 0.2
