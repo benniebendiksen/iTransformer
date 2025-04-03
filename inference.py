@@ -381,6 +381,9 @@ def main():
     # Parse arguments
     args = parse_args()
 
+    # Force CPU mode if CUDA is not available
+    args.use_gpu = False
+
     # Determine device
     device = torch.device('cuda:{}'.format(args.gpu) if args.use_gpu else 'cpu')
     print(f'Using device: {device}')
