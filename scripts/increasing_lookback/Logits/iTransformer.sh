@@ -47,7 +47,6 @@ python -u run.py \
   --precision_factor 2.0 \
   --auto_weight 1 \
   --freq 12h \
-  --dropout 0.15
 
 
 #data_path="btcusdt_pca_components_12h_60_07_05_60_window_1.csv"

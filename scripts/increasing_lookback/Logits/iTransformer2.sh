@@ -14,10 +14,10 @@ python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available(
 model_name=iTransformer
 
 # data_path="btcusdt_pca_components_12h_60_07_05.csv"
-data_path="btcusdt_pca_components_12h_4h_70_07_05.csv"
+data_path="btcusdt_pca_components_12h_4h_60_07_05.csv"
 seq_len=96
 pred_len=1
-enc_in=75
+enc_in=65
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
