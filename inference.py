@@ -152,13 +152,27 @@ def get_test_data(args):
 
 
 def run_inference(model, test_data, test_loader, args, device):
-    """Generate predictions on test data"""
+    """Generate predictions on test data with improved timestamp and prediction index tracking"""
     model.eval()
     preds = []
     trues = []
     probs = []
     timestamps = []
     original_indices = []
+    prediction_indices = []
+    prices = []
+
+    # Load original data to get timestamps if not available in metadata
+    try:
+        original_df = pd.read_csv(os.path.join(args.root_path, args.data_path))
+        if 'date' in original_df.columns:
+            if pd.api.types.is_numeric_dtype(original_df['date']):
+                original_df['date'] = pd.to_datetime(original_df['date'], unit='s')
+            else:
+                original_df['date'] = pd.to_datetime(original_df['date'])
+    except Exception as e:
+        print(f"Warning: Could not load original data for timestamp extraction: {e}")
+        original_df = None
 
     print('Running inference on test dataset...')
     with torch.no_grad():
@@ -198,25 +212,54 @@ def run_inference(model, test_data, test_loader, args, device):
             trues.append(true_label)
             probs.append(output_prob)
 
-            # Store metadata if available
-            if hasattr(test_data, 'active_indices') and i < len(test_data.active_indices):
+            # Get timestamp, prediction index and metadata with better priority order
+            timestamp = None
+            price = None
+            orig_idx = None
+            pred_idx = None
+
+            # First try sequence_indices which has the most detailed info
+            if hasattr(test_data, 'sequence_indices') and i in test_data.sequence_indices:
+                meta = test_data.sequence_indices[i]
+                orig_idx = meta.get('orig_start_idx')
+                pred_idx = meta.get('pred_idx')
+                price = meta.get('pred_price')
+
+                # Get timestamp if available in original_df
+                if original_df is not None and pred_idx is not None and pred_idx < len(original_df):
+                    timestamp = original_df.iloc[pred_idx]['date'] if 'date' in original_df.columns else None
+
+            # Then try sample_metadata
+            if (timestamp is None or pred_idx is None) and hasattr(test_data, 'sample_metadata') and i < len(
+                    test_data.sample_metadata):
+                meta = test_data.sample_metadata[i]
+                timestamp = meta.get('timestamp') if timestamp is None else timestamp
+                if orig_idx is None:
+                    orig_idx = meta.get('orig_idx')
+                if pred_idx is None:
+                    pred_idx = meta.get('pred_idx')
+                if price is None:
+                    price = meta.get('pred_price')
+
+            # Finally try active_indices
+            if orig_idx is None and hasattr(test_data, 'active_indices') and i < len(test_data.active_indices):
                 orig_idx = test_data.active_indices[i]
-                original_indices.append(orig_idx)
 
-                # Get timestamp if available
-                timestamp = None
-                meta = None
-                if hasattr(test_data, 'sequence_indices') and i in test_data.sequence_indices:
-                    meta = test_data.sequence_indices[i]
-                elif hasattr(test_data, 'sample_metadata') and i < len(test_data.sample_metadata):
-                    meta = test_data.sample_metadata[i]
+            # Calculate prediction index from original index if not directly available
+            if pred_idx is None and orig_idx is not None and hasattr(test_data, 'seq_len'):
+                pred_idx = orig_idx + test_data.seq_len
 
-                if meta and 'timestamp' in meta:
-                    timestamp = meta['timestamp']
-                timestamps.append(timestamp)
-            else:
-                original_indices.append(i)
-                timestamps.append(None)
+                # Try to get timestamp and price from original data
+                if timestamp is None and original_df is not None and pred_idx < len(original_df):
+                    timestamp = original_df.iloc[pred_idx]['date'] if 'date' in original_df.columns else None
+                    price = original_df.iloc[pred_idx][args.target] if args.target in original_df.columns else None
+
+            # Store data with fallbacks
+            original_indices.append(orig_idx if orig_idx is not None else i)
+            prediction_indices.append(
+                pred_idx if pred_idx is not None else (orig_idx + args.seq_len if orig_idx is not None else i))
+            timestamps.append(timestamp)
+            prices.append(price)
 
             # Progress indication
             if (i + 1) % 100 == 0 or i == len(test_data) - 1:
@@ -227,7 +270,7 @@ def run_inference(model, test_data, test_loader, args, device):
     trues = np.array(trues)
     probs = np.array(probs)
 
-    return preds, trues, probs, timestamps, original_indices
+    return preds, trues, probs, timestamps, original_indices, prediction_indices, prices
 
 
 def calculate_metrics(preds, trues, is_shorting=True):
@@ -323,17 +366,62 @@ def calculate_trading_returns(preds, trues, probs, is_shorting=True):
     }
 
 
-def save_results(preds, trues, probs, timestamps, original_indices, metrics, returns, args):
-    """Save inference results to output directory"""
+def save_results(preds, trues, probs, timestamps, original_indices, prices, metrics, returns, args):
+    """Save inference results to output directory with improved column formatting"""
     os.makedirs(args.output_path, exist_ok=True)
 
-    # Create results dataframe
+    # Process timestamps to ensure we have both unix and human readable formats
+    unix_timestamps = []
+    human_timestamps = []
+
+    for ts in timestamps:
+        # Handle different timestamp formats
+        if isinstance(ts, pd.Timestamp):
+            # Convert pandas timestamp to unix timestamp (seconds)
+            unix_ts = int(ts.timestamp())
+            human_ts = ts.strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(ts, (int, float)) and ts > 1000000000:  # Looks like a unix timestamp
+            # Already a unix timestamp
+            unix_ts = int(ts)
+            human_ts = pd.Timestamp(unix_ts, unit='s').strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(ts, str):
+            try:
+                # Try to parse string to timestamp
+                dt = pd.to_datetime(ts)
+                unix_ts = int(dt.timestamp())
+                human_ts = dt.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                # If parsing fails, use None
+                unix_ts = None
+                human_ts = ts
+        else:
+            unix_ts = None
+            human_ts = "Unknown" if ts is not None else None
+
+        unix_timestamps.append(unix_ts)
+        human_timestamps.append(human_ts)
+
+    # Calculate prediction indices - these are the original indices plus the sequence length
+    pred_indices = []
+    for i, orig_idx in enumerate(original_indices):
+        if hasattr(args, 'seq_len'):
+            pred_idx = orig_idx + args.seq_len if orig_idx is not None else None
+            pred_indices.append(pred_idx)
+        else:
+            # Fallback if seq_len not available
+            pred_indices.append(orig_idx)
+
+    # Create results dataframe with the desired column order and names
     results_df = pd.DataFrame({
-        'original_index': original_indices,
+        'pred_index': pred_indices,
+        'unix_timestamp': unix_timestamps,
+        'human_timestamp': human_timestamps,
         'prediction': preds,
         'true_label': trues,
         'probability': probs,
-        'timestamp': timestamps
+        'price': prices,
+        'return': returns['per_trade'],
+        'cumulative_return': returns['cumulative']
     })
 
     # Save results to CSV
@@ -396,9 +484,6 @@ def save_results(preds, trues, probs, timestamps, original_indices, metrics, ret
 
 
 def main():
-    # Add model configuration args to the parser, here
-
-
     # Parse arguments
     args = parse_args()
 
@@ -430,6 +515,13 @@ def main():
         args.class_strategy
     )
 
+    # Override checkpoints path if specific checkpoint not provided
+    if not args.checkpoints:
+        checkpoint_path = os.path.join('./checkpoints', setting, 'checkpoint.pth')
+        if os.path.exists(checkpoint_path):
+            args.checkpoints = checkpoint_path
+            print(f"Using checkpoint: {checkpoint_path}")
+
     # Setup experiment
     exp = setup_experiment(args)
 
@@ -440,8 +532,9 @@ def main():
     # Get test data
     test_data, test_loader = get_test_data(args)
 
-    # Run inference
-    preds, trues, probs, timestamps, original_indices = run_inference(model, test_data, test_loader, args, device)
+    # Run inference with improved timestamp and prediction index tracking
+    preds, trues, probs, timestamps, original_indices, prediction_indices, prices = run_inference(
+        model, test_data, test_loader, args, device)
 
     # Calculate metrics
     metrics = calculate_metrics(preds, trues, bool(args.is_shorting))
@@ -449,8 +542,8 @@ def main():
     # Calculate trading returns
     returns = calculate_trading_returns(preds, trues, probs, bool(args.is_shorting))
 
-    # Save results
-    save_results(preds, trues, probs, timestamps, original_indices, metrics, returns, args)
+    # Save results with improved formatting
+    save_results(preds, trues, probs, timestamps, prediction_indices, prices, metrics, returns, args)
 
     # Print summary
     print("\nInference Summary:")
@@ -459,6 +552,19 @@ def main():
     print(f"Precision: {metrics['precision'] * 100:.2f}%")
     print(f"Win rate: {metrics['trading']['win_rate'] * 100:.2f}%")
     print(f"Total return: {returns['total_return'] * 100:.2f}%")
+
+    # Print some examples with prediction indices and timestamps
+    print("\nExample predictions:")
+    for i in range(min(5, len(preds))):
+        pred_idx = prediction_indices[i] if i < len(prediction_indices) else "N/A"
+        ts = timestamps[i] if i < len(timestamps) else "N/A"
+        if isinstance(ts, pd.Timestamp):
+            ts_str = ts.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            ts_str = str(ts)
+        price = prices[i] if i < len(prices) and prices[i] is not None else "N/A"
+        print(
+            f"Sample {i}: Pred Index={pred_idx}, Time={ts_str}, Pred={preds[i]}, True={trues[i]}, Prob={probs[i]:.4f}, Price={price}")
 
     print("\nDone!")
 

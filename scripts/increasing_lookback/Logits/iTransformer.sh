@@ -13,7 +13,7 @@ python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available(
 
 model_name=iTransformer
 
-data_path="btcusdt_pca_components_12h_60_07_05.csv"
+data_path="btcusdt_pca_components_12h_4h_70_07_05.csv"
 seq_len=96
 pred_len=1
 enc_in=65
@@ -47,7 +47,7 @@ python -u run.py \
   --precision_factor 2.0 \
   --auto_weight 1 \
   --freq 12h \
-  --dropout 0.08
+  --dropout 0.15
 
 
 #data_path="btcusdt_pca_components_12h_60_07_05_60_window_1.csv"
