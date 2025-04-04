@@ -16,7 +16,7 @@ model_name=iTransformer
 data_path="btcusdt_pca_components_12h_1d_53_07_05.csv"
 seq_len=96
 pred_len=1
-enc_in=65
+enc_in=58
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
