@@ -1,5 +1,6 @@
 # Ignored folder
 slurm_outputs/
+outputs/
 test_results/
 results/
 checkpoints/

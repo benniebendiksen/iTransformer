@@ -5,10 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/inference.py" beforeDir="false" afterPath="$PROJECT_DIR$/inference.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -135,7 +134,7 @@
       <workItem from="1743624270600" duration="15000" />
       <workItem from="1743648239375" duration="6473000" />
       <workItem from="1743710638561" duration="5000" />
-      <workItem from="1743718590755" duration="5351000" />
+      <workItem from="1743718590755" duration="6315000" />
     </task>
     <servers />
   </component>
@@ -143,6 +142,6 @@
     <option name="version" value="3" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/iTransformer$inference.coverage" NAME="inference Coverage Results" MODIFIED="1743723859272" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/iTransformer$inference.coverage" NAME="inference Coverage Results" MODIFIED="1743725057331" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>

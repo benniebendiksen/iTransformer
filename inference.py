@@ -81,6 +81,7 @@ def parse_args():
     parser.add_argument('--is_shorting', type=int, default=0, help='enable shorting')
     parser.add_argument('--precision_factor', type=float, default=2.0, help='precision weighting factor')
     parser.add_argument('--auto_weight', type=int, default=0, help='auto weighting logic')
+    parser.add_argument('--output_path', type=str, default='./outputs/', help='path to save inference results')
 
     # Set timeenc based on embed
     args, _ = parser.parse_known_args()
@@ -109,15 +110,37 @@ def setup_experiment(args):
     return exp
 
 
+# def load_model(exp, args, setting):
+#     """Load the trained model from the checkpoints dir"""
+#     if args.checkpoints:
+#         checkpoint_path = args.checkpoints
+#     else:
+#         checkpoint_path = os.path.join('./checkpoints', setting, 'checkpoint.pth')
+#
+#     print(f'Loading model from {checkpoint_path}')
+#     exp.model.load_state_dict(torch.load(checkpoint_path))
+#     return exp.model
+
 def load_model(exp, args, setting):
     """Load the trained model from the checkpoints dir"""
+    # Use the hardcoded checkpoint path
     if args.checkpoints:
         checkpoint_path = args.checkpoints
     else:
         checkpoint_path = os.path.join('./checkpoints', setting, 'checkpoint.pth')
 
     print(f'Loading model from {checkpoint_path}')
-    exp.model.load_state_dict(torch.load(checkpoint_path))
+
+    # Check if file exists before loading
+    if not os.path.exists(checkpoint_path):
+        print(f"WARNING: Checkpoint file not found at {checkpoint_path}")
+        print("Please check that the file exists and the path is correct")
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+    # IMPORTANT: Always force CPU loading since the model was trained on GPU
+    state_dict = torch.load(checkpoint_path, map_location=torch.device('cpu'))
+
+    exp.model.load_state_dict(state_dict)
     return exp.model
 
 
@@ -310,9 +333,7 @@ def save_results(preds, trues, probs, timestamps, original_indices, metrics, ret
         'prediction': preds,
         'true_label': trues,
         'probability': probs,
-        'timestamp': timestamps,
-        'return': returns['per_trade'],
-        'cumulative_return': returns['cumulative']
+        'timestamp': timestamps
     })
 
     # Save results to CSV
