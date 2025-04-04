@@ -47,4 +47,4 @@ python -u run.py \
   --precision_factor 2.0 \
   --auto_weight 1 \
   --freq 12h \
-  --dropout 0.05
+  --dropout 0.12

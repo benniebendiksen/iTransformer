@@ -433,27 +433,28 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         # Show detailed label verification
         # TODO: handle this debug case
-        # print("\nLabel Verification with Detailed Metadata:")
-        # print("-" * 140)
-        # print(
-        #     f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
-        # print("-" * 140)
-        #
-        # for i, meta in enumerate(all_metadata):
-        #     if i >= len(all_trues) or meta is None:
-        #         continue
-        #
-        #     orig_idx = meta['orig_start_idx']
-        #     pred_idx = meta['pred_idx']
-        #     pred_price = meta['pred_price']
-        #     future_price = meta['future_price']
-        #     price_change = meta['price_change']
-        #     stored_label = meta['label']
-        #     model_true = all_trues[i]
-        #     match = "✓" if abs(stored_label - model_true) < 0.01 else "✗"
-        #
-        #     print(
-        #         f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5}")
+        print("\nLabel Verification with Detailed Metadata:")
+        print("-" * 140)
+        print(
+            f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
+        print("-" * 140)
+
+        for i, meta in enumerate(all_metadata):
+            if i >= len(all_trues) or meta is None:
+                continue
+
+            orig_idx = meta['orig_start_idx']
+            pred_idx = meta['pred_idx']
+            pred_price = meta['pred_price']
+            future_price = meta['future_price']
+            price_change = meta['price_change']
+            stored_label = meta['label']
+            model_true = all_trues[i]
+            match = "✓" if abs(stored_label - model_true) < 0.01 else "✗"
+            timestamp = meta['timestamp']
+
+            print(
+                f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5} | {timestamp:<5}")
 
         # Show summary statistics
         matches = sum(

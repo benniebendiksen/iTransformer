@@ -441,7 +441,7 @@ class Dataset_Crypto(Dataset):
                     'timestamp': df_raw['date'].iloc[pred_idx] if 'date' in df_raw.columns else None
                 })
 
-        # Create a mapping from sequence indices to original indices
+        # Create a mapping from sequence indices to original indices. This DS is used to map test cases to corresponding fields of the dataset
         self.sequence_indices = {}
         for i in range(len(self.active_indices) - self.seq_len - self.pred_len + 1):
             # Skip if we don't have enough data for this sequence
@@ -471,7 +471,8 @@ class Dataset_Crypto(Dataset):
                 'pred_price': pred_price,
                 'future_price': future_price,
                 'price_change': (future_price - pred_price) / pred_price * 100.0,
-                'label': calculated_label
+                'label': calculated_label,
+                'timestamp': df_raw['date'].iloc[pred_idx] if 'date' in df_raw.columns else None
             }
 
         # Save original active_indices for integrity checking
