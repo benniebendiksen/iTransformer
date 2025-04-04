@@ -13,10 +13,8 @@ python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available(
 
 model_name=iTransformer
 
-# data_path="btcusdt_pca_components_12h_60_07_05.csv"
-# data_path="btcusdt_pca_components_12h_4h_60_07_05.csv"
 # data_path="btcusdt_pca_components_12h_1d_53_07_05.csv"
-# data_path="bitstamp_btcusd_pca_components_12h_3_67_07_05_strict_biz.csv"
+# re-train adapt to the times (fixed component count relative to last train)
 data_path="btcusdt_pca_components_12h_70_07_05_04_04.csv"
 seq_len=96
 pred_len=1
@@ -52,6 +50,7 @@ python -u run.py \
   --auto_weight 1 \
   --freq 12h
 
+# re-train adapt to the times (adjusted component count, +10 to 95% explanation count)
 data_path="btcusdt_pca_components_12h_72_07_05_04_04.csv"
 seq_len=96
 pred_len=1
