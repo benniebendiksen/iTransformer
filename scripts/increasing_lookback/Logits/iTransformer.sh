@@ -14,11 +14,11 @@ python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available(
 model_name=iTransformer
 
 # no re-train and gauge performance on new data (around 2 weeks of cases)
-data_path="btcusdt_pca_components_12h_70_3558_3840_04_04.csv"
+data_path="btcusdt_pca_components_12h_66_07_05_04_04_shift.csv"
 # data_path="bitstamp_btcusd_pca_components_12h_2_67_07_05_strict_biz.csv"
 seq_len=96
 pred_len=1
-enc_in=75
+enc_in=71
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
