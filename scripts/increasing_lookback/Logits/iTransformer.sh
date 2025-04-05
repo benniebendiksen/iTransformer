@@ -14,10 +14,11 @@ python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available(
 model_name=iTransformer
 
 # baseline testing
-data_path="btcusdt_pca_components_12h_4h_72_07_05_baseline.csv"
+#data_path="btcusdt_pca_components_12h_4h_72_07_05_baseline.csv"
+data_path="btcusdt_pca_components_12h_4h_40_3558_282_no_l_juice_testing.csv"
 seq_len=96
 pred_len=1
-enc_in=77
+enc_in=45
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -49,11 +50,9 @@ python -u run.py \
   --auto_weight 1 \
   --freq 12h
 
-# baseline testing
-data_path="btcusdt_pca_components_12h_4h_72_07_05_baseline.csv"
 seq_len=96
 pred_len=1
-enc_in=77
+enc_in=45
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -86,11 +85,10 @@ python -u run.py \
   --freq 12h \
   --dropout 0.15 \
 
-# baseline testing
-data_path="btcusdt_pca_components_12h_4h_72_07_05_baseline.csv"
+
 seq_len=96
 pred_len=1
-enc_in=77
+enc_in=45
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
