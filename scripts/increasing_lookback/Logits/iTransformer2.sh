@@ -21,10 +21,10 @@ model_name=iTransformer
 #data_path="btcusdt_pca_components_12h_4h_50_3558_282_no_l_juice_testing.csv"
 #data_path="btcusdt_pca_components_12h_4h_70_3558_282_04_04.csv_dud"
 
-data_path="btcusdt_pca_components_12h_4h_40_7_5_bitstamp.csv"
+data_path="btcusdt_pca_components_12h_4h_57_7_5_bitstamp.csv"
 seq_len=96
 pred_len=1
-enc_in=45
+enc_in=62
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -55,7 +55,6 @@ python -u run.py \
   --precision_factor 2.0 \
   --auto_weight 1 \
   --freq 12h \
-  --dropout 0.015 \
 #data_path="btcusdt_pca_components_12h_4h_50_3558_282_04_04_two.csv"
 #seq_len=96
 #pred_len=1
