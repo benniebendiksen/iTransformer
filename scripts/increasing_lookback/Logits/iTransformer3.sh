@@ -19,10 +19,11 @@ btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv
 # data_path="btcusdt_pca_components_12h_4h_72_3572_282_shifted.csv"
 # data_path="btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv"
 # data_path="btcusdt_pca_components_12h_4h_70_3558_282_04_04_two.csv"
-data_path="btcusd_pca_components_12h_4h_1d_80_7_5_bitsap.csv"
+#data_path="btcusd_pca_components_12h_4h_1d_80_7_5_bitsap.csv"
+data_path="btcusd_pca_components_12h_71_7_5_bitsap_2_4_1.csv"
 seq_len=96
 pred_len=1
-enc_in=85
+enc_in=76
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
