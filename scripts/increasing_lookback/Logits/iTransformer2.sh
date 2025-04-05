@@ -19,7 +19,7 @@ model_name=iTransformer
 # juice-testing
 #data_path="btcusdt_pca_components_12h_4h_72_3558_282_juice_testing.csv"
 #data_path="btcusdt_pca_components_12h_4h_50_3558_282_no_l_juice_testing.csv"
-data_path="btcusdt_pca_components_12h_4h_70_3558_282_04_04.csv"
+data_path="btcusdt_pca_components_12h_4h_70_3558_282_04_04.csv_dud"
 seq_len=96
 pred_len=1
 enc_in=71

@@ -16,6 +16,7 @@ model_name=iTransformer
 # baseline testing
 #data_path="btcusdt_pca_components_12h_4h_72_07_05_baseline.csv"
 # data_path="btcusdt_pca_components_12h_4h_40_3558_282_no_l_juice_testing.csv"
+#data_path="btcusdt_pca_components_12h_4h_70_3558_282_04_04.csv"
 data_path="btcusdt_pca_components_12h_4h_70_3558_282_04_04.csv"
 seq_len=96
 pred_len=1
