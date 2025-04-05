@@ -15,7 +15,7 @@ model_name=iTransformer
 
 # data_path="btcusdt_pca_components_12h_1d_53_07_05.csv"
 # juice-testing
-data_path=data_path="btcusdt_pca_components_12h_4h_72_3558_282_juice_testing.csv"
+data_path="btcusdt_pca_components_12h_4h_72_3558_282_juice_testing.csv"
 seq_len=96
 pred_len=1
 enc_in=77
@@ -50,7 +50,7 @@ python -u run.py \
   --auto_weight 1 \
   --freq 12h
 
-data_path=data_path="btcusdt_pca_components_12h_4h_72_3558_282_juice_testing.csv"
+data_path="btcusdt_pca_components_12h_4h_72_3558_282_juice_testing.csv"
 seq_len=96
 pred_len=1
 enc_in=77
@@ -86,7 +86,7 @@ python -u run.py \
   --freq 12h \
   --dropout 0.15 \
 
-data_path=data_path="btcusdt_pca_components_12h_4h_72_3558_282_juice_testing.csv"
+data_path="btcusdt_pca_components_12h_4h_72_3558_282_juice_testing.csv"
 seq_len=96
 pred_len=1
 enc_in=77
