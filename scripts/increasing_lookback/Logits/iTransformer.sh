@@ -50,7 +50,8 @@ python -u run.py \
   --is_shorting 1 \
   --precision_factor 2.0 \
   --auto_weight 1 \
-  --freq 12h
+  --freq 12h \
+  --dropout 0.2 \
 #
 #seq_len=96
 #pred_len=1
