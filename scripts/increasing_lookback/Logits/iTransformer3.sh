@@ -17,10 +17,11 @@ btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv
 
 # Shifted, unchanged component number
 # data_path="btcusdt_pca_components_12h_4h_72_3572_282_shifted.csv"
-data_path="btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv_dud"
+# data_path="btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv"
+data_path="btcusdt_pca_components_12h_4h_70_3558_282_04_04_two.csv"
 seq_len=96
 pred_len=1
-enc_in=55
+enc_in=75
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -54,7 +55,7 @@ python -u run.py \
 
 seq_len=96
 pred_len=1
-enc_in=51
+enc_in=71
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
