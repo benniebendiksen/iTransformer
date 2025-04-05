@@ -19,10 +19,10 @@ btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv
 # data_path="btcusdt_pca_components_12h_4h_72_3572_282_shifted.csv"
 # data_path="btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv"
 # data_path="btcusdt_pca_components_12h_4h_70_3558_282_04_04_two.csv"
-data_path="btcusdt_pca_components_12h_4h_57_7_5_bitstamp.csv"
+data_path="btcusd_pca_components_12h_4h_1d_80_7_5_bitsap.csv"
 seq_len=96
 pred_len=1
-enc_in=62
+enc_in=85
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
@@ -53,7 +53,6 @@ python -u run.py \
   --precision_factor 2.0 \
   --auto_weight 1 \
   --freq 12h \
-  --drop_out .015
 #
 #seq_len=96
 #pred_len=1
