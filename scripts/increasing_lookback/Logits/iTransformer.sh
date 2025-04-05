@@ -20,10 +20,10 @@ model_name=iTransformer
 #data_path="btcusdt_pca_components_12h_4h_50_7_5_bitstamp.csv"
 #data_path="btcusd_pca_components_12h_1d_70_7_5_bitsap.csv"
 #data_path="btcusd_pca_components_12h_70_7_5_bitsap_1_4_2.csv"
-data_path="btcusd_pca_components_12h_4h_70_7_5_bitsap.csv"
+data_path="btcusd_pca_components_12h_reduced_4h_53_7_5_1_2_1.csv"
 seq_len=96
 pred_len=1
-enc_in=75
+enc_in=58
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
