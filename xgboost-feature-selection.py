@@ -64,7 +64,7 @@ def parse_args():
                         help='number of hyperparameter optimization trials')
     parser.add_argument('--cv_splits', type=int, default=3,
                         help='number of CV splits for time series evaluation')
-    parser.add_argument('--optimize_metric', type=str, default='win_rate',
+    parser.add_argument('--optimize_metric', type=str, default='accuracy',
                         choices=['accuracy', 'precision', 'recall', 'f1', 'win_rate', 'profit_factor'],
                         help='metric to optimize during hyperparameter tuning')
     parser.add_argument('--timeout', type=int, default=7200,
@@ -440,19 +440,13 @@ def train_final_model(best_params, train_X, train_y, val_X, val_y, args):
 
     # Initialize and train model
     model = xgb.XGBClassifier(
-        **final_params
+        **final_params, early_stopping_rounds=100
     )
-
-    # Create early stopping callback instead of using early_stopping_rounds
-    callbacks = [
-        xgb.callback.EarlyStopping(rounds=100, save_best=True)
-    ]
 
     model.fit(
         np.vstack([train_X, val_X]),
         np.concatenate([train_y, val_y]),
         eval_set=[(val_X, val_y)],
-        callbacks=callbacks,
         verbose=False
     )
 
