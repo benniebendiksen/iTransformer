@@ -162,16 +162,14 @@ def load_data(args):
     logger.info(f"Dataset columns: {len(df.columns)}")
 
     # Check if we need to generate the target column
-    if args.target == 'price_direction' and 'price_direction' not in df.columns:
-        print("Target column 'price_direction' not found in dataset, generating it...")
+    if args.target not in df.columns:
+        print(f"Target column '{args.target}' not found in dataset, generating it...")
         if args.price_col not in df.columns:
             raise ValueError(f"'{args.price_col}' column required for generating direction target, but not found!")
-        df = generate_target_column(df, args.price_col, args.seq_len, args.pred_len)
-    elif args.target in df.columns:
+        df = generate_target_column(df, args.price_col, args.seq_len, args.pred_len, target_col=args.target)
+    else:
         target_counts = df[args.target].value_counts(normalize=True)
         logger.info(f"Target distribution:\n{target_counts}")
-    else:
-        logger.warning(f"Target column '{args.target}' not found in dataset!")
 
     return df
 
@@ -204,8 +202,13 @@ def prepare_features_targets(df, args, exclude_cols=None):
     if exclude_cols is None:
         exclude_cols = args.exclude_cols.split(',')
 
+    # Make sure we add the target to exclude columns
     if args.target not in exclude_cols:
         exclude_cols.append(args.target)
+
+    # Add 'split' to exclude columns if present
+    if 'split' in df.columns and 'split' not in exclude_cols:
+        exclude_cols.append('split')
 
     # Get features and target
     feature_cols = [col for col in df.columns if col not in exclude_cols]
@@ -257,14 +260,22 @@ def objective(trial, train_X, train_y, val_X, val_y, args, use_gpu=False):
         param['drop_rate'] = trial.suggest_float('drop_rate', 0.1, 0.5)
         param['skip_drop'] = trial.suggest_float('skip_drop', 0.1, 0.5)
 
+    # Create callbacks instead of using deprecated parameters
+    callbacks = [
+        lgb.early_stopping(50, verbose=False),
+        lgb.log_evaluation(0)  # 0 means silent
+    ]
+
+    # Get n_estimators and remove from params
+    n_estimators = param.pop('n_estimators')
+
     # Train the model
-    model = lgb.LGBMClassifier(**param)
+    model = lgb.LGBMClassifier(**param, n_estimators=n_estimators)
     model.fit(
         train_X, train_y,
         eval_set=[(val_X, val_y)],
         eval_metric='binary_logloss',
-        early_stopping_rounds=50,
-        verbose=False
+        callbacks=callbacks
     )
 
     # Make predictions
@@ -376,7 +387,13 @@ def train_final_model(best_params, train_X, train_y, val_X, val_y, args):
         final_params['gpu_platform_id'] = 0
         final_params['gpu_device_id'] = 0
 
-    # Get n_estimators and remove from params as we'll use early stopping
+    # Set up callbacks for early stopping
+    callbacks = [
+        lgb.early_stopping(100, verbose=False),
+        lgb.log_evaluation(100)  # Log every 100 iterations
+    ]
+
+    # Get n_estimators and adjust as needed
     n_estimators = final_params.pop('n_estimators', 200)
 
     # Initialize and train model
@@ -393,8 +410,7 @@ def train_final_model(best_params, train_X, train_y, val_X, val_y, args):
         np.concatenate([train_y, val_y]),
         eval_set=[(val_X, val_y)],
         eval_metric='binary_logloss',
-        early_stopping_rounds=100,
-        verbose=100
+        callbacks=callbacks
     )
 
     logger.info(f"Final model trained with {model.best_iteration_} iterations")
