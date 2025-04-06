@@ -79,7 +79,7 @@ def parse_args():
                         help='number of PCA components to extract')
 
     # GPU/Performance arguments
-    parser.add_argument('--use_gpu', action='store_true',
+    parser.add_argument('--use_gpu', default=True,
                         help='use GPU for LightGBM training if available')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed for reproducibility')
@@ -342,6 +342,7 @@ def optimize_lightgbm(train_X, train_y, val_X, val_y, args):
 
     # Check if GPU should be used
     use_gpu = args.use_gpu and torch.cuda.is_available()
+    print(f"Using GPU: {use_gpu}")
     if use_gpu:
         logger.info("Using GPU for LightGBM training")
     else:
