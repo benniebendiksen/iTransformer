@@ -420,7 +420,6 @@ class Dataset_Crypto(Dataset):
         active_indices = active_data.index.tolist()
         self.active_indices = active_indices  # Save as class attribute
 
-        # Add this after binary_labels creation in __read_data__
         self.sample_metadata = []
         for i in range(len(self.active_indices)):
             orig_idx = self.active_indices[i]

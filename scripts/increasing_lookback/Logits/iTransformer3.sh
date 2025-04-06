@@ -20,7 +20,7 @@ btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv
 # data_path="btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv"
 # data_path="btcusdt_pca_components_12h_4h_70_3558_282_04_04_two.csv"
 #data_path="btcusd_pca_components_12h_4h_1d_80_7_5_bitsap.csv"
-data_path="btcusd_pca_components_12h_reduced_4h_47_7_5_1_4_2_old_dud.csv"
+data_path="btcusd_pca_components_12h_reduced_4h_47_7_5_1_4_2_old.csv"
 seq_len=96
 pred_len=1
 enc_in=76
