@@ -443,12 +443,22 @@ def train_final_model(best_params, train_X, train_y, val_X, val_y, args):
         **final_params, early_stopping_rounds=100
     )
 
+    X_full = pd.concat([train_X, val_X], axis=0)
+    y_full = np.concatenate([train_y, val_y])
+
     model.fit(
-        np.vstack([train_X, val_X]),
-        np.concatenate([train_y, val_y]),
+        X_full,
+        y_full,
         eval_set=[(val_X, val_y)],
         verbose=False
     )
+
+    # model.fit(
+    #     np.vstack([train_X, val_X]),
+    #     np.concatenate([train_y, val_y]),
+    #     eval_set=[(val_X, val_y)],
+    #     verbose=False
+    # )
 
     # Log the number of iterations
     if hasattr(model, 'best_iteration'):
