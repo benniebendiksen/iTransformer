@@ -505,7 +505,7 @@ def calculate_feature_importance(model, feature_names, args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Save feature importance to CSV
-    output_file = os.path.join(args.output_dir, 'feature_importance.csv')
+    output_file = os.path.join(args.output_dir, 'feature_importance_xgboost.csv')
     feature_importance.to_csv(output_file, index=False)
     logger.info(f"Saved feature importance to {output_file}")
 
@@ -513,7 +513,7 @@ def calculate_feature_importance(model, feature_names, args):
     top_n = min(args.top_n_features, len(feature_importance))
     top_features = feature_importance.head(top_n)['Feature'].tolist()
 
-    top_features_file = os.path.join(args.output_dir, 'top_features.txt')
+    top_features_file = os.path.join(args.output_dir, 'top_features_xgboost.txt')
     with open(top_features_file, 'w') as f:
         for feature in top_features:
             f.write(f"{feature}\n")
@@ -526,12 +526,11 @@ def calculate_feature_importance(model, feature_names, args):
     plt.xlabel('Normalized Importance')
     plt.tight_layout()
 
-    plot_file = os.path.join(args.output_dir, 'feature_importance.png')
+    plot_file = os.path.join(args.output_dir, 'feature_importance_xgboost.png')
     plt.savefig(plot_file, dpi=300, bbox_inches='tight')
     logger.info(f"Saved feature importance plot to {plot_file}")
 
     return feature_importance, top_features
-
 
 def create_processed_dataset(df, top_features, args):
     """Create a processed dataset with only the top features or PCA components"""
@@ -542,10 +541,10 @@ def create_processed_dataset(df, top_features, args):
     if args.target not in top_features:
         essential_cols.append(args.target)
 
-    # Get time column if specified
+    # Collect time and date columns
     time_cols = []
     for col in df.columns:
-        if 'time' in col.lower() or 'date' in col.lower():
+        if any(x in col.lower() for x in ['time', 'date', 'timestamp']):
             time_cols.append(col)
 
     # Combine essential, time, and top feature columns
@@ -580,7 +579,7 @@ def create_processed_dataset(df, top_features, args):
         pca_cols = [f'pca_comp_{i + 1}' for i in range(n_components)]
         pca_df = pd.DataFrame(pca_result, columns=pca_cols)
 
-        # Add essential columns back
+        # Add essential and time columns back
         for col in essential_cols + time_cols:
             if col in df.columns:
                 pca_df[col] = df[col].values
@@ -620,6 +619,94 @@ def create_processed_dataset(df, top_features, args):
         pca_feature_mapping.to_csv(os.path.join(args.output_dir, 'pca_feature_mapping.csv'), index=False)
 
     return df_selected
+
+# def create_processed_dataset(df, top_features, args):
+#     """Create a processed dataset with only the top features or PCA components"""
+#     logger.info("Creating processed dataset")
+#
+#     # Ensure required columns are included
+#     essential_cols = ['split']
+#     if args.target not in top_features:
+#         essential_cols.append(args.target)
+#
+#     # Get time column if specified
+#     time_cols = []
+#     for col in df.columns:
+#         if 'time' in col.lower() or 'date' in col.lower():
+#             time_cols.append(col)
+#
+#     # Combine essential, time, and top feature columns
+#     all_cols = list(set(essential_cols + time_cols + top_features))
+#
+#     # Check if all columns exist in the dataframe
+#     missing_cols = [col for col in all_cols if col not in df.columns]
+#     if missing_cols:
+#         logger.warning(f"The following columns are missing in the dataset: {missing_cols}")
+#         all_cols = [col for col in all_cols if col in df.columns]
+#
+#     # Create DataFrame with selected columns
+#     df_selected = df[all_cols].copy()
+#     logger.info(f"Created dataset with top features, shape: {df_selected.shape}")
+#
+#     # Apply PCA if requested
+#     if args.use_pca:
+#         logger.info(f"Applying PCA to reduce dimensions from {len(top_features)} to {args.pca_components}")
+#
+#         # Extract feature data
+#         X = df_selected[top_features].values
+#
+#         # Handle missing values
+#         X = np.nan_to_num(X, nan=0.0)
+#
+#         # Apply PCA
+#         n_components = min(args.pca_components, len(top_features))
+#         pca = PCA(n_components=n_components)
+#         pca_result = pca.fit_transform(X)
+#
+#         # Create PCA component names and DataFrame
+#         pca_cols = [f'pca_comp_{i + 1}' for i in range(n_components)]
+#         pca_df = pd.DataFrame(pca_result, columns=pca_cols)
+#
+#         # Add essential columns back
+#         for col in essential_cols + time_cols:
+#             if col in df.columns:
+#                 pca_df[col] = df[col].values
+#
+#         # Replace selected DataFrame with PCA results
+#         df_selected = pca_df
+#         logger.info(f"Created PCA dataset with shape: {df_selected.shape}")
+#         logger.info(f"Total explained variance: {sum(pca.explained_variance_ratio_):.4f}")
+#
+#         # Save PCA model
+#         joblib.dump(pca, os.path.join(args.output_dir, 'pca_model.joblib'))
+#
+#         # Save PCA component details
+#         pca_info = pd.DataFrame({
+#             'Component': pca_cols,
+#             'ExplainedVariance': pca.explained_variance_ratio_,
+#             'CumulativeVariance': np.cumsum(pca.explained_variance_ratio_)
+#         })
+#         pca_info.to_csv(os.path.join(args.output_dir, 'pca_components.csv'), index=False)
+#
+#         # Create feature contribution to PCA components
+#         pca_feature_mapping = pd.DataFrame(index=range(len(pca_cols)))
+#         pca_feature_mapping['component'] = pca_cols
+#         pca_feature_mapping['explained_variance'] = pca.explained_variance_ratio_
+#
+#         # Add top 3 contributing features per component
+#         for i, comp in enumerate(pca_cols):
+#             loadings = pca.components_[i]
+#             top_indices = np.argsort(np.abs(loadings))[-3:]
+#             top_features_pca = [top_features[idx] for idx in top_indices]
+#             top_loadings = [loadings[idx] for idx in top_indices]
+#
+#             for j in range(3):
+#                 pca_feature_mapping.loc[i, f'top_feature_{j + 1}'] = top_features_pca[j]
+#                 pca_feature_mapping.loc[i, f'loading_{j + 1}'] = top_loadings[j]
+#
+#         pca_feature_mapping.to_csv(os.path.join(args.output_dir, 'pca_feature_mapping.csv'), index=False)
+#
+#     return df_selected
 
 
 def save_processed_dataset(df_processed, args):
@@ -697,8 +784,8 @@ def save_execution_summary(args, metrics, feature_importance, output_file):
         'configuration': vars(args),
         'execution_time': time.strftime('%Y-%m-%d %H:%M:%S'),
         'metrics': metrics,
-        'feature_importance_file': os.path.join(args.output_dir, 'feature_importance.csv'),
-        'top_features_file': os.path.join(args.output_dir, 'top_features.txt'),
+        'feature_importance_file': os.path.join(args.output_dir, 'feature_importance_xgboost.csv'),
+        'top_features_file': os.path.join(args.output_dir, 'top_features_xgboost.txt'),
         'processed_dataset': output_file,
         'top_10_features': feature_importance.head(10)[['Feature', 'ImportanceNorm']].to_dict('records')
     }

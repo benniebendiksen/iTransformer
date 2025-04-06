@@ -6,7 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/optimized_feature_selection.py" beforeDir="false" afterPath="$PROJECT_DIR$/optimized_feature_selection.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/light_boost_feature_selection.py" beforeDir="false" afterPath="$PROJECT_DIR$/light_boost_feature_selection.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xgboost-feature-selection.py" beforeDir="false" afterPath="$PROJECT_DIR$/xgboost-feature-selection.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -60,8 +61,8 @@
       <recent name="$PROJECT_DIR$/dataset" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.optimized_feature_selection">
-    <configuration name="optimized_feature_selection" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+  <component name="RunManager" selected="Python.light_boost_feature_selection">
+    <configuration name="light_boost_feature_selection" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="iTransformer" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -75,7 +76,7 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/optimized_feature_selection.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/light_boost_feature_selection.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -101,7 +102,7 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.optimized_feature_selection" />
+        <item itemvalue="Python.light_boost_feature_selection" />
         <item itemvalue="Shell Script.iTransformer.sh" />
       </list>
     </recent_temporary>
@@ -164,7 +165,7 @@
       <workItem from="1743834971641" duration="1885000" />
       <workItem from="1743837389777" duration="1038000" />
       <workItem from="1743842084583" duration="3732000" />
-      <workItem from="1743877492453" duration="15360000" />
+      <workItem from="1743877492453" duration="16288000" />
     </task>
     <servers />
   </component>
