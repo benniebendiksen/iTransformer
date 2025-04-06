@@ -114,7 +114,6 @@ def generate_target_column(df, price_col, seq_len, pred_len, target_col='price_d
     """
     logger.info(f"Generating target column '{target_col}' based on future price direction changes")
 
-    # Ensure we have the price column
     if price_col not in df.columns:
         raise ValueError(f"Price column '{price_col}' not found in dataset!")
 
@@ -155,7 +154,7 @@ def generate_target_column(df, price_col, seq_len, pred_len, target_col='price_d
 
 def load_data(args):
     """Load the dataset and perform basic preprocessing"""
-    logger.info(f"Loading data from {os.path.join(args.root_path, args.data_path)}")
+    print(f"Loading data from {os.path.join(args.root_path, args.data_path)}")
     df = pd.read_csv(os.path.join(args.root_path, args.data_path))
     logger.info(f"Loaded data shape: {df.shape}")
 
@@ -163,8 +162,8 @@ def load_data(args):
     logger.info(f"Dataset columns: {len(df.columns)}")
 
     # Check if we need to generate the target column
-    if args.target == 'direction' and 'direction' not in df.columns:
-        logger.info("Target column 'direction' not found in dataset, generating it...")
+    if args.target == 'price_direction' and 'price_direction' not in df.columns:
+        print("Target column 'price_direction' not found in dataset, generating it...")
         if args.price_col not in df.columns:
             raise ValueError(f"'{args.price_col}' column required for generating direction target, but not found!")
         df = generate_target_column(df, args.price_col, args.seq_len, args.pred_len)
