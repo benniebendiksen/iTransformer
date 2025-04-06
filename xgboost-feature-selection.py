@@ -440,8 +440,7 @@ def train_final_model(best_params, train_X, train_y, val_X, val_y, args):
 
     # Initialize and train model
     model = xgb.XGBClassifier(
-        **final_params,
-        n_estimators=n_estimators
+        **final_params
     )
 
     # Create early stopping callback instead of using early_stopping_rounds

@@ -5,6 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xgboost-feature-selection.py" beforeDir="false" afterPath="$PROJECT_DIR$/xgboost-feature-selection.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -163,7 +164,7 @@
       <workItem from="1743834971641" duration="1885000" />
       <workItem from="1743837389777" duration="1038000" />
       <workItem from="1743842084583" duration="3732000" />
-      <workItem from="1743877492453" duration="14245000" />
+      <workItem from="1743877492453" duration="14466000" />
     </task>
     <servers />
   </component>
