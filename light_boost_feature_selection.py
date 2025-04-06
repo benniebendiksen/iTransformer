@@ -491,7 +491,7 @@ def create_processed_dataset(df, top_features, args):
     logger.info("Creating processed dataset")
 
     # Ensure required columns are included
-    essential_cols = ['split']
+    essential_cols = ['close', 'direction']
     if args.target not in top_features:
         essential_cols.append(args.target)
 
