@@ -54,9 +54,9 @@ def parse_args():
     parser.add_argument('--exclude_cols', type=str,
                         default='date,timestamp,unix_timestamp,open_time,close_time,12h_unix_timestamp,4h_batch1_unix_timestamp,4h_batch2_unix_timestamp,4h_batch3_unix_timestamp',
                         help='comma-separated columns to exclude from feature selection')
-    parser.add_argument('--train_ratio', type=float, default=0.7,
+    parser.add_argument('--train_ratio', type=float, default=0.88,
                         help='ratio of data to use for training')
-    parser.add_argument('--val_ratio', type=float, default=0.1,
+    parser.add_argument('--val_ratio', type=float, default=0.07,
                         help='ratio of data to use for validation')
 
     # Optimization arguments
