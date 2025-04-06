@@ -43,7 +43,7 @@ def parse_args():
                         help='target column for binary prediction')
     parser.add_argument('--price_col', type=str, default='close',
                         help='price column name for generating direction target')
-    parser.add_argument('--output_dir', type=str, default='./optimized_features/',
+    parser.add_argument('--output_dir', type=str, default='./optimized_features_xg/',
                         help='directory to save results')
 
     # Data processing arguments
