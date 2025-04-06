@@ -263,16 +263,9 @@ def objective(trial, train_X, train_y, val_X, val_y, args, use_gpu=False):
     # Train the model - using the updated XGBoost API syntax
     model = xgb.XGBClassifier(**param, n_estimators=n_estimators, early_stopping_rounds=50)
 
-    # Create early stopping callback instead of using early_stopping_rounds
-    early_stopping_rounds = 50
-    callbacks = [
-        xgb.callback.EarlyStopping(save_best=True)
-    ]
-
     model.fit(
         train_X, train_y,
         eval_set=[(val_X, val_y)],
-        callbacks=callbacks,
         verbose=False
     )
 
