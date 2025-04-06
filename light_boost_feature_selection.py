@@ -71,7 +71,7 @@ def parse_args():
                         help='timeout for hyperparameter optimization in seconds')
 
     # Feature selection arguments
-    parser.add_argument('--top_n_features', type=int, default=100,
+    parser.add_argument('--top_n_features', type=int, default=150,
                         help='number of top features to select')
     parser.add_argument('--use_pca', action='store_true',
                         help='whether to apply PCA to the top features')
