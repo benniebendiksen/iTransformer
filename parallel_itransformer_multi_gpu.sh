@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=iTransformer_training
+#SBATCH --job-name=parallel_array_script
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=b.bendiksen001@umb.edu
 #SBATCH -p DGXA100
