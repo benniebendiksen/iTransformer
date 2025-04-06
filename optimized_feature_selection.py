@@ -60,7 +60,7 @@ def parse_args():
                         help='ratio of data to use for validation')
 
     # Optimization arguments
-    parser.add_argument('--n_trials', type=int, default=50,
+    parser.add_argument('--n_trials', type=int, default=100,
                         help='number of hyperparameter optimization trials')
     parser.add_argument('--cv_splits', type=int, default=3,
                         help='number of CV splits for time series evaluation')
@@ -71,7 +71,7 @@ def parse_args():
                         help='timeout for hyperparameter optimization in seconds')
 
     # Feature selection arguments
-    parser.add_argument('--top_n_features', type=int, default=65,
+    parser.add_argument('--top_n_features', type=int, default=100,
                         help='number of top features to select')
     parser.add_argument('--use_pca', action='store_true',
                         help='whether to apply PCA to the top features')
@@ -215,8 +215,8 @@ def prepare_features_targets(df, args, exclude_cols=None):
     X = df[feature_cols]
     y = df[args.target].values
 
-    # Handle missing values
-    X = X.fillna(method='ffill').fillna(method='bfill').fillna(0)
+    # Handle missing values using the non-deprecated methods
+    X = X.ffill().bfill().fillna(0)
 
     logger.info(f"Prepared features shape: {X.shape}")
     logger.info(f"Prepared target shape: {y.shape}")
@@ -260,11 +260,12 @@ def objective(trial, train_X, train_y, val_X, val_y, args, use_gpu=False):
         param['drop_rate'] = trial.suggest_float('drop_rate', 0.1, 0.5)
         param['skip_drop'] = trial.suggest_float('skip_drop', 0.1, 0.5)
 
-    # Create callbacks instead of using deprecated parameters
-    callbacks = [
-        lgb.early_stopping(50, verbose=False),
-        lgb.log_evaluation(0)  # 0 means silent
-    ]
+    # Create callbacks based on boosting type
+    callbacks = []
+    # Early stopping is not available in dart mode
+    if param['boosting_type'] != 'dart':
+        callbacks.append(lgb.early_stopping(50, verbose=False))
+    callbacks.append(lgb.log_evaluation(0))  # 0 means silent
 
     # Get n_estimators and remove from params
     n_estimators = param.pop('n_estimators')
@@ -305,7 +306,12 @@ def objective(trial, train_X, train_y, val_X, val_y, args, use_gpu=False):
     trial.set_user_attr('f1', float(f1))
     trial.set_user_attr('win_rate', float(win_rate))
     trial.set_user_attr('profit_factor', float(profit_factor))
-    trial.set_user_attr('best_iteration', model.best_iteration_)
+
+    # Store best_iteration if available (not for dart mode)
+    if hasattr(model, 'best_iteration_'):
+        trial.set_user_attr('best_iteration', model.best_iteration_)
+    else:
+        trial.set_user_attr('best_iteration', n_estimators)
 
     # Return the metric to optimize
     metric_to_optimize = {
@@ -387,11 +393,12 @@ def train_final_model(best_params, train_X, train_y, val_X, val_y, args):
         final_params['gpu_platform_id'] = 0
         final_params['gpu_device_id'] = 0
 
-    # Set up callbacks for early stopping
-    callbacks = [
-        lgb.early_stopping(100, verbose=False),
-        lgb.log_evaluation(100)  # Log every 100 iterations
-    ]
+    # Set up callbacks based on boosting type
+    callbacks = []
+    # Early stopping is not available in dart mode
+    if final_params.get('boosting_type') != 'dart':
+        callbacks.append(lgb.early_stopping(100, verbose=False))
+    callbacks.append(lgb.log_evaluation(100))  # Log every 100 iterations
 
     # Get n_estimators and adjust as needed
     n_estimators = final_params.pop('n_estimators', 200)
@@ -413,7 +420,11 @@ def train_final_model(best_params, train_X, train_y, val_X, val_y, args):
         callbacks=callbacks
     )
 
-    logger.info(f"Final model trained with {model.best_iteration_} iterations")
+    # Log the number of iterations
+    if hasattr(model, 'best_iteration_'):
+        logger.info(f"Final model trained with {model.best_iteration_} iterations")
+    else:
+        logger.info(f"Final model trained with {n_estimators} iterations (dart mode doesn't use early stopping)")
 
     return model
 
