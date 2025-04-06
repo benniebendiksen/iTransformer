@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 import pandas as pd
 import torch
-import lightgbm as lgb
+import xgboost as xgb
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.model_selection import TimeSeriesSplit
@@ -79,8 +79,8 @@ def parse_args():
                         help='number of PCA components to extract')
 
     # GPU/Performance arguments
-    parser.add_argument('--use_gpu', default=False,
-                        help='use GPU for LightGBM training if available')
+    parser.add_argument('--use_gpu', action='store_true', default=True,
+                        help='use GPU for XGBoost training if available')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed for reproducibility')
 
@@ -226,57 +226,53 @@ def prepare_features_targets(df, args, exclude_cols=None):
 
 def objective(trial, train_X, train_y, val_X, val_y, args, use_gpu=False):
     """Objective function for Optuna hyperparameter optimization"""
-    # Define hyperparameter search space
+    # Define hyperparameter search space for XGBoost
     param = {
-        'objective': 'binary',
-        'metric': 'binary_logloss',
-        'verbosity': -1,
-        'boosting_type': trial.suggest_categorical('boosting_type', ['gbdt', 'dart', 'goss']),
-        'num_leaves': trial.suggest_int('num_leaves', 10, 150),
+        'objective': 'binary:logistic',
+        'eval_metric': 'logloss',
+        'verbosity': 0,
+        'booster': trial.suggest_categorical('booster', ['gbtree', 'dart']),
         'max_depth': trial.suggest_int('max_depth', 3, 15),
         'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
         'n_estimators': trial.suggest_int('n_estimators', 50, 500),
-        'min_child_samples': trial.suggest_int('min_child_samples', 5, 100),
+        'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
         'subsample': trial.suggest_float('subsample', 0.6, 1.0),
         'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
         'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
         'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
+        'random_state': args.seed
     }
 
     # Add GPU-specific parameters if using GPU
     if use_gpu:
-        param['device'] = 'gpu'
-        param['gpu_platform_id'] = 0
-        param['gpu_device_id'] = 0
+        param['tree_method'] = 'gpu_hist'
+        param['gpu_id'] = 0
+    else:
+        param['tree_method'] = 'hist'
 
-    # Add boosting-type specific parameters
-    if param['boosting_type'] == 'goss':
-        param['top_rate'] = trial.suggest_float('top_rate', 0.1, 0.5)
-        param['other_rate'] = trial.suggest_float('other_rate', 0.1, 0.5)
-        # Remove subsample as it's not used with GOSS
-        param.pop('subsample')
+    # Add booster-specific parameters
+    if param['booster'] == 'dart':
+        param['sample_type'] = trial.suggest_categorical('sample_type', ['uniform', 'weighted'])
+        param['normalize_type'] = trial.suggest_categorical('normalize_type', ['tree', 'forest'])
+        param['rate_drop'] = trial.suggest_float('rate_drop', 0.01, 0.5)
+        param['skip_drop'] = trial.suggest_float('skip_drop', 0.01, 0.5)
 
-    if param['boosting_type'] == 'dart':
-        param['drop_rate'] = trial.suggest_float('drop_rate', 0.1, 0.5)
-        param['skip_drop'] = trial.suggest_float('skip_drop', 0.1, 0.5)
-
-    # Create callbacks based on boosting type
-    callbacks = []
-    # Early stopping is not available in dart mode
-    if param['boosting_type'] != 'dart':
-        callbacks.append(lgb.early_stopping(50, verbose=False))
-    callbacks.append(lgb.log_evaluation(0))  # 0 means silent
-
-    # Get n_estimators and remove from params
+    # Get n_estimators and remove from params (will be set in fit method)
     n_estimators = param.pop('n_estimators')
 
+    # Create early stopping parameters
+    early_stopping_rounds = 50
+
+    # Create evaluation dataset
+    eval_set = [(val_X, val_y)]
+
     # Train the model
-    model = lgb.LGBMClassifier(**param, n_estimators=n_estimators)
+    model = xgb.XGBClassifier(**param, n_estimators=n_estimators)
     model.fit(
         train_X, train_y,
-        eval_set=[(val_X, val_y)],
-        eval_metric='binary_logloss',
-        callbacks=callbacks
+        eval_set=eval_set,
+        early_stopping_rounds=early_stopping_rounds,
+        verbose=False
     )
 
     # Make predictions
@@ -307,9 +303,9 @@ def objective(trial, train_X, train_y, val_X, val_y, args, use_gpu=False):
     trial.set_user_attr('win_rate', float(win_rate))
     trial.set_user_attr('profit_factor', float(profit_factor))
 
-    # Store best_iteration if available (not for dart mode)
-    if hasattr(model, 'best_iteration_'):
-        trial.set_user_attr('best_iteration', model.best_iteration_)
+    # Store best iteration if available
+    if hasattr(model, 'best_iteration'):
+        trial.set_user_attr('best_iteration', model.best_iteration)
     else:
         trial.set_user_attr('best_iteration', n_estimators)
 
@@ -326,8 +322,8 @@ def objective(trial, train_X, train_y, val_X, val_y, args, use_gpu=False):
     return metric_to_optimize[args.optimize_metric]
 
 
-def optimize_lightgbm(train_X, train_y, val_X, val_y, args):
-    """Run hyperparameter optimization for LightGBM"""
+def optimize_xgboost(train_X, train_y, val_X, val_y, args):
+    """Run hyperparameter optimization for XGBoost"""
     logger.info(f"Starting hyperparameter optimization with {args.n_trials} trials")
     logger.info(f"Optimizing for metric: {args.optimize_metric}")
 
@@ -337,16 +333,36 @@ def optimize_lightgbm(train_X, train_y, val_X, val_y, args):
     study = optuna.create_study(
         direction='maximize',
         sampler=TPESampler(seed=args.seed),
-        study_name=f'lgbm_crypto_{args.optimize_metric}'
+        study_name=f'xgb_crypto_{args.optimize_metric}'
     )
 
     # Check if GPU should be used
     use_gpu = args.use_gpu and torch.cuda.is_available()
-    print(f"Using GPU: {use_gpu}")
+
+    # Check if XGBoost GPU support is available
     if use_gpu:
-        logger.info("Using GPU for LightGBM training")
+        # Try to create a simple XGBoost model with GPU to check if it's supported
+        try:
+            # Create a minimal dataset
+            mini_X = train_X[:10]
+            mini_y = train_y[:10]
+
+            # Try to train a model with GPU
+            test_params = {
+                'tree_method': 'gpu_hist',
+                'gpu_id': 0,
+                'verbosity': 0
+            }
+            test_model = xgb.XGBClassifier(**test_params)
+            test_model.fit(mini_X, mini_y)
+
+            logger.info("Using GPU for XGBoost training")
+        except Exception as e:
+            use_gpu = False
+            logger.warning(f"GPU support not available in XGBoost: {str(e)}")
+            logger.info("Falling back to CPU for XGBoost training")
     else:
-        logger.info("Using CPU for LightGBM training")
+        logger.info("Using CPU for XGBoost training")
 
     # Run optimization
     study.optimize(
@@ -375,84 +391,113 @@ def train_final_model(best_params, train_X, train_y, val_X, val_y, args):
     # Use best params but remove type-specific ones if not needed
     final_params = best_params.copy()
 
-    # Adjust params for specific boosting types
-    if 'top_rate' in final_params and final_params['boosting_type'] != 'goss':
-        final_params.pop('top_rate')
-        final_params.pop('other_rate')
+    # Add booster-specific parameters if not present
+    if final_params.get('booster') == 'dart':
+        if 'sample_type' not in final_params:
+            final_params['sample_type'] = 'uniform'
+        if 'normalize_type' not in final_params:
+            final_params['normalize_type'] = 'tree'
+        if 'rate_drop' not in final_params:
+            final_params['rate_drop'] = 0.1
+        if 'skip_drop' not in final_params:
+            final_params['skip_drop'] = 0.1
 
-    if 'drop_rate' in final_params and final_params['boosting_type'] != 'dart':
-        final_params.pop('drop_rate')
-        final_params.pop('skip_drop')
-
-    # Make sure subsample is included for gbdt and dart
-    if 'subsample' not in final_params and final_params['boosting_type'] != 'goss':
-        final_params['subsample'] = 0.8
-
-    # Add GPU settings if needed
+    # Check if GPU should be used and is available
+    use_gpu = False
     if args.use_gpu and torch.cuda.is_available():
-        final_params['device'] = 'gpu'
-        final_params['gpu_platform_id'] = 0
-        final_params['gpu_device_id'] = 0
+        # Try to create a simple XGBoost model with GPU to check if it's supported
+        try:
+            # Create a minimal dataset
+            mini_X = train_X[:10]
+            mini_y = train_y[:10]
 
-    # Set up callbacks based on boosting type
-    callbacks = []
-    # Early stopping is not available in dart mode
-    if final_params.get('boosting_type') != 'dart':
-        callbacks.append(lgb.early_stopping(100, verbose=False))
-    callbacks.append(lgb.log_evaluation(100))  # Log every 100 iterations
+            # Try to train a model with GPU
+            test_params = {
+                'tree_method': 'gpu_hist',
+                'gpu_id': 0,
+                'verbosity': 0
+            }
+            test_model = xgb.XGBClassifier(**test_params)
+            test_model.fit(mini_X, mini_y)
 
-    # Get n_estimators and adjust as needed
-    n_estimators = final_params.pop('n_estimators', 200)
+            # If we get here, GPU is available
+            use_gpu = True
+            logger.info("Using GPU for final model training")
+
+            # Add GPU settings
+            final_params['tree_method'] = 'gpu_hist'
+            final_params['gpu_id'] = 0
+        except Exception as e:
+            logger.warning(f"GPU support not available in XGBoost: {str(e)}")
+            logger.info("Falling back to CPU for final model training")
+            final_params['tree_method'] = 'hist'
+    else:
+        logger.info("Using CPU for final model training")
+        final_params['tree_method'] = 'hist'
+
+    # Add other necessary parameters
+    final_params['objective'] = 'binary:logistic'
+    final_params['eval_metric'] = 'logloss'
+    final_params['verbosity'] = 0
+    final_params['random_state'] = args.seed
+
+    # Set n_estimators
+    n_estimators = 500  # Default to a high value, will use early stopping
 
     # Initialize and train model
-    model = lgb.LGBMClassifier(
+    model = xgb.XGBClassifier(
         **final_params,
-        n_estimators=n_estimators,
-        objective='binary',
-        metric='binary_logloss',
-        verbosity=-1
+        n_estimators=n_estimators
     )
 
     model.fit(
         np.vstack([train_X, val_X]),
         np.concatenate([train_y, val_y]),
         eval_set=[(val_X, val_y)],
-        eval_metric='binary_logloss',
-        callbacks=callbacks
+        early_stopping_rounds=100,
+        verbose=False
     )
 
     # Log the number of iterations
-    if hasattr(model, 'best_iteration_'):
-        logger.info(f"Final model trained with {model.best_iteration_} iterations")
+    if hasattr(model, 'best_iteration'):
+        logger.info(f"Final model trained with {model.best_iteration} iterations")
     else:
-        logger.info(f"Final model trained with {n_estimators} iterations (dart mode doesn't use early stopping)")
+        logger.info(f"Final model trained with {n_estimators} iterations")
 
     return model
 
 
 def calculate_feature_importance(model, feature_names, args):
-    """Calculate and save feature importance from the optimized LightGBM model"""
+    """Calculate and save feature importance from the optimized XGBoost model"""
     logger.info("Calculating feature importance")
 
-    # Get feature importance (split and gain)
-    split_importance = model.feature_importances_
-    gain_importance = model.booster_.feature_importance(importance_type='gain')
+    # Get feature importance
+    importance_type = 'gain'  # Can be 'weight', 'gain', 'cover', 'total_gain', or 'total_cover'
 
-    # Create DataFrame for feature importance
+    # XGBoost provides feature importance directly
+    importance_values = model.get_booster().get_score(importance_type=importance_type)
+
+    # Convert to DataFrame (handling features that might not be in the importance dict)
     feature_importance = pd.DataFrame({
         'Feature': feature_names,
-        'SplitImportance': split_importance,
-        'GainImportance': gain_importance
+        'Importance': [importance_values.get(f, 0) for f in feature_names]
     })
 
-    # Normalize importance scores
-    feature_importance['SplitImportanceNorm'] = feature_importance['SplitImportance'] / feature_importance[
-        'SplitImportance'].sum()
-    feature_importance['GainImportanceNorm'] = feature_importance['GainImportance'] / feature_importance[
-        'GainImportance'].sum()
+    # Handle the case where feature names in the model might be different (e.g., f0, f1, etc.)
+    if all(importance_values.get(f, 0) == 0 for f in feature_names):
+        # Try using feature index names (f0, f1, etc.)
+        importance_values = model.get_booster().get_score(importance_type=importance_type)
+        feature_importance = pd.DataFrame({
+            'Feature': feature_names,
+            'Importance': [importance_values.get(f'f{i}', 0) for i in range(len(feature_names))]
+        })
 
-    # Sort by gain importance
-    feature_importance = feature_importance.sort_values('GainImportance', ascending=False).reset_index(drop=True)
+    # Normalize importance scores
+    feature_importance['ImportanceNorm'] = feature_importance['Importance'] / feature_importance['Importance'].sum() if \
+    feature_importance['Importance'].sum() > 0 else 0
+
+    # Sort by importance
+    feature_importance = feature_importance.sort_values('Importance', ascending=False).reset_index(drop=True)
 
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
@@ -474,7 +519,7 @@ def calculate_feature_importance(model, feature_names, args):
 
     # Plot feature importance
     plt.figure(figsize=(12, 10))
-    plt.barh(feature_importance['Feature'][:top_n][::-1], feature_importance['GainImportanceNorm'][:top_n][::-1])
+    plt.barh(feature_importance['Feature'][:top_n][::-1], feature_importance['ImportanceNorm'][:top_n][::-1])
     plt.title(f'Top {top_n} Features by Importance (Gain)')
     plt.xlabel('Normalized Importance')
     plt.tight_layout()
@@ -581,12 +626,12 @@ def save_processed_dataset(df_processed, args):
     if args.use_pca:
         output_file = os.path.join(
             args.output_dir,
-            f"{os.path.splitext(args.data_path)[0]}_pca_components_{args.pca_components}_light_gbm.csv"
+            f"{os.path.splitext(args.data_path)[0]}_pca_components_{args.pca_components}_xgboost.csv"
         )
     else:
         output_file = os.path.join(
             args.output_dir,
-            f"{os.path.splitext(args.data_path)[0]}_top_{args.top_n_features}_features_light_gbm.csv"
+            f"{os.path.splitext(args.data_path)[0]}_top_{args.top_n_features}_features_xgboost.csv"
         )
 
     # Save to CSV
@@ -644,7 +689,6 @@ def evaluate_model(model, X, y, name="Test"):
         }
     }
 
-
 def save_execution_summary(args, metrics, feature_importance, output_file):
     """Save execution summary including configuration, metrics, and output locations"""
     summary = {
@@ -654,7 +698,7 @@ def save_execution_summary(args, metrics, feature_importance, output_file):
         'feature_importance_file': os.path.join(args.output_dir, 'feature_importance.csv'),
         'top_features_file': os.path.join(args.output_dir, 'top_features.txt'),
         'processed_dataset': output_file,
-        'top_10_features': feature_importance.head(10)[['Feature', 'GainImportanceNorm']].to_dict('records')
+        'top_10_features': feature_importance.head(10)[['Feature', 'ImportanceNorm']].to_dict('records')
     }
 
     # Save summary to JSON
@@ -692,9 +736,9 @@ def main():
     val_X, val_y, _ = prepare_features_targets(val_df, args)
     test_X, test_y, _ = prepare_features_targets(test_df, args)
 
-    # Step 2: Optimize LightGBM on full dataset
-    logger.info("STEP 2: Optimizing LightGBM on full dataset")
-    study = optimize_lightgbm(train_X, train_y, val_X, val_y, args)
+    # Step 2: Optimize XGBoost on full dataset
+    logger.info("STEP 2: Optimizing XGBoost on full dataset")
+    study = optimize_xgboost(train_X, train_y, val_X, val_y, args)
 
     # Step 3: Train final model with best parameters
     logger.info("STEP 3: Training final model with best hyperparameters")
@@ -717,8 +761,8 @@ def main():
     output_file = save_processed_dataset(df_processed, args)
 
     # Step 8: Save model
-    logger.info("STEP 8: Saving LightGBM model")
-    model_file = os.path.join(args.output_dir, 'optimized_lightgbm_model.joblib')
+    logger.info("STEP 8: Saving XGBoost model")
+    model_file = os.path.join(args.output_dir, 'optimized_xgboost_model.joblib')
     joblib.dump(model, model_file)
 
     # Save execution summary
