@@ -14,9 +14,13 @@ def parse_args():
 
     # Basic config (required from bash)
     parser.add_argument('--is_training', type=int, required=False, default=0, help='status')
-    parser.add_argument('--model_id', type=str, default='1_btcusdt_pca_components_12h_60_07_05_96_1_65', help='model id')
+    # parser.add_argument('--model_id', type=str, default='1_btcusd_pca_components_lightboost_12h_4h_reduced_60_7_5_1_2_1_old_96_1_65',
+    #                     help='model id')
+    parser.add_argument('--model_id', type=str,
+                        default='1_btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_96_1_75',
+                        help='model id')
+    parser.add_argument('--projection_idx', type=str, default='4', help='projection identifier (0, 1, 2, 3, 4)')
     parser.add_argument('--model', type=str, default='iTransformer', help='model name')
-
     # Data loader
     parser.add_argument('--data', type=str, default='logits', help='dataset type')
     parser.add_argument('--root_path', type=str, default='./dataset/logits/', help='root path of the data file')
@@ -62,7 +66,7 @@ def parse_args():
     parser.add_argument('--use_amp', action='store_true', default=False, help='mixed precision training')
 
     # GPU
-    parser.add_argument('--use_gpu', type=bool, default=True, help='use GPU')
+    parser.add_argument('--use_gpu', type=bool, help='use GPU')
     parser.add_argument('--gpu', type=int, default=0, help='GPU device id')
     parser.add_argument('--use_multi_gpu', action='store_true', default=False, help='use multiple GPUs')
     parser.add_argument('--devices', type=str, default='0', help='GPU devices')
@@ -92,16 +96,16 @@ def parse_args():
     args = parser.parse_args()
 
     # GPU setup
-    args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
+    args.use_gpu = True if torch.cuda.is_available() else False
     if args.use_gpu and args.use_multi_gpu:
         args.devices = args.devices.replace(' ', '')
         args.device_ids = [int(id_) for id_ in args.devices.split(',')]
         args.gpu = args.device_ids[0]
-
+        print(f"using multiple GPUs, device ids: {args.device_ids}")
+    print(f"using GPU: {args.gpu == 1}")
     print('Args:')
     print(args)
     return args
-
 
 
 def setup_experiment(args):
@@ -109,17 +113,6 @@ def setup_experiment(args):
     exp = Exp_Logits_Forecast(args)
     return exp
 
-
-# def load_model(exp, args, setting):
-#     """Load the trained model from the checkpoints dir"""
-#     if args.checkpoints:
-#         checkpoint_path = args.checkpoints
-#     else:
-#         checkpoint_path = os.path.join('./checkpoints', setting, 'checkpoint.pth')
-#
-#     print(f'Loading model from {checkpoint_path}')
-#     exp.model.load_state_dict(torch.load(checkpoint_path))
-#     return exp.model
 
 def load_model(exp, args, setting):
     """Load the trained model from the checkpoints dir"""
@@ -129,7 +122,7 @@ def load_model(exp, args, setting):
     else:
         checkpoint_path = os.path.join('./checkpoints', setting, 'checkpoint.pth')
 
-    print(f'Loading model from {checkpoint_path}')
+    print(f'Loading model from path: {checkpoint_path}')
 
     # Check if file exists before loading
     if not os.path.exists(checkpoint_path):
@@ -137,7 +130,6 @@ def load_model(exp, args, setting):
         print("Please check that the file exists and the path is correct")
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-    # IMPORTANT: Always force CPU loading since the model was trained on GPU
     state_dict = torch.load(checkpoint_path, map_location=torch.device('cpu'))
 
     exp.model.load_state_dict(state_dict)
@@ -153,6 +145,7 @@ def get_test_data(args):
 
 def run_inference(model, test_data, test_loader, args, device):
     """Generate predictions on test data with improved timestamp and prediction index tracking"""
+    print(f"Running inference on {len(test_data)} test samples...")
     model.eval()
     preds = []
     trues = []
@@ -174,7 +167,6 @@ def run_inference(model, test_data, test_loader, args, device):
         print(f"Warning: Could not load original data for timestamp extraction: {e}")
         original_df = None
 
-    print('Running inference on test dataset...')
     with torch.no_grad():
         # Process one sample at a time to ensure correct label tracking
         for i in range(len(test_data)):
@@ -275,6 +267,7 @@ def run_inference(model, test_data, test_loader, args, device):
 
 def calculate_metrics(preds, trues, is_shorting=True):
     """Calculate performance metrics"""
+    print(f"Calculating model metrics...")
     # Classification metrics
     accuracy = accuracy_score(trues, preds)
     precision = precision_score(trues, preds, zero_division=0)
@@ -322,55 +315,185 @@ def calculate_metrics(preds, trues, is_shorting=True):
     }
 
 
-def calculate_trading_returns(preds, trues, probs, is_shorting=True):
-    """Calculate trading returns for different strategies"""
-    # Placeholder for returns per trade
-    # In a real implementation, these would be calculated from actual price data
-    # Here we use a fixed percentage for demonstration
-    uptrend_return = 0.01  # 1% return for correct uptrend prediction
-    downtrend_return = 0.01  # 1% return for correct downtrend prediction
+def calculate_returns(preds, trues, probs, is_shorting=True, actual_changes=None):
+    """
+    Calculate returns with improved accuracy using actual price changes when available
 
-    # Initialize return arrays
-    returns = np.zeros(len(preds))
+    Parameters:
+    -----------
+    preds : numpy.ndarray
+        Binary predictions (0 or 1)
+    trues : numpy.ndarray
+        Actual binary labels (0 or 1)
+    probs : numpy.ndarray
+        Prediction probabilities
+    is_shorting : bool
+        Whether shorting is enabled in the strategy
+    actual_changes : numpy.ndarray, optional
+        Actual percentage price changes in decimal form. If None, will be estimated.
 
+    Returns:
+    --------
+    dict
+        Dictionary containing return metrics and arrays
+    """
+    print(f"Calculating returns...")
+
+    # If actual changes not provided, estimate based on true labels
+    if actual_changes is None:
+        actual_changes = np.zeros(len(trues))
+        for i in range(len(trues)):
+            if trues[i] == 1:  # Actually went up
+                actual_changes[i] = 0.02  # Assume 2% increase
+            else:  # Actually went down
+                actual_changes[i] = -0.015  # Assume 1.5% decrease
+
+    # Calculate returns for different strategies
+
+    # 1. Long-only strategy (take long positions only when predicting price increases)
+    long_only_returns = np.zeros(len(preds))
     for i in range(len(preds)):
-        pred = preds[i]
-        true = trues[i]
+        if preds[i] == 1:  # Predicted price increase, take long position
+            long_only_returns[i] = actual_changes[i]  # Gain/lose based on actual price change
 
-        if is_shorting:
-            # Shorting strategy
-            if (pred == 1 and true == 1):  # Correct uptrend prediction
-                returns[i] = uptrend_return
-            elif (pred == 0 and true == 0):  # Correct downtrend prediction
-                returns[i] = downtrend_return
-            elif (pred == 1 and true == 0):  # Incorrect uptrend prediction
-                returns[i] = -uptrend_return
-            else:  # Incorrect downtrend prediction
-                returns[i] = -downtrend_return
-        else:
-            # No-shorting strategy
-            if pred == 1:  # We take a position
-                if true == 1:  # Correct uptrend prediction
-                    returns[i] = uptrend_return
-                else:  # Incorrect uptrend prediction
-                    returns[i] = -uptrend_return
-            # else: No position taken for predicted downtrends
+    # 2. Short-only strategy (take short positions only when predicting price decreases)
+    short_only_returns = np.zeros(len(preds))
+    for i in range(len(preds)):
+        if preds[i] == 0:  # Predicted price decrease, take short position
+            short_only_returns[i] = -actual_changes[i]  # Gain when price falls, lose when price rises
+
+    # 3. Combined strategy (take long for predicted increases, short for predicted decreases)
+    combined_returns = np.zeros(len(preds))
+    for i in range(len(preds)):
+        if preds[i] == 1:  # Predicted price increase, take long position
+            combined_returns[i] = actual_changes[i]
+        else:  # Predicted price decrease, take short position
+            combined_returns[i] = -actual_changes[i]
+
+    # Choose which strategy to use based on shorting parameter
+    if is_shorting:
+        strategy_returns = combined_returns
+    else:
+        strategy_returns = long_only_returns
 
     # Calculate cumulative returns
-    cumulative_returns = np.cumprod(1 + returns) - 1
+    long_cum_returns = np.cumprod(1 + long_only_returns) - 1
+    short_cum_returns = np.cumprod(1 + short_only_returns) - 1
+    combined_cum_returns = np.cumprod(1 + combined_returns) - 1
+
+    # Calculate additional metrics
+    def calculate_metrics(returns):
+        if len(returns) == 0:
+            return {
+                'total_trades': 0,
+                'profitable_trades': 0,
+                'unprofitable_trades': 0,
+                'win_rate': 0,
+                'avg_return': 0,
+                'total_return': 0
+            }
+
+        total_trades = np.sum(returns != 0)
+        profitable_trades = np.sum(returns > 0)
+        unprofitable_trades = np.sum(returns < 0)
+        win_rate = profitable_trades / total_trades if total_trades > 0 else 0
+        avg_return = np.mean(returns[returns != 0]) if np.sum(returns != 0) > 0 else 0
+        total_return = np.cumprod(1 + returns)[-1] - 1 if len(returns) > 0 else 0
+
+        return {
+            'total_trades': int(total_trades),
+            'profitable_trades': int(profitable_trades),
+            'unprofitable_trades': int(unprofitable_trades),
+            'win_rate': win_rate,
+            'avg_return': avg_return,
+            'total_return': total_return
+        }
+
+    # Calculate metrics for all strategies
+    long_metrics = calculate_metrics(long_only_returns)
+    short_metrics = calculate_metrics(short_only_returns)
+    combined_metrics = calculate_metrics(combined_returns)
 
     return {
-        'per_trade': returns,
-        'cumulative': cumulative_returns,
-        'total_return': cumulative_returns[-1] if len(cumulative_returns) > 0 else 0
+        'per_trade': strategy_returns,  # Based on shorting parameter
+        'cumulative': np.cumprod(1 + strategy_returns) - 1 if len(strategy_returns) > 0 else np.array([0]),
+        'total_return': np.cumprod(1 + strategy_returns)[-1] - 1 if len(strategy_returns) > 0 else 0,
+        'strategies': {
+            'long_only': {
+                'returns': long_only_returns,
+                'cumulative': long_cum_returns,
+                'metrics': long_metrics
+            },
+            'short_only': {
+                'returns': short_only_returns,
+                'cumulative': short_cum_returns,
+                'metrics': short_metrics
+            },
+            'combined': {
+                'returns': combined_returns,
+                'cumulative': combined_cum_returns,
+                'metrics': combined_metrics
+            }
+        }
     }
 
+def print_detailed_analysis(preds, trues, probs, timestamps, prices, actual_changes, returns):
+    """
+    Prints a detailed analysis table showing prediction results and returns
 
-def save_results(preds, trues, probs, timestamps, original_indices, prices, metrics, returns, args):
+    Parameters:
+    -----------
+    preds : numpy.ndarray
+        Binary predictions (0 or 1)
+    trues : numpy.ndarray
+        Actual binary labels (0 or 1)
+    probs : numpy.ndarray
+        Prediction probabilities
+    timestamps : list
+        Timestamps for each prediction
+    prices : list
+        Current prices at prediction time
+    actual_changes : numpy.ndarray
+        Actual percentage price changes in decimal form
+    returns : dict
+        Dictionary containing return data
+    """
+    # Print detailed trading results for the combined strategy
+    print("\nDetailed Analysis (Combined):")
+    print("-" * 120)
+    print(
+        f"{'Sample':<8} | {'Timestamp':<20} | {'Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Actual Chg':<10} | {'Percent Change':>8} | {'Cum Percent Change':>12}")
+    print("-" * 120)
+
+    # Get combined returns and cumulative returns
+    combined_returns = returns['strategies']['combined']['returns']
+    cum_returns = returns['strategies']['combined']['cumulative']
+
+    for i in range(len(preds)):
+        # Format timestamp for display
+        if timestamps[i] is None:
+            ts_str = f"sample_{i}"
+        elif isinstance(timestamps[i], pd.Timestamp):
+            ts_str = timestamps[i].strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            ts_str = str(timestamps[i])
+
+        # Format price (handle None values)
+        price_str = f"{prices[i]:<12.2f}" if prices[i] is not None else "N/A"
+
+        # Print row
+        print(
+            f"{i:<8} | {ts_str:<20} | {price_str} | {preds[i]:<5.0f} | "
+            f"{trues[i]:<5.0f} | {probs[i]:<8.4f} | {actual_changes[i] * 100:>10.2f}% | {combined_returns[i]:>8.4%} | {cum_returns[i]:>12.4%}")
+
+
+def save_results(preds, trues, probs, timestamps, original_indices, prediction_indices, prices, metrics, returns, args,
+                 actual_changes):
     """Save inference results to output directory with improved column formatting"""
+    print(f"Saving results to directory: {args.output_path}...")
     os.makedirs(args.output_path, exist_ok=True)
 
-    # Process timestamps to ensure we have both unix and human readable formats
+    # Process timestamps to ensure we have both unix and human-readable formats
     unix_timestamps = []
     human_timestamps = []
 
@@ -401,34 +524,6 @@ def save_results(preds, trues, probs, timestamps, original_indices, prices, metr
         unix_timestamps.append(unix_ts)
         human_timestamps.append(human_ts)
 
-    # Calculate prediction indices - these are the original indices plus the sequence length
-    pred_indices = []
-    for i, orig_idx in enumerate(original_indices):
-        if hasattr(args, 'seq_len'):
-            pred_idx = orig_idx + args.seq_len if orig_idx is not None else None
-            pred_indices.append(pred_idx)
-        else:
-            # Fallback if seq_len not available
-            pred_indices.append(orig_idx)
-
-    # Create results dataframe with the desired column order and names
-    results_df = pd.DataFrame({
-        'pred_index': pred_indices,
-        'unix_timestamp': unix_timestamps,
-        'human_timestamp': human_timestamps,
-        'prediction': preds,
-        'true_label': trues,
-        'probability': probs,
-        'price': prices,
-        'return': returns['per_trade'],
-        'cumulative_return': returns['cumulative']
-    })
-
-    # Save results to CSV
-    output_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_results.csv")
-    results_df.to_csv(output_file, index=False)
-    print(f"Results saved to {output_file}")
-
     # Save metrics to JSON
     import json
     metrics_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_metrics.json")
@@ -445,129 +540,181 @@ def save_results(preds, trues, probs, timestamps, original_indices, prices, metr
         }, f, indent=4)
     print(f"Metrics saved to {metrics_file}")
 
-    # Generate summary report
-    report_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_report.txt")
-    with open(report_file, 'w') as f:
-        f.write(f"Inference Report for {args.model} (ID: {args.model_id})\n")
-        f.write("=" * 50 + "\n\n")
+    # Save the detailed analysis table to a CSV
+    results_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_inference_results_table.csv")
 
-        f.write("Model Configuration:\n")
-        f.write(f"- Data: {args.data_path}\n")
-        f.write(f"- Sequence Length: {args.seq_len}\n")
-        f.write(f"- Prediction Length: {args.pred_len}\n")
-        f.write(f"- Features: {args.features}\n")
-        f.write(f"- Trading Strategy: {'Shorting Enabled' if args.is_shorting else 'No Shorting'}\n\n")
+    detailed_df = pd.DataFrame({
+        'sample': range(len(preds)),
+        'timestamp': human_timestamps,
+        'price': prices,
+        'prediction': preds,
+        'true_label': trues,
+        'probability': probs,
+        'actual_change_pct': [x * 100 for x in actual_changes],
+        'trade_return_pct': [x * 100 for x in returns['strategies']['combined']['returns']],
+        'cumulative_return_pct': [x * 100 for x in returns['strategies']['combined']['cumulative']]
+    })
 
-        f.write("Classification Metrics:\n")
-        f.write(f"- Accuracy: {metrics['accuracy']:.4f} ({metrics['accuracy'] * 100:.2f}%)\n")
-        f.write(f"- Precision: {metrics['precision']:.4f} ({metrics['precision'] * 100:.2f}%)\n")
-        f.write(f"- Recall: {metrics['recall']:.4f} ({metrics['recall'] * 100:.2f}%)\n")
-        f.write(f"- F1 Score: {metrics['f1']:.4f} ({metrics['f1'] * 100:.2f}%)\n\n")
+    detailed_df.to_csv(results_file, index=False)
+    print(f"Results table saved to {results_file}")
 
-        f.write("Confusion Matrix:\n")
-        f.write(f"- True Positives: {metrics['confusion_matrix']['TP']}\n")
-        f.write(f"- True Negatives: {metrics['confusion_matrix']['TN']}\n")
-        f.write(f"- False Positives: {metrics['confusion_matrix']['FP']}\n")
-        f.write(f"- False Negatives: {metrics['confusion_matrix']['FN']}\n\n")
+    return metrics_file, results_file
+def extract_actual_price_changes(prediction_indices, args):
+    """
+    Extract actual price changes from the original dataset
 
-        f.write("Trading Performance:\n")
-        f.write(f"- Total Trades: {metrics['trading']['total_trades']}\n")
-        f.write(f"- Profitable Trades: {metrics['trading']['profitable_trades']}\n")
-        f.write(f"- Unprofitable Trades: {metrics['trading']['unprofitable_trades']}\n")
-        f.write(f"- Win Rate: {metrics['trading']['win_rate']:.4f} ({metrics['trading']['win_rate'] * 100:.2f}%)\n")
-        f.write(f"- Profit Factor: {metrics['trading']['profit_factor']:.4f}\n")
-        f.write(f"- Cumulative Return: {returns['total_return']:.4f} ({returns['total_return'] * 100:.2f}%)\n")
+    Parameters:
+    -----------
+    prediction_indices : list
+        List of prediction indices in the dataset
+    args : argparse.Namespace
+        Command line arguments
 
-    print(f"Report saved to {report_file}")
+    Returns:
+    --------
+    numpy.ndarray
+        Array of actual price changes in decimal form
+    """
+    try:
+        original_df = pd.read_csv(os.path.join(args.root_path, args.data_path))
 
-    return output_file, metrics_file, report_file
+        # If 'date' column exists, convert it to datetime
+        if 'date' in original_df.columns:
+            if pd.api.types.is_numeric_dtype(original_df['date']):
+                original_df['date'] = pd.to_datetime(original_df['date'], unit='s')
+            else:
+                original_df['date'] = pd.to_datetime(original_df['date'])
 
+        # Calculate actual price changes
+        actual_changes = []
+        for pred_idx in prediction_indices:
+            if pred_idx is not None and pred_idx < len(original_df) and pred_idx + args.pred_len < len(original_df):
+                current_price = original_df.iloc[pred_idx][args.target]
+                future_price = original_df.iloc[pred_idx + args.pred_len][args.target]
+
+                if current_price > 0:  # Avoid division by zero
+                    change = (future_price - current_price) / current_price  # Decimal form (e.g., 0.05 for 5%)
+                else:
+                    change = 0.0
+
+                actual_changes.append(change)
+            else:
+                actual_changes.append(0.0)
+
+        return np.array(actual_changes)
+
+    except Exception as e:
+        print(f"Warning: Could not extract actual price changes: {e}")
+        return None
 
 def main():
-    # Parse arguments
-    args = parse_args()
+    try:
+        print("Starting inference script...")
+        # Parse arguments
+        args = parse_args()
+        print("Arguments parsed successfully")
 
-    # Force CPU mode if CUDA is not available
-    args.use_gpu = False
+        # Determine device
+        device = torch.device('cuda:{}'.format(args.gpu) if args.use_gpu else 'cpu')
+        print(f'Using device: {device}')
 
-    # Determine device
-    device = torch.device('cuda:{}'.format(args.gpu) if args.use_gpu else 'cpu')
-    print(f'Using device: {device}')
+        # Create experiment and model setting
+        setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
+            args.model_id,
+            args.model,
+            args.data,
+            args.features,
+            args.seq_len,
+            args.label_len,
+            args.pred_len,
+            args.d_model,
+            args.n_heads,
+            args.e_layers,
+            args.d_layers,
+            args.d_ff,
+            args.factor,
+            args.embed,
+            args.distil,
+            'Logits',
+            args.class_strategy,
+            args.projection_idx
+        )
 
-    # Create experiment and model setting
-    setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_0'.format(
-        args.model_id,
-        args.model,
-        args.data,
-        args.features,
-        args.seq_len,
-        args.label_len,
-        args.pred_len,
-        args.d_model,
-        args.n_heads,
-        args.e_layers,
-        args.d_layers,
-        args.d_ff,
-        args.factor,
-        args.embed,
-        args.distil,
-        'Logits',
-        args.class_strategy
-    )
+        # Override checkpoints path if specific checkpoint not provided
+        if not args.checkpoints:
+            checkpoint_path = os.path.join('./checkpoints', setting, 'checkpoint.pth')
+            if os.path.exists(checkpoint_path):
+                args.checkpoints = checkpoint_path
+                print(f"Using checkpoint: {checkpoint_path}")
 
-    # Override checkpoints path if specific checkpoint not provided
-    if not args.checkpoints:
-        checkpoint_path = os.path.join('./checkpoints', setting, 'checkpoint.pth')
-        if os.path.exists(checkpoint_path):
-            args.checkpoints = checkpoint_path
-            print(f"Using checkpoint: {checkpoint_path}")
+        # Setup experiment
+        print("Setting up experiment...")
+        exp = setup_experiment(args)
 
-    # Setup experiment
-    exp = setup_experiment(args)
+        # Load model
+        print("Loading model...")
+        model = load_model(exp, args, setting)
+        model.to(device)
 
-    # Load model
-    model = load_model(exp, args, setting)
-    model.to(device)
+        # Get test data
+        print("Getting test data...")
+        test_data, test_loader = get_test_data(args)
 
-    # Get test data
-    test_data, test_loader = get_test_data(args)
+        # Run inference with improved timestamp and prediction index tracking
+        print("Running inference...")
+        preds, trues, probs, timestamps, original_indices, prediction_indices, prices = run_inference(
+            model, test_data, test_loader, args, device)
 
-    # Run inference with improved timestamp and prediction index tracking
-    preds, trues, probs, timestamps, original_indices, prediction_indices, prices = run_inference(
-        model, test_data, test_loader, args, device)
+        # Calculate metrics
+        print("Calculating metrics...")
+        metrics = calculate_metrics(preds, trues, bool(args.is_shorting))
 
-    # Calculate metrics
-    metrics = calculate_metrics(preds, trues, bool(args.is_shorting))
+        # Extract actual price changes from the original dataset
+        print("Extracting actual price changes...")
+        actual_changes = extract_actual_price_changes(prediction_indices, args)
 
-    # Calculate trading returns
-    returns = calculate_trading_returns(preds, trues, probs, bool(args.is_shorting))
+        # If actual changes couldn't be extracted, estimate based on true labels
+        if actual_changes is None:
+            print("Using estimated price changes based on true labels...")
+            actual_changes = np.zeros(len(trues))
+            for i in range(len(trues)):
+                if trues[i] == 1:  # Actually went up
+                    actual_changes[i] = 0.02  # Assume 2% increase
+                else:  # Actually went down
+                    actual_changes[i] = -0.015  # Assume 1.5% decrease
 
-    # Save results with improved formatting
-    save_results(preds, trues, probs, timestamps, prediction_indices, prices, metrics, returns, args)
+        # Calculate trading returns with actual price changes
+        print("Calculating trading returns...")
+        returns = calculate_returns(preds, trues, probs, bool(args.is_shorting), actual_changes)
 
-    # Print summary
-    print("\nInference Summary:")
-    print(f"Total samples: {len(preds)}")
-    print(f"Accuracy: {metrics['accuracy'] * 100:.2f}%")
-    print(f"Precision: {metrics['precision'] * 100:.2f}%")
-    print(f"Win rate: {metrics['trading']['win_rate'] * 100:.2f}%")
-    print(f"Total return: {returns['total_return'] * 100:.2f}%")
+        # Print detailed analysis table
+        print_detailed_analysis(preds, trues, probs, timestamps, prices, actual_changes, returns)
 
-    # Print some examples with prediction indices and timestamps
-    print("\nExample predictions:")
-    for i in range(min(5, len(preds))):
-        pred_idx = prediction_indices[i] if i < len(prediction_indices) else "N/A"
-        ts = timestamps[i] if i < len(timestamps) else "N/A"
-        if isinstance(ts, pd.Timestamp):
-            ts_str = ts.strftime('%Y-%m-%d %H:%M:%S')
-        else:
-            ts_str = str(ts)
-        price = prices[i] if i < len(prices) and prices[i] is not None else "N/A"
-        print(
-            f"Sample {i}: Pred Index={pred_idx}, Time={ts_str}, Pred={preds[i]}, True={trues[i]}, Prob={probs[i]:.4f}, Price={price}")
+        # Get the final return value
+        final_return = returns['strategies']['combined']['metrics']['total_return']
 
-    print("\nDone!")
+        # Print summary
+        print("\nInference Summary:")
+        print(f"Total samples: {len(preds)}")
+        print(f"Accuracy: {metrics['accuracy'] * 100:.2f}%")
+        print(f"Precision: {metrics['precision'] * 100:.2f}%")
+        print(f"Win rate: {metrics['trading']['win_rate'] * 100:.2f}%")
+        print(f"Total cumulative return: {final_return * 100:.2f}%")
+
+        # Save enhanced results
+        print("Saving results...")
+        metrics_file, results_file = save_results(
+            preds, trues, probs, timestamps, original_indices, prediction_indices,
+            prices, metrics, returns, args, actual_changes)
+
+        print("\nDone!")
+
+    except Exception as e:
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
 
 
+# Make sure this is at the end of your script
 if __name__ == "__main__":
     main()
