@@ -189,13 +189,14 @@ if __name__ == '__main__':
         exp.verify_test_labels(setting)
 
         if args.adaptive_test:
-            print('>>>>>>>adaptive testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-            exp.adaptive_test(
-                setting,
-                test=1,
-                top_n=args.adaptive_top_n,
-                epochs=args.adaptive_epochs,
-                learning_rate=args.adaptive_lr
-            )
+            print("Adaptive testing is enabled")
+        print('>>>>>>>adaptive testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+        exp.adaptive_test(
+            setting,
+            test=1,
+            top_n=args.adaptive_top_n,
+            epochs=args.adaptive_epochs,
+            learning_rate=args.adaptive_lr
+        )
 
         torch.cuda.empty_cache()
