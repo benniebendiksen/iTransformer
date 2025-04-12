@@ -102,7 +102,7 @@ if __name__ == '__main__':
     # command-line arguments for adaptive testing
     parser.add_argument('--adaptive_test', default=True,
                         help='whether to perform adaptive fine-tuning per test sample')
-    parser.add_argument('--adaptive_top_n', type=int, default=200,
+    parser.add_argument('--adaptive_top_n', type=int, default=50,
                         help='number of similar samples to use for adaptive fine-tuning')
     parser.add_argument('--adaptive_epochs', type=int, default=7, help='number of epochs for adaptive fine-tuning')
     parser.add_argument('--adaptive_lr', type=float, default=0.0001, help='learning rate for adaptive fine-tuning')

@@ -1282,7 +1282,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
             # Step 4: Fine-tune on similar samples
             # Reset adaptive model to current model weights
-            adaptive_model.load_state_dict(self.model.state_dict())
+            # adaptive_model.load_state_dict(self.model.state_dict())
 
             # Fine-tune adaptive model
             self._fine_tune_model(
@@ -1461,7 +1461,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         return embedding
 
-    def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, top_n=10, similarity='cosine'):
+    def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, top_n=10, similarity='euclidean'):
         """
         Find the most similar samples to the test sample
 
