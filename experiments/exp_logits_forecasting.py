@@ -1215,8 +1215,23 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         train_embeddings = self._extract_embeddings(train_data)
         val_embeddings = self._extract_embeddings(val_data)
 
-        # Use a copy of the trained model for adaptive predictions
-        adaptive_model = type(self.model)(**vars(self.args))
+        # Create a new model with the same architecture
+        # Only pass the arguments that the model constructor expects
+        model_args = {}
+        # Extract the model configuration from self.args
+        # Adjust this list based on what your model's __init__ method actually accepts
+        model_arg_names = [
+            'seq_len', 'pred_len', 'output_attention', 'use_norm',
+            'embed', 'freq', 'dropout', 'class_strategy', 'd_model',
+            'n_heads', 'e_layers', 'd_layers', 'd_ff', 'activation',
+            'channel_independence', 'enc_in', 'dec_in', 'c_out', 'distil'
+        ]
+
+        for arg_name in model_arg_names:
+            if hasattr(self.args, arg_name):
+                model_args[arg_name] = getattr(self.args, arg_name)
+
+        adaptive_model = type(self.model)(**model_args)
         adaptive_model.to(self.device)
 
         print(f"\nProcessing {len(test_data)} test samples with adaptive fine-tuning...")
@@ -1383,18 +1398,64 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         with torch.no_grad():
             # Access encoder embedding from the model
             # This is model-specific and needs to be adapted to the actual model architecture
-            if hasattr(self.model, 'enc_embedding'):
-                # For iTransformer model
-                embedding = self.model.enc_embedding(batch_x, batch_x_mark)
+            try:
+                if hasattr(self.model, 'enc_embedding'):
+                    # For iTransformer model
+                    embedding = self.model.enc_embedding(batch_x, batch_x_mark)
 
-                # Flatten embedding for easier distance calculation
-                # Take mean across sequence dimension to get a single vector per sample
-                embedding = embedding.mean(dim=1).cpu().numpy()
-            else:
-                # Fallback if model structure is different
-                # Try to find encoder or embedding components
-                print("Model structure doesn't have expected enc_embedding attribute")
-                # Create a placeholder embedding based on input features
+                    # Flatten embedding for easier distance calculation
+                    # Take mean across sequence dimension to get a single vector per sample
+                    embedding = embedding.mean(dim=1).cpu().numpy()
+                elif hasattr(self.model, 'encoder') and hasattr(self.model.encoder, 'attn_layers'):
+                    # Another common architecture pattern
+                    # First get the embedding
+                    if hasattr(self.model, 'enc_embedding'):
+                        enc_out = self.model.enc_embedding(batch_x, batch_x_mark)
+                    else:
+                        # If no embedding layer, use input directly
+                        enc_out = batch_x.transpose(1, 2)  # [B, N, L]
+
+                    # Run through first encoder layer to get more semantic representation
+                    enc_out = self.model.encoder.attn_layers[0](enc_out)
+                    embedding = enc_out.mean(dim=1).cpu().numpy()
+                else:
+                    # For other model architectures, we'll use a feature-based approach
+                    print("Using feature-based embeddings as model architecture is different")
+                    # Combine both input features and time marks as a feature vector
+                    # Normalize batch_x if needed
+                    if self.args.use_norm:
+                        batch_mean = batch_x.mean(1, keepdim=True)
+                        batch_std = torch.sqrt(torch.var(batch_x, dim=1, keepdim=True, unbiased=False) + 1e-5)
+                        batch_x = (batch_x - batch_mean) / batch_std
+
+                    # Flatten and combine features
+                    x_flat = batch_x.reshape(batch_x.shape[0], -1)
+                    x_mark_flat = batch_x_mark.reshape(batch_x_mark.shape[0], -1)
+                    combined = torch.cat([x_flat, x_mark_flat], dim=1).cpu().numpy()
+
+                    # Apply dimensionality reduction if very high-dimensional
+                    if combined.shape[1] > 1000:
+                        # Simple dimensionality reduction by taking statistics
+                        # Mean, std, min, max, and a few percentiles for each channel
+                        stats = []
+                        for i in range(batch_x.shape[2]):  # For each channel
+                            channel_data = batch_x[:, :, i].cpu().numpy()
+                            channel_stats = [
+                                np.mean(channel_data, axis=1),
+                                np.std(channel_data, axis=1),
+                                np.min(channel_data, axis=1),
+                                np.max(channel_data, axis=1),
+                                np.percentile(channel_data, 25, axis=1),
+                                np.percentile(channel_data, 75, axis=1)
+                            ]
+                            stats.append(np.concatenate(channel_stats, axis=0))
+
+                        embedding = np.concatenate(stats, axis=0)
+                    else:
+                        embedding = combined
+            except Exception as e:
+                print(f"Error extracting embedding: {e}")
+                # Fall back to using raw features
                 embedding = batch_x.mean(dim=1).cpu().numpy()
 
         return embedding
@@ -1470,14 +1531,30 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         # Collect similar samples
         similar_samples = []
         for dataset_name, idx, _ in similar_indices:
-            if dataset_name == 'train':
-                similar_samples.append(train_data[idx])
-            else:  # 'val'
-                similar_samples.append(val_data[idx])
+            try:
+                if dataset_name == 'train':
+                    if idx >= len(train_data):
+                        print(f"Warning: Train index {idx} out of range ({len(train_data)})")
+                        continue
+                    similar_samples.append(train_data[idx])
+                else:  # 'val'
+                    if idx >= len(val_data):
+                        print(f"Warning: Val index {idx} out of range ({len(val_data)})")
+                        continue
+                    similar_samples.append(val_data[idx])
+            except Exception as e:
+                print(f"Error accessing {dataset_name} sample at index {idx}: {e}")
+                continue
+
+        # Check if we have enough samples to proceed
+        if len(similar_samples) == 0:
+            print("No similar samples could be collected for fine-tuning")
+            return
 
         # Fine-tune for specified epochs
         for epoch in range(epochs):
             epoch_loss = 0
+            samples_processed = 0
 
             # Process samples in mini-batches
             for i in range(0, len(similar_samples), batch_size):
@@ -1489,44 +1566,106 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 batch_x_mark_list = []
                 batch_y_mark_list = []
 
-                for seq_x, seq_y, seq_x_mark, seq_y_mark in batch_samples:
-                    batch_x_list.append(seq_x)
-                    batch_y_list.append(seq_y)
-                    batch_x_mark_list.append(seq_x_mark)
-                    batch_y_mark_list.append(seq_y_mark)
+                # Filter out any problematic samples
+                valid_samples = []
+                for j, sample in enumerate(batch_samples):
+                    try:
+                        if len(sample) != 4:
+                            print(f"Warning: Sample {i + j} has unexpected length {len(sample)}, expected 4")
+                            continue
 
-                # Convert to tensors and move to device
-                batch_x = torch.tensor(np.stack(batch_x_list)).float().to(self.device)
-                batch_y = torch.tensor(np.stack(batch_y_list)).float().to(self.device)
-                batch_x_mark = torch.tensor(np.stack(batch_x_mark_list)).float().to(self.device)
-                batch_y_mark = torch.tensor(np.stack(batch_y_mark_list)).float().to(self.device)
+                        seq_x, seq_y, seq_x_mark, seq_y_mark = sample
 
-                # Create decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+                        # Check for None values
+                        if seq_x is None or seq_y is None or seq_x_mark is None or seq_y_mark is None:
+                            print(f"Warning: Sample {i + j} contains None values")
+                            continue
 
-                # Zero gradients
-                optimizer.zero_grad()
+                        # Add to valid samples
+                        valid_samples.append(sample)
+                        batch_x_list.append(seq_x)
+                        batch_y_list.append(seq_y)
+                        batch_x_mark_list.append(seq_x_mark)
+                        batch_y_mark_list.append(seq_y_mark)
+                    except Exception as e:
+                        print(f"Error processing sample {i + j}: {e}")
+                        continue
 
-                # Forward pass
-                if self.args.output_attention:
-                    outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                else:
-                    outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                # Skip this batch if no valid samples
+                if len(valid_samples) == 0:
+                    continue
 
-                # Process outputs
-                outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+                try:
+                    # Make sure all data is in the same format (numpy arrays) before stacking
+                    batch_x_numpy = []
+                    batch_y_numpy = []
+                    batch_x_mark_numpy = []
+                    batch_y_mark_numpy = []
 
-                # Calculate loss
-                loss = criterion(outputs_last, batch_y_last)
-                epoch_loss += loss.item()
+                    for x in batch_x_list:
+                        if isinstance(x, torch.Tensor):
+                            batch_x_numpy.append(x.detach().cpu().numpy())
+                        else:
+                            batch_x_numpy.append(x)
 
-                # Backward pass and optimize
-                loss.backward()
-                optimizer.step()
+                    for y in batch_y_list:
+                        if isinstance(y, torch.Tensor):
+                            batch_y_numpy.append(y.detach().cpu().numpy())
+                        else:
+                            batch_y_numpy.append(y)
 
-            # Optional: Print progress
-            # print(f"Fine-tuning epoch {epoch+1}/{epochs}, loss: {epoch_loss/len(similar_samples):.6f}")
+                    for x_mark in batch_x_mark_list:
+                        if isinstance(x_mark, torch.Tensor):
+                            batch_x_mark_numpy.append(x_mark.detach().cpu().numpy())
+                        else:
+                            batch_x_mark_numpy.append(x_mark)
+
+                    for y_mark in batch_y_mark_list:
+                        if isinstance(y_mark, torch.Tensor):
+                            batch_y_mark_numpy.append(y_mark.detach().cpu().numpy())
+                        else:
+                            batch_y_mark_numpy.append(y_mark)
+
+                    # Convert to tensors and move to device
+                    batch_x = torch.tensor(np.stack(batch_x_numpy)).float().to(self.device)
+                    batch_y = torch.tensor(np.stack(batch_y_numpy)).float().to(self.device)
+                    batch_x_mark = torch.tensor(np.stack(batch_x_mark_numpy)).float().to(self.device)
+                    batch_y_mark = torch.tensor(np.stack(batch_y_mark_numpy)).float().to(self.device)
+
+                    # Create decoder input
+                    dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                    dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+                    # Zero gradients
+                    optimizer.zero_grad()
+
+                    # Forward pass
+                    if self.args.output_attention:
+                        outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                    else:
+                        outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                    # Process outputs
+                    outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+
+                    # Calculate loss
+                    loss = criterion(outputs_last, batch_y_last)
+                    epoch_loss += loss.item()
+                    samples_processed += len(valid_samples)
+
+                    # Backward pass and optimize
+                    loss.backward()
+                    optimizer.step()
+                except Exception as e:
+                    print(f"Error during batch processing: {e}")
+                    continue
+
+            # Print progress (only if samples were processed)
+            if samples_processed > 0:
+                avg_loss = epoch_loss / samples_processed
+                if epoch == epochs - 1 or epoch % 2 == 0:  # Print first, last and every other epoch
+                    print(
+                        f"Fine-tuning epoch {epoch + 1}/{epochs}, avg loss: {avg_loss:.6f}, samples: {samples_processed}")
 
         # Set model back to evaluation mode
         model.eval()
