@@ -99,6 +99,14 @@ if __name__ == '__main__':
     parser.add_argument('--precision_factor', type=float, default=2.0, help='factor to adjust precision weighting')
     parser.add_argument('--auto_weight', type=int, default=0, help='automatically adjust weighting if set to 1')
 
+    # command-line arguments for adaptive testing
+    parser.add_argument('--adaptive_test', default=1,
+                        help='whether to perform adaptive fine-tuning per test sample')
+    parser.add_argument('--adaptive_top_n', type=int, default=200,
+                        help='number of similar samples to use for adaptive fine-tuning')
+    parser.add_argument('--adaptive_epochs', type=int, default=7, help='number of epochs for adaptive fine-tuning')
+    parser.add_argument('--adaptive_lr', type=float, default=0.0001, help='learning rate for adaptive fine-tuning')
+
     args = parser.parse_args()
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
 
@@ -179,4 +187,15 @@ if __name__ == '__main__':
         # exp.test(setting, test=1)
         exp.test_with_direct_sample_processing(setting)
         exp.verify_test_labels(setting)
+
+        if args.adaptive_test:
+            print('>>>>>>>adaptive testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+            exp.adaptive_test(
+                setting,
+                test=1,
+                top_n=args.adaptive_top_n,
+                epochs=args.adaptive_epochs,
+                learning_rate=args.adaptive_lr
+            )
+
         torch.cuda.empty_cache()

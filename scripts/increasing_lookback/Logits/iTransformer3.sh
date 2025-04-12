@@ -13,6 +13,9 @@ python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available(
 
 model_name=iTransformer
 
+exit 0
+
+
 btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv
 
 # Shifted, unchanged component number
@@ -22,7 +25,7 @@ btcusdt_pca_components_12h_4h_50_3672_282_no_l_juice_testing_22_test_cases.csv
 #data_path="btcusd_pca_components_12h_4h_1d_80_7_5_bitsap.csv"
 #data_path="btcusd_pca_components_12h_reduced_4h_47_7_5_1_4_2_old.csv"
 
-data_path="btcusd_pca_components_xgboost_12h_4h_reduced_43_7_5_1_2_1_old_dud.csv"
+data_path="btcusd_pca_components_xgboost_12h_4h_reduced_43_7_5_1_2_1_old.csv"
 seq_len=96
 pred_len=1
 enc_in=48

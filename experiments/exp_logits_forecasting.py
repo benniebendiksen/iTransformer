@@ -1075,10 +1075,10 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         # Print detailed confusion matrix breakdown
         print('\nConfusion Matrix Breakdown:')
-        print(f'  True Positives (correctly predicted price increases): {TP}')
-        print(f'  True Negatives (correctly predicted price decreases): {TN}')
-        print(f'  False Positives (incorrectly predicted price increases): {FP}')
-        print(f'  False Negatives (incorrectly predicted price decreases): {FN}')
+        print(f'  True Positives: {TP}')
+        print(f'  True Negatives: {TN}')
+        print(f'  False Positives: {FP}')
+        print(f'  False Negatives: {FN}')
         print(f'  Total Predictions: {TP + TN + FP + FN}')
 
         # Calculate domain specific performance metrics
@@ -1171,6 +1171,471 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         return
 
+    # Adaptive fine-tuning method and helper methods
+    def adaptive_test(self, setting, test=0, top_n=10, epochs=5, learning_rate=0.0001, batch_size=4):
+        """
+        Test method with per-sample adaptive fine-tuning.
+
+        Args:
+            setting: Experiment setting name
+            test: Whether to load model from checkpoint
+            top_n: Number of similar training samples to use for fine-tuning
+            epochs: Number of epochs for fine-tuning
+            learning_rate: Learning rate for fine-tuning
+            batch_size: Batch size for fine-tuning
+
+        Returns:
+            Dictionary containing performance metrics for both methods
+        """
+        print("\n============= ADAPTIVE TEST WITH PER-SAMPLE FINE-TUNING =============")
+
+        # Step 0: Load model from checkpoint if needed
+        if test:
+            print('loading model')
+            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+
+        # Load data
+        train_data, _ = self._get_data(flag='train')
+        val_data, _ = self._get_data(flag='val')
+        test_data, _ = self._get_data(flag='test')
+
+        # Prepare for storing results
+        standard_preds = []
+        standard_trues = []
+        adaptive_preds = []
+        adaptive_trues = []
+        adaptive_probs = []
+        standard_probs = []
+
+        # Set model to evaluation mode
+        self.model.eval()
+
+        # Step 1: Extract embeddings from all samples
+        print("\nExtracting embeddings from training and validation samples...")
+        train_embeddings = self._extract_embeddings(train_data)
+        val_embeddings = self._extract_embeddings(val_data)
+
+        # Use a copy of the trained model for adaptive predictions
+        adaptive_model = type(self.model)(**vars(self.args))
+        adaptive_model.to(self.device)
+
+        print(f"\nProcessing {len(test_data)} test samples with adaptive fine-tuning...")
+
+        # Process each test sample individually
+        for i in range(len(test_data)):
+            if i % 10 == 0:
+                print(f"Processing test sample {i + 1}/{len(test_data)}")
+
+            # Get current test sample
+            batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
+
+            # Add batch dimension
+            batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
+            batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
+            batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
+            batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
+
+            # Create decoder input
+            dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+            dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+            # Get standard prediction from current model
+            with torch.no_grad():
+                if self.args.output_attention:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                else:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+                output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+                output_binary = (output_prob > 0.5).astype(np.float32)
+                true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+
+                # Store standard prediction
+                standard_preds.append(output_binary)
+                standard_trues.append(true_label)
+                standard_probs.append(output_prob)
+
+            # Step 2: Extract embedding for this test sample
+            test_embed = self._extract_embedding_single(batch_x, batch_x_mark)
+
+            # Step 3: Find similar samples in train and validation set
+            similar_indices = self._find_similar_samples(
+                test_embed, train_embeddings, val_embeddings, top_n=top_n
+            )
+
+            # Step 4: Fine-tune on similar samples
+            # Reset adaptive model to current model weights
+            adaptive_model.load_state_dict(self.model.state_dict())
+
+            # Fine-tune adaptive model
+            self._fine_tune_model(
+                adaptive_model,
+                train_data,
+                val_data,
+                similar_indices,
+                epochs=epochs,
+                lr=learning_rate,
+                batch_size=batch_size
+            )
+
+            # Step 5: Get prediction from fine-tuned model
+            with torch.no_grad():
+                adaptive_model.eval()
+                if self.args.output_attention:
+                    outputs = adaptive_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                else:
+                    outputs = adaptive_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+                output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+                output_binary = (output_prob > 0.5).astype(np.float32)
+
+                # Store adaptive prediction
+                adaptive_preds.append(output_binary)
+                adaptive_trues.append(true_label)
+                adaptive_probs.append(output_prob)
+
+        # Convert results to numpy arrays
+        standard_preds = np.array(standard_preds)
+        standard_trues = np.array(standard_trues)
+        standard_probs = np.array(standard_probs)
+        adaptive_preds = np.array(adaptive_preds)
+        adaptive_trues = np.array(adaptive_trues)
+        adaptive_probs = np.array(adaptive_probs)
+
+        # Calculate metrics for both methods
+        standard_metrics = self._calculate_test_metrics(standard_trues, standard_preds, standard_probs)
+        adaptive_metrics = self._calculate_test_metrics(adaptive_trues, adaptive_preds, adaptive_probs)
+
+        # Compare the two methods
+        print("\n============= COMPARISON OF METHODS =============")
+        print("Standard Method:")
+        self._print_test_metrics(standard_metrics)
+
+        print("\nAdaptive Fine-tuning Method:")
+        self._print_test_metrics(adaptive_metrics)
+
+        # Sample-by-sample comparison
+        correct_standard = (standard_preds == standard_trues).sum()
+        correct_adaptive = (adaptive_preds == adaptive_trues).sum()
+        improved = ((standard_preds != standard_trues) & (adaptive_preds == adaptive_trues)).sum()
+        degraded = ((standard_preds == standard_trues) & (adaptive_preds != adaptive_trues)).sum()
+
+        print("\nSample-by-sample comparison:")
+        print(f"Samples improved by adaptive method: {improved} ({improved / len(test_data):.2%})")
+        print(f"Samples degraded by adaptive method: {degraded} ({degraded / len(test_data):.2%})")
+        print(f"Net improvement: {improved - degraded} samples ({(improved - degraded) / len(test_data):.2%})")
+
+        # Save results
+        folder_path = './results/' + setting + '/adaptive/'
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+
+        np.save(folder_path + 'standard_metrics.npy', standard_metrics)
+        np.save(folder_path + 'adaptive_metrics.npy', adaptive_metrics)
+        np.save(folder_path + 'standard_preds.npy', standard_preds)
+        np.save(folder_path + 'adaptive_preds.npy', adaptive_preds)
+
+        return {
+            'standard': standard_metrics,
+            'adaptive': adaptive_metrics,
+        }
+
+    def _extract_embeddings(self, dataset):
+        """
+        Extract embeddings for all samples in a dataset
+
+        Args:
+            dataset: Dataset to extract embeddings from
+
+        Returns:
+            Dictionary mapping indices to embeddings
+        """
+        embeddings = {}
+
+        self.model.eval()
+        with torch.no_grad():
+            for i in range(len(dataset)):
+                batch_x, batch_y, batch_x_mark, batch_y_mark = dataset[i]
+
+                # Add batch dimension
+                batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
+                batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
+
+                # Extract embedding
+                embedding = self._extract_embedding_single(batch_x, batch_x_mark)
+                embeddings[i] = embedding
+
+        return embeddings
+
+    def _extract_embedding_single(self, batch_x, batch_x_mark):
+        """
+        Extract embedding for a single sample
+
+        Args:
+            batch_x: Input tensor
+            batch_x_mark: Input timestamp tensor
+
+        Returns:
+            Embedding tensor
+        """
+        with torch.no_grad():
+            # Access encoder embedding from the model
+            # This is model-specific and needs to be adapted to the actual model architecture
+            if hasattr(self.model, 'enc_embedding'):
+                # For iTransformer model
+                embedding = self.model.enc_embedding(batch_x, batch_x_mark)
+
+                # Flatten embedding for easier distance calculation
+                # Take mean across sequence dimension to get a single vector per sample
+                embedding = embedding.mean(dim=1).cpu().numpy()
+            else:
+                # Fallback if model structure is different
+                # Try to find encoder or embedding components
+                print("Model structure doesn't have expected enc_embedding attribute")
+                # Create a placeholder embedding based on input features
+                embedding = batch_x.mean(dim=1).cpu().numpy()
+
+        return embedding
+
+    def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, top_n=10, similarity='cosine'):
+        """
+        Find the most similar samples to the test sample
+
+        Args:
+            test_embedding: Embedding of test sample
+            train_embeddings: Dictionary of train embeddings
+            val_embeddings: Dictionary of validation embeddings
+            top_n: Number of similar samples to find
+            similarity: Similarity metric to use ('cosine' or 'euclidean')
+
+        Returns:
+            List of tuples (dataset, index) for the most similar samples
+        """
+        similarities = []
+
+        # Calculate similarity for training samples
+        for idx, embed in train_embeddings.items():
+            if similarity == 'cosine':
+                # Cosine similarity (higher is more similar)
+                sim = np.dot(test_embedding.flatten(), embed.flatten()) / (
+                        np.linalg.norm(test_embedding) * np.linalg.norm(embed)
+                )
+                similarities.append(('train', idx, sim))
+            else:
+                # Euclidean distance (lower is more similar)
+                dist = np.linalg.norm(test_embedding - embed)
+                similarities.append(('train', idx, -dist))  # Negate so higher is more similar
+
+        # Calculate similarity for validation samples
+        for idx, embed in val_embeddings.items():
+            if similarity == 'cosine':
+                sim = np.dot(test_embedding.flatten(), embed.flatten()) / (
+                        np.linalg.norm(test_embedding) * np.linalg.norm(embed)
+                )
+                similarities.append(('val', idx, sim))
+            else:
+                dist = np.linalg.norm(test_embedding - embed)
+                similarities.append(('val', idx, -dist))
+
+        # Sort by similarity (descending)
+        similarities.sort(key=lambda x: x[2], reverse=True)
+
+        # Return top N most similar
+        return similarities[:top_n]
+
+    def _fine_tune_model(self, model, train_data, val_data, similar_indices, epochs=5, lr=0.0001, batch_size=4):
+        """
+        Fine-tune model on similar samples
+
+        Args:
+            model: Model to fine-tune
+            train_data: Training dataset
+            val_data: Validation dataset
+            similar_indices: List of (dataset, index) tuples for similar samples
+            epochs: Number of epochs
+            lr: Learning rate
+            batch_size: Batch size
+        """
+        # Set model to training mode
+        model.train()
+
+        # Create optimizer
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+        # Create criterion
+        criterion = self._select_criterion()
+
+        # Collect similar samples
+        similar_samples = []
+        for dataset_name, idx, _ in similar_indices:
+            if dataset_name == 'train':
+                similar_samples.append(train_data[idx])
+            else:  # 'val'
+                similar_samples.append(val_data[idx])
+
+        # Fine-tune for specified epochs
+        for epoch in range(epochs):
+            epoch_loss = 0
+
+            # Process samples in mini-batches
+            for i in range(0, len(similar_samples), batch_size):
+                batch_samples = similar_samples[i:i + batch_size]
+
+                # Prepare batch data
+                batch_x_list = []
+                batch_y_list = []
+                batch_x_mark_list = []
+                batch_y_mark_list = []
+
+                for seq_x, seq_y, seq_x_mark, seq_y_mark in batch_samples:
+                    batch_x_list.append(seq_x)
+                    batch_y_list.append(seq_y)
+                    batch_x_mark_list.append(seq_x_mark)
+                    batch_y_mark_list.append(seq_y_mark)
+
+                # Convert to tensors and move to device
+                batch_x = torch.tensor(np.stack(batch_x_list)).float().to(self.device)
+                batch_y = torch.tensor(np.stack(batch_y_list)).float().to(self.device)
+                batch_x_mark = torch.tensor(np.stack(batch_x_mark_list)).float().to(self.device)
+                batch_y_mark = torch.tensor(np.stack(batch_y_mark_list)).float().to(self.device)
+
+                # Create decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+                # Zero gradients
+                optimizer.zero_grad()
+
+                # Forward pass
+                if self.args.output_attention:
+                    outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                else:
+                    outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                # Process outputs
+                outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+
+                # Calculate loss
+                loss = criterion(outputs_last, batch_y_last)
+                epoch_loss += loss.item()
+
+                # Backward pass and optimize
+                loss.backward()
+                optimizer.step()
+
+            # Optional: Print progress
+            # print(f"Fine-tuning epoch {epoch+1}/{epochs}, loss: {epoch_loss/len(similar_samples):.6f}")
+
+        # Set model back to evaluation mode
+        model.eval()
+
+    def _calculate_test_metrics(self, trues, preds, probs):
+        """
+        Calculate test metrics for both classification and trading performance
+
+        Args:
+            trues: True labels
+            preds: Predicted labels
+            probs: Predicted probabilities
+
+        Returns:
+            Dictionary of metrics
+        """
+        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+
+        # Calculate classification metrics
+        accuracy = accuracy_score(trues, preds)
+
+        # Handle cases where classes might be missing
+        try:
+            precision = precision_score(trues, preds)
+        except:
+            precision = 0.0
+
+        try:
+            recall = recall_score(trues, preds)
+        except:
+            recall = 0.0
+
+        try:
+            f1 = f1_score(trues, preds)
+        except:
+            f1 = 0.0
+
+        # Create confusion matrix
+        cm = confusion_matrix(trues, preds)
+
+        # Calculate trading metrics
+        if self.is_shorting:
+            # For shorting strategy: profit from both correct predictions
+            correct_positives = np.logical_and(preds == 1, trues == 1)
+            correct_negatives = np.logical_and(preds == 0, trues == 0)
+
+            # Profit comes from correct predictions in both directions
+            profitable_trades = correct_positives.sum() + correct_negatives.sum()
+            total_trades = len(preds)
+        else:
+            # For no-shorting strategy: only profit from correct positive predictions
+            profitable_trades = np.logical_and(preds == 1, trues == 1).sum()
+            # We lose on false positives but not on true negatives or false negatives
+            unprofitable_trades = np.logical_and(preds == 1, trues == 0).sum()
+            total_trades = profitable_trades + unprofitable_trades
+
+        win_rate = profitable_trades / total_trades if total_trades > 0 else 0
+        profit_factor = profitable_trades / (len(preds) - profitable_trades) if (
+                                                                                            len(preds) - profitable_trades) > 0 else float(
+            'inf')
+
+        return {
+            'classification': {
+                'accuracy': accuracy,
+                'precision': precision,
+                'recall': recall,
+                'f1': f1,
+                'confusion_matrix': cm
+            },
+            'trading': {
+                'win_rate': win_rate,
+                'profit_factor': profit_factor,
+                'profitable_trades': profitable_trades,
+                'total_trades': total_trades,
+                'is_shorting': self.is_shorting
+            }
+        }
+
+    def _print_test_metrics(self, metrics):
+        """Print test metrics in a formatted way"""
+        cm = metrics['classification']['confusion_matrix']
+
+        # Extract confusion matrix components if available
+        if cm.shape == (2, 2):
+            TN, FP = cm[0, 0], cm[0, 1]
+            FN, TP = cm[1, 0], cm[1, 1]
+
+            print('\nConfusion Matrix Breakdown:')
+            print(f'  True Positives: {TP}')
+            print(f'  True Negatives: {TN}')
+            print(f'  False Positives: {FP}')
+            print(f'  False Negatives: {FN}')
+            print(f'  Total Predictions: {TP + TN + FP + FN}')
+
+        cls = metrics['classification']
+        trading = metrics['trading']
+
+        print('\nClassification Performance:')
+        print('  Accuracy: {:.2f}%, Precision: {:.2f}%, Recall: {:.2f}%, F1: {:.2f}%'.format(
+            cls['accuracy'] * 100, cls['precision'] * 100, cls['recall'] * 100, cls['f1'] * 100))
+
+        print('\nTrading Performance:')
+        print('  Strategy: {}'.format('Short enabled' if trading['is_shorting'] else 'No shorting (holding only)'))
+        print('  Profitable Trades: {}, Total Trades: {}'.format(
+            trading['profitable_trades'], trading['total_trades']))
+        print('  Win Rate: {:.2f}%'.format(trading['win_rate'] * 100))
+        print('  Profit Factor: {:.2f}'.format(trading['profit_factor']))
+
+    # adaptive testing and helper methods end here
     def test_with_direct_sample_processing(self, setting, test=0):
         """
         Modified test method that processes each sample individually to ensure correct labels.

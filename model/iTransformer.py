@@ -22,7 +22,7 @@ class Model(nn.Module):
         self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.embed, configs.freq,
                                                     configs.dropout)
         self.class_strategy = configs.class_strategy
-        # Encoder-only architecture
+        # Encoder-only architecture: encode the input sequence and project the output to the prediction length
         self.encoder = Encoder(
             [
                 EncoderLayer(

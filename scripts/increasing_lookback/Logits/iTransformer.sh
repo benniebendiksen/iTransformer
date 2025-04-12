@@ -57,6 +57,8 @@ python -u run.py \
   --auto_weight 1 \
   --freq 12h \
 
+  exit 0
+
 data_path="btcusd_pca_components_lightboost_12h_4h_reduced_60_7_5_1_2_1_old.csv"
 seq_len=96
 pred_len=1
