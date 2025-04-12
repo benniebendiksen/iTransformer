@@ -1461,7 +1461,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         return embedding
 
-    def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, top_n=10, similarity='euclidean'):
+    def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, top_n=10, similarity='cosine'):
         """
         Find the most similar samples to the test sample
 
