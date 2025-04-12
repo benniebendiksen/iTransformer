@@ -1231,7 +1231,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             if hasattr(self.args, arg_name):
                 model_args[arg_name] = getattr(self.args, arg_name)
 
-        adaptive_model = type(self.model)(**model_args)
+        #adaptive_model = type(self.model)(**model_args)
+        adaptive_model = self.model
         adaptive_model.to(self.device)
 
         print(f"\nProcessing {len(test_data)} test samples with adaptive fine-tuning...")
