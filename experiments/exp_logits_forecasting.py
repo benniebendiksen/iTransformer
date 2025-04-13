@@ -1423,7 +1423,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 if hasattr(self.model, 'enc_embedding'):
                     # For iTransformer model
                     embedding = self.model.enc_embedding(batch_x, batch_x_mark)
-                    (f"Embedding shape orig: {embedding.shape}")
+                    print(f"Embedding shape orig: {embedding.shape}")
 
                     # Flatten embedding for easier distance calculation
                     # Take mean across sequence dimension to get a single vector per sample
