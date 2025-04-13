@@ -1333,6 +1333,17 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             adaptive_probs.append(output_prob)
             print(f"Adaptive prediction for sample {i + 1}: {output_binary}, True Label: {true_label}, Probability: {output_prob}")
 
+            # standard model single test sample prediction
+            if self.args.output_attention:
+                outputs_std = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+            else:
+                outputs_std = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+            outputs_last_std, batch_y_last_std, _, _ = self._process_outputs(outputs_std, batch_y)
+            output_prob_std = torch.sigmoid(outputs_last_std).detach().cpu().numpy()[0, 0]
+            output_binary_std = (output_prob_std > 0.5).astype(np.float32)
+            print(f"Standard prediction for sample {i + 1}: {output_binary_std}, True Label: {true_label}, Probability: {output_prob_std}")
+
         # Convert results to numpy arrays
         standard_preds = np.array(standard_preds)
         standard_trues = np.array(standard_trues)
