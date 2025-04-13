@@ -37,7 +37,7 @@ def parse_args():
     # Basic arguments
     parser.add_argument('--root_path', type=str, default='./dataset/logits/',
                         help='root path of the data file')
-    parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete.csv',
+    parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_2.csv',
                         help='data file')
     parser.add_argument('--target', type=str, default='price_direction',
                         help='target column for binary prediction')
@@ -87,11 +87,15 @@ def parse_args():
     # "Freeze" arguments for maintaining feature selection and train/val splits given a reference dataset and new data
     # parser.add_argument('--reference_csv', type=str, default=None,
     #                     help='reference CSV file to maintain consistent feature selection and splits')
-    parser.add_argument('--reference_csv', type=str, default=None,
+    parser.add_argument('--reference_csv', type=str, default='./dataset/logits/btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old.csv',
                         help='reference CSV file to maintain consistent feature selection and splits')
-    parser.add_argument('--freeze_features', action='store_true',
+    # parser.add_argument('--freeze_features', action='store_true',
+    #                     help='use features from reference CSV instead of running feature selection')
+    parser.add_argument('--freeze_features', default=True,
                         help='use features from reference CSV instead of running feature selection')
-    parser.add_argument('--freeze_train_val', action='store_true',
+    # parser.add_argument('--freeze_train_val', action='store_true',
+    #                     help='maintain same train/val data points as reference CSV')
+    parser.add_argument('--freeze_train_val', default=True,
                         help='maintain same train/val data points as reference CSV')
     parser.add_argument('--timestamp_col', type=str, default='timestamp',
                         help='timestamp column to use for aligning data')
@@ -632,7 +636,7 @@ def calculate_feature_importance(model, feature_names, args):
     top_n = min(args.top_n_features, len(feature_importance))
     top_features = feature_importance.head(top_n)['Feature'].tolist()
 
-    top_features_file = os.path.join(args.output_dir, 'top_features_lightboost.txt')
+    top_features_file = os.path.join(args.output_dir, 'top_features_lightboost_baseline.txt')
     with open(top_features_file, 'w') as f:
         for feature in top_features:
             f.write(f"{feature}\n")
@@ -822,7 +826,7 @@ def save_execution_summary(args, metrics, feature_importance, output_file, refer
         'execution_time': time.strftime('%Y-%m-%d %H:%M:%S'),
         'metrics': metrics,
         'feature_importance_file': os.path.join(args.output_dir, 'feature_importance_lightboost.csv'),
-        'top_features_file': os.path.join(args.output_dir, 'top_features_lightboost.txt'),
+        'top_features_file': os.path.join(args.output_dir, 'top_features_lightboost_baseline.txt'),
         'processed_dataset': output_file,
         'top_10_features': feature_importance.head(10)[['Feature', 'GainImportanceNorm']].to_dict('records')
     }
