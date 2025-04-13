@@ -984,8 +984,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             #     f"Sample {i}: orig_idx={orig_idx}, pred_idx={pred_idx}, raw_label={raw_label}, expected={expected_label}")
 
 
-
-
         if test:
             print('loading model')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
@@ -1197,7 +1195,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         # Load data
         train_data, _ = self._get_data(flag='train')
         val_data, _ = self._get_data(flag='val')
-        test_data, _ = self._get_data(flag='test')
+        test_data, test_loader = self._get_data(flag='test')
 
         # Prepare for storing results
         standard_preds = []
@@ -1237,30 +1235,30 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         print(f"\nProcessing {len(test_data)} test samples with adaptive fine-tuning...")
 
-        # Process each test sample individually
-        for i in range(len(test_data)):
-            if i % 10 == 0:
-                print(f"Processing test sample {i + 1}/{len(test_data)}")
+        self.model.eval()
+        with torch.no_grad():
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.float().to(self.device)
+                batch_x_mark = batch_x_mark.float().to(self.device)
+                batch_y_mark = batch_y_mark.float().to(self.device)
 
-            # Get current test sample
-            batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
+                # decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
-            # Add batch dimension
-            batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
-            batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
-            batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
-            batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
-
-            # Create decoder input
-            dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-            dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
-
-            # Get standard prediction from current model
-            with torch.no_grad():
-                if self.args.output_attention:
-                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                # encoder - decoder
+                if self.args.use_amp:
+                    with torch.cuda.amp.autocast():
+                        if self.args.output_attention:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                        else:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 else:
-                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    if self.args.output_attention:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                    else:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
                 outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
                 output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
@@ -1272,36 +1270,59 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 standard_trues.append(true_label)
                 standard_probs.append(output_prob)
 
-            # Step 2: Extract embedding for this test sample
-            test_embed = self._extract_embedding_single(batch_x, batch_x_mark)
+        # Process each test sample individually
+        with torch.no_grad():
+            for i in range(len(test_data)):
+                if i % 10 == 0:
+                    print(f"Processing test sample {i + 1}/{len(test_data)}")
 
-            # Step 3: Find similar samples in train and validation set
-            similar_indices = self._find_similar_samples(
-                test_embed, train_embeddings, val_embeddings, top_n=top_n
-            )
+                # Get current test sample
+                batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
 
-            # Step 4: Fine-tune on similar samples
-            # Reset adaptive model to current model weights
-            # adaptive_model.load_state_dict(self.model.state_dict())
+                # Add batch dimension
+                batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
+                batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
+                batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
+                batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
 
-            # Fine-tune adaptive model
-            self._fine_tune_model(
-                adaptive_model,
-                train_data,
-                val_data,
-                similar_indices,
-                epochs=epochs,
-                lr=learning_rate,
-                batch_size=batch_size
-            )
+                # Create decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
-            # Step 5: Get prediction from fine-tuned model
-            with torch.no_grad():
-                adaptive_model.eval()
+                # # Step 2: Extract embedding for test samples
+                test_embed = self._extract_embedding_single(batch_x, batch_x_mark)
+                # test_embeddings = self._extract_embeddings(test_data)
+
+                # Step 3: Find similar samples in train and validation set
+                similar_indices = self._find_similar_samples(
+                    test_embed, train_embeddings, val_embeddings, top_n=top_n
+                )
+
+                # Step 4: Fine-tune on similar samples
+                # load the trained model from the checkpoints dir
+                checkpoint_path = os.path.join('./checkpoints/' + setting, 'checkpoint.pth')
+                state_dict = torch.load(checkpoint_path)
+                exp = Exp_Logits_Forecast(self.args)
+                exp.model.load_state_dict(state_dict)
+                per_sample_model = exp.model
+                per_sample_model.to(self.device)
+
+                # Fine-tune adaptive model
+                self._fine_tune_model(
+                    per_sample_model,
+                    train_data,
+                    val_data,
+                    similar_indices,
+                    epochs=epochs,
+                    lr=learning_rate,
+                    batch_size=batch_size
+                )
+
+                # Get standard prediction from current model
                 if self.args.output_attention:
-                    outputs = adaptive_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                    outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                 else:
-                    outputs = adaptive_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
                 outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
                 output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
