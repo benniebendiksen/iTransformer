@@ -1423,10 +1423,13 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 if hasattr(self.model, 'enc_embedding'):
                     # For iTransformer model
                     embedding = self.model.enc_embedding(batch_x, batch_x_mark)
+                    (f"Embedding shape orig: {embedding.shape}")
 
                     # Flatten embedding for easier distance calculation
                     # Take mean across sequence dimension to get a single vector per sample
                     embedding = embedding.mean(dim=1).cpu().numpy()
+                    print(f"Embedding shape after mean: {embedding.shape}")
+
                 elif hasattr(self.model, 'encoder') and hasattr(self.model.encoder, 'attn_layers'):
                     # Another common architecture pattern
                     # First get the embedding
@@ -1665,8 +1668,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                         outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                     else:
                         outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
-                    print(f"outputs.requires_grad: {outputs.requires_grad}")  # should be True
 
                     # Process outputs
                     outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
