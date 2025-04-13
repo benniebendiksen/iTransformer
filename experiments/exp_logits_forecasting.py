@@ -1423,12 +1423,13 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 if hasattr(self.model, 'enc_embedding'):
                     # For iTransformer model
                     embedding = self.model.enc_embedding(batch_x, batch_x_mark)
-                    print(f"Embedding shape orig: {embedding.shape}")
+                    # print(f"Embedding shape orig: {embedding.shape}") # [1, 75, 512]
 
                     # Flatten embedding for easier distance calculation
                     # Take mean across sequence dimension to get a single vector per sample
-                    embedding = embedding.mean(dim=1).cpu().numpy()
-                    print(f"Embedding shape after mean: {embedding.shape}")
+                    # embedding = embedding.mean(dim=1).cpu().numpy()
+                    embedding = embedding.squeeze(0).cpu().numpy()  # [75, 512]
+                    # print(f"Embedding shape after mean: {embedding.shape}")
 
                 elif hasattr(self.model, 'encoder') and hasattr(self.model.encoder, 'attn_layers'):
                     # Another common architecture pattern
@@ -1486,49 +1487,87 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
     def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, top_n=10, similarity='cosine'):
         """
-        Find the most similar samples to the test sample
+        Find the most similar samples to the test sample using per-timestep similarity.
 
         Args:
-            test_embedding: Embedding of test sample
-            train_embeddings: Dictionary of train embeddings
-            val_embeddings: Dictionary of validation embeddings
-            top_n: Number of similar samples to find
-            similarity: Similarity metric to use ('cosine' or 'euclidean')
-
-        Returns:
-            List of tuples (dataset, index) for the most similar samples
+            test_embedding: [seq_len, embed_dim]
+            train_embeddings / val_embeddings: dict of {idx: embedding [seq_len, embed_dim]}
         """
+
+        def avg_cosine_similarity(seq1, seq2):
+            # Assumes shape [T, D]
+            cos_sims = [
+                np.dot(seq1[t], seq2[t]) / (np.linalg.norm(seq1[t]) * np.linalg.norm(seq2[t]) + 1e-8)
+                for t in range(seq1.shape[0])
+            ]
+            return np.mean(cos_sims)
+
         similarities = []
 
-        # Calculate similarity for training samples
         for idx, embed in train_embeddings.items():
             if similarity == 'cosine':
-                # Cosine similarity (higher is more similar)
-                sim = np.dot(test_embedding.flatten(), embed.flatten()) / (
-                        np.linalg.norm(test_embedding) * np.linalg.norm(embed)
-                )
+                sim = avg_cosine_similarity(test_embedding, embed)
                 similarities.append(('train', idx, sim))
             else:
-                # Euclidean distance (lower is more similar)
                 dist = np.linalg.norm(test_embedding - embed)
-                similarities.append(('train', idx, -dist))  # Negate so higher is more similar
+                similarities.append(('train', idx, -dist))
 
-        # Calculate similarity for validation samples
         for idx, embed in val_embeddings.items():
             if similarity == 'cosine':
-                sim = np.dot(test_embedding.flatten(), embed.flatten()) / (
-                        np.linalg.norm(test_embedding) * np.linalg.norm(embed)
-                )
+                sim = avg_cosine_similarity(test_embedding, embed)
                 similarities.append(('val', idx, sim))
             else:
                 dist = np.linalg.norm(test_embedding - embed)
                 similarities.append(('val', idx, -dist))
 
-        # Sort by similarity (descending)
         similarities.sort(key=lambda x: x[2], reverse=True)
-
-        # Return top N most similar
         return similarities[:top_n]
+
+    # def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, top_n=10, similarity='cosine'):
+    #     """
+    #     Find the most similar samples to the test sample
+    #
+    #     Args:
+    #         test_embedding: Embedding of test sample
+    #         train_embeddings: Dictionary of train embeddings
+    #         val_embeddings: Dictionary of validation embeddings
+    #         top_n: Number of similar samples to find
+    #         similarity: Similarity metric to use ('cosine' or 'euclidean')
+    #
+    #     Returns:
+    #         List of tuples (dataset, index) for the most similar samples
+    #     """
+    #     similarities = []
+    #
+    #     # Calculate similarity for training samples
+    #     for idx, embed in train_embeddings.items():
+    #         if similarity == 'cosine':
+    #             # Cosine similarity (higher is more similar)
+    #             sim = np.dot(test_embedding.flatten(), embed.flatten()) / (
+    #                     np.linalg.norm(test_embedding) * np.linalg.norm(embed)
+    #             )
+    #             similarities.append(('train', idx, sim))
+    #         else:
+    #             # Euclidean distance (lower is more similar)
+    #             dist = np.linalg.norm(test_embedding - embed)
+    #             similarities.append(('train', idx, -dist))  # Negate so higher is more similar
+    #
+    #     # Calculate similarity for validation samples
+    #     for idx, embed in val_embeddings.items():
+    #         if similarity == 'cosine':
+    #             sim = np.dot(test_embedding.flatten(), embed.flatten()) / (
+    #                     np.linalg.norm(test_embedding) * np.linalg.norm(embed)
+    #             )
+    #             similarities.append(('val', idx, sim))
+    #         else:
+    #             dist = np.linalg.norm(test_embedding - embed)
+    #             similarities.append(('val', idx, -dist))
+    #
+    #     # Sort by similarity (descending)
+    #     similarities.sort(key=lambda x: x[2], reverse=True)
+    #
+    #     # Return top N most similar
+    #     return similarities[:top_n]
 
     def _fine_tune_model(self, model, train_data, val_data, similar_indices, epochs=5, lr=0.0001, batch_size=4):
         """
