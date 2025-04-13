@@ -32,7 +32,7 @@ python -u run.py \
   --is_training 1 \
   --root_path ./dataset/logits/ \
   --data_path $data_path \
-  --model_id "1_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model_id "2_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
   --model $model_name \
   --data logits \
   --features MS \
