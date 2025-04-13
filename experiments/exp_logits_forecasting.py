@@ -1271,67 +1271,66 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 standard_probs.append(output_prob)
 
         # Process each test sample individually
-        with torch.no_grad():
-            for i in range(len(test_data)):
-                if i % 10 == 0:
-                    print(f"Processing test sample {i + 1}/{len(test_data)}")
+        for i in range(len(test_data)):
+            if i % 10 == 0:
+                print(f"Processing test sample {i + 1}/{len(test_data)}")
 
-                # Get current test sample
-                batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
+            # Get current test sample
+            batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
 
-                # Add batch dimension
-                batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
-                batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
-                batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
-                batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
+            # Add batch dimension
+            batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
+            batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
+            batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
+            batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
 
-                # Create decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+            # Create decoder input
+            dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+            dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
-                # # Step 2: Extract embedding for test samples
-                test_embed = self._extract_embedding_single(batch_x, batch_x_mark)
-                # test_embeddings = self._extract_embeddings(test_data)
+            # # Step 2: Extract embedding for test samples
+            test_embed = self._extract_embedding_single(batch_x, batch_x_mark)
+            # test_embeddings = self._extract_embeddings(test_data)
 
-                # Step 3: Find similar samples in train and validation set
-                similar_indices = self._find_similar_samples(
-                    test_embed, train_embeddings, val_embeddings, top_n=top_n
-                )
+            # Step 3: Find similar samples in train and validation set
+            similar_indices = self._find_similar_samples(
+                test_embed, train_embeddings, val_embeddings, top_n=top_n
+            )
 
-                # Step 4: Fine-tune on similar samples
-                # load the trained model from the checkpoints dir
-                checkpoint_path = os.path.join('./checkpoints/' + setting, 'checkpoint.pth')
-                state_dict = torch.load(checkpoint_path)
-                exp = Exp_Logits_Forecast(self.args)
-                exp.model.load_state_dict(state_dict)
-                per_sample_model = exp.model
-                per_sample_model.to(self.device)
+            # Step 4: Fine-tune on similar samples
+            # load the trained model from the checkpoints dir
+            checkpoint_path = os.path.join('./checkpoints/' + setting, 'checkpoint.pth')
+            state_dict = torch.load(checkpoint_path)
+            exp = Exp_Logits_Forecast(self.args)
+            exp.model.load_state_dict(state_dict)
+            per_sample_model = exp.model
+            per_sample_model.to(self.device)
 
-                # Fine-tune adaptive model
-                self._fine_tune_model(
-                    per_sample_model,
-                    train_data,
-                    val_data,
-                    similar_indices,
-                    epochs=epochs,
-                    lr=learning_rate,
-                    batch_size=batch_size
-                )
+            # Fine-tune adaptive model
+            self._fine_tune_model(
+                per_sample_model,
+                train_data,
+                val_data,
+                similar_indices,
+                epochs=epochs,
+                lr=learning_rate,
+                batch_size=batch_size
+            )
 
-                # Get standard prediction from current model
-                if self.args.output_attention:
-                    outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                else:
-                    outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+            # Get standard prediction from current model
+            if self.args.output_attention:
+                outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+            else:
+                outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
-                output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
-                output_binary = (output_prob > 0.5).astype(np.float32)
+            outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+            output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+            output_binary = (output_prob > 0.5).astype(np.float32)
 
-                # Store adaptive prediction
-                adaptive_preds.append(output_binary)
-                adaptive_trues.append(true_label)
-                adaptive_probs.append(output_prob)
+            # Store adaptive prediction
+            adaptive_preds.append(output_binary)
+            adaptive_trues.append(true_label)
+            adaptive_probs.append(output_prob)
 
         # Convert results to numpy arrays
         standard_preds = np.array(standard_preds)
@@ -1666,6 +1665,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                         outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                     else:
                         outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                    print(f"outputs.requires_grad: {outputs.requires_grad}")  # should be True
 
                     # Process outputs
                     outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
