@@ -1331,6 +1331,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             adaptive_preds.append(output_binary)
             adaptive_trues.append(true_label)
             adaptive_probs.append(output_prob)
+            print(f"Adaptive prediction for sample {i + 1}: {output_binary}, True Label: {true_label}, Probability: {output_prob}")
 
         # Convert results to numpy arrays
         standard_preds = np.array(standard_preds)
