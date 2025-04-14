@@ -1326,6 +1326,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
             output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
             output_binary = (output_prob > 0.5).astype(np.float32)
+            true_label = batch_y_last.detach().cpu().numpy()[0, 0]
 
             # Store adaptive prediction
             adaptive_preds.append(output_binary)
