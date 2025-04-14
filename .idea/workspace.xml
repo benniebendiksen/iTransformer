@@ -5,11 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/light_boost_feature_selection_2.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/run.py" beforeDir="false" afterPath="$PROJECT_DIR$/run.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/light_boost_feature_selection.py" beforeDir="false" afterPath="$PROJECT_DIR$/light_boost_feature_selection.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -65,8 +63,8 @@
       <recent name="$PROJECT_DIR$/dataset" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.light_boost_feature_selection">
-    <configuration name="light_boost_feature_selection" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+  <component name="RunManager" selected="Python.light_boost_feature_selection_2">
+    <configuration name="light_boost_feature_selection_2" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="iTransformer" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -80,7 +78,7 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/light_boost_feature_selection.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/light_boost_feature_selection_2.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -106,7 +104,7 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.light_boost_feature_selection" />
+        <item itemvalue="Python.light_boost_feature_selection_2" />
         <item itemvalue="Shell Script.iTransformer.sh" />
       </list>
     </recent_temporary>
@@ -175,7 +173,8 @@
       <workItem from="1744251067427" duration="7419000" />
       <workItem from="1744481411690" duration="24400000" />
       <workItem from="1744554756522" duration="15959000" />
-      <workItem from="1744642430286" duration="151000" />
+      <workItem from="1744642430286" duration="920000" />
+      <workItem from="1744655780366" duration="2081000" />
     </task>
     <servers />
   </component>
