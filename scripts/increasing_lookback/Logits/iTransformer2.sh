@@ -13,6 +13,7 @@ python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available(
 
 model_name=iTransformer
 
+exit 0
 
 # data_path="btcusdt_pca_components_12h_1d_53_07_05.csv"
 # juice-testing

@@ -16,7 +16,8 @@ model_name=iTransformer
 # baseline re-testing
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_60_7_5_1_2_1_old.csv"
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old.csv"
-data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_reproduced.csv"
+#data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_reproduced.csv"
+data_path="btcusd_pca_components_lightboost_12h_4h_reduced_reproduced_14_70_7_5_1_2_1_old.csv"
 seq_len=96
 pred_len=1
 #enc_in=65

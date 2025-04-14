@@ -6,6 +6,9 @@
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/run.py" beforeDir="false" afterPath="$PROJECT_DIR$/run.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -171,7 +174,8 @@
       <workItem from="1744055956266" duration="7200000" />
       <workItem from="1744251067427" duration="7419000" />
       <workItem from="1744481411690" duration="24400000" />
-      <workItem from="1744554756522" duration="15353000" />
+      <workItem from="1744554756522" duration="15959000" />
+      <workItem from="1744642430286" duration="151000" />
     </task>
     <servers />
   </component>
