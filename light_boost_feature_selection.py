@@ -86,8 +86,8 @@ def parse_args():
 
     # "Freeze" arguments for maintaining feature selection and train/val splits given a reference dataset and new data
     # parser.add_argument('--reference_csv', type=str, default=None,
-    #                     help='reference CSV file to maintain consistent feature selection and splits')
-    parser.add_argument('--reference_csv', type=str, default='./dataset/logits/btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old.csv',
+    #                     help='reference CSV file to maintain consistent feature selection')
+    parser.add_argument('--reference_csv', type=str, default='./optimized_features_light/btcusdt_12h_4h_complete_top_150_features_light_gbm_reproduced.csv',
                         help='reference CSV file to maintain consistent feature selection and splits')
     # parser.add_argument('--freeze_features', action='store_true',
     #                     help='use features from reference CSV instead of running feature selection')
@@ -1142,20 +1142,91 @@ def main():
     else:
         logger.info(f"Using '{args.reference_timestamp_col}' as reference timestamp column")
 
+    # Define essential columns that should always be included if they exist
+    essential_columns = ['timestamp', 'close', 'direction', 'price_direction', 'date']
+
     # Load reference data if specified
     ref_df = None
     ref_features = None
     if args.reference_csv:
         ref_df = load_reference_data(args)
         if args.freeze_features:
+            # Get the standard features from the reference
             ref_features = identify_features_from_reference(ref_df, args.reference_timestamp_col,
                                                             args.exclude_cols.split(','))
 
-    # Step 1: Load and prepare data
-    logger.info("STEP 1: Loading and preparing data")
+            # Make sure essential columns from reference are included
+            for col in essential_columns:
+                if col in ref_df.columns and col not in ref_features:
+                    logger.info(f"Adding essential column '{col}' from reference dataset")
+                    ref_features.append(col)
 
-    # Load data and ensure target column exists
-    df = load_data(args)
+            logger.info(f"Using {len(ref_features)} columns from reference dataset")
+
+            # We have a valid reference with features, we can load the source data now
+            logger.info("STEP 1: Loading and preparing data")
+            df = load_data(args)
+
+            # Add any essential columns from source that weren't in reference
+            for col in essential_columns:
+                if col in df.columns and col not in ref_features:
+                    logger.info(f"Adding essential column '{col}' from source data (not in reference)")
+                    ref_features.append(col)
+
+            # Check if all reference columns exist in source data
+            missing_cols = [col for col in ref_features if col not in df.columns]
+            if missing_cols:
+                logger.warning(f"The following columns from reference are missing in source data: {missing_cols}")
+                ref_features = [col for col in ref_features if col in df.columns]
+                logger.info(f"Will use remaining {len(ref_features)} columns that exist in source data")
+
+            # Skip to creating the processed dataset directly with reference features
+            # No need for train/val splitting or model training
+            logger.info("Creating processed dataset with reference columns")
+            df_processed = df[ref_features].copy()
+
+            # Create a dummy feature importance DataFrame
+            feature_importance = pd.DataFrame({
+                'Feature': ref_features,
+                'SplitImportance': range(len(ref_features), 0, -1),
+                'GainImportance': range(len(ref_features), 0, -1),
+                'SplitImportanceNorm': [1.0 / len(ref_features)] * len(ref_features),
+                'GainImportanceNorm': [1.0 / len(ref_features)] * len(ref_features)
+            })
+
+            # Create summary info about what we did
+            reference_info = {
+                'reference_file': args.reference_csv,
+                'used_columns_from_reference': True,
+                'num_columns_used': len(ref_features),
+                'missing_columns': missing_cols,
+                'essential_columns_included': [col for col in essential_columns if col in ref_features]
+            }
+
+            test_metrics = {'info': 'No model training or evaluation performed - just column selection'}
+
+            # Save the processed dataset
+            suffix = "refbased"
+            output_file = save_processed_dataset(df_processed, args, suffix)
+
+            # Save execution summary
+            summary_file = save_execution_summary(args, test_metrics, feature_importance, output_file, reference_info)
+
+            # Log completion
+            total_time = time.time() - start_time
+            logger.info(f"Completed column selection in {total_time:.2f} seconds")
+            logger.info(f"Processed dataset saved to: {output_file}")
+            logger.info(f"Execution summary: {summary_file}")
+            return
+
+    # If we get here, either no reference was provided, freeze_features is False,
+    # or there was an issue with the reference data.
+    # Continue with the regular feature selection workflow:
+
+    # Step 1: Load and prepare data (if not already done)
+    if 'df' not in locals():
+        logger.info("STEP 1: Loading and preparing data")
+        df = load_data(args)
 
     # Create data splits (aligned with reference if needed)
     train_df, val_df, test_df, full_df_with_split = prepare_data_splits(df, args, ref_df)
