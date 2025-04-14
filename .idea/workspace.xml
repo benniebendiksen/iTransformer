@@ -7,7 +7,6 @@
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/light_boost_feature_selection.py" beforeDir="false" afterPath="$PROJECT_DIR$/light_boost_feature_selection.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -172,7 +171,7 @@
       <workItem from="1744055956266" duration="7200000" />
       <workItem from="1744251067427" duration="7419000" />
       <workItem from="1744481411690" duration="24400000" />
-      <workItem from="1744554756522" duration="10686000" />
+      <workItem from="1744554756522" duration="11652000" />
     </task>
     <servers />
   </component>

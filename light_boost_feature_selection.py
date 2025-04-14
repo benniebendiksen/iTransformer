@@ -101,7 +101,8 @@ def parse_args():
                         help='timestamp column to use for aligning data')
     parser.add_argument('--remove_future_train_val', action='store_true',
                         help='remove future timestamps from train/val that did not exist in reference data')
-
+    parser.add_argument('--reference_timestamp_col', type=str, default='date',
+                        help='timestamp column in the reference dataset (if different from timestamp_col)')
     return parser.parse_args()
 
 
@@ -238,7 +239,7 @@ def identify_features_from_reference(ref_df, timestamp_col='timestamp', exclude_
     return feature_cols
 
 
-def align_reference_splits(new_df, ref_df, timestamp_col='timestamp', remove_future=False):
+def align_reference_splits(new_df, ref_df, timestamp_col='timestamp', ref_timestamp_col=None, remove_future=False):
     """
     Align the train/val/test splits between new data and reference data
     based on timestamps.
@@ -246,7 +247,8 @@ def align_reference_splits(new_df, ref_df, timestamp_col='timestamp', remove_fut
     Args:
         new_df: New DataFrame to be split
         ref_df: Reference DataFrame with existing splits
-        timestamp_col: Column containing timestamps for alignment
+        timestamp_col: Column containing timestamps in new_df for alignment
+        ref_timestamp_col: Column containing timestamps in ref_df (if different from timestamp_col)
         remove_future: If True, remove timestamps from train/val that didn't exist in reference data
 
     Returns:
@@ -258,24 +260,70 @@ def align_reference_splits(new_df, ref_df, timestamp_col='timestamp', remove_fut
 
     logger.info("Aligning train/val/test splits with reference data")
 
-    # Ensure timestamp column exists in both dataframes
-    if timestamp_col not in new_df.columns or timestamp_col not in ref_df.columns:
-        logger.warning(f"Timestamp column '{timestamp_col}' not found in both datasets, cannot align splits")
+    # If ref_timestamp_col not specified, use the same as timestamp_col
+    if ref_timestamp_col is None:
+        ref_timestamp_col = timestamp_col
+
+    # Ensure timestamp columns exist in respective dataframes
+    if timestamp_col not in new_df.columns:
+        logger.warning(f"Timestamp column '{timestamp_col}' not found in new dataset, cannot align splits")
         return new_df
+
+    if ref_timestamp_col not in ref_df.columns:
+        logger.warning(f"Timestamp column '{ref_timestamp_col}' not found in reference dataset, cannot align splits")
+        return new_df
+
+    logger.info(f"Using column '{timestamp_col}' in new data and '{ref_timestamp_col}' in reference data for alignment")
 
     # Create split column in new DataFrame
     new_df['split'] = 'test'  # Default all to test
 
     # Get reference timestamps for each split
-    ref_train_timestamps = set(ref_df[ref_df['split'] == 'train'][timestamp_col])
-    ref_val_timestamps = set(ref_df[ref_df['split'] == 'val'][timestamp_col])
+    ref_train_timestamps = set(ref_df[ref_df['split'] == 'train'][ref_timestamp_col])
+    ref_val_timestamps = set(ref_df[ref_df['split'] == 'val'][ref_timestamp_col])
+
+    # Check for type differences and try to handle them
+    sample_new_ts = new_df[timestamp_col].iloc[0] if len(new_df) > 0 else None
+    sample_ref_ts = ref_df[ref_timestamp_col].iloc[0] if len(ref_df) > 0 else None
+
+    if sample_new_ts is not None and sample_ref_ts is not None:
+        # Check if types differ (e.g., string vs datetime)
+        if type(sample_new_ts) != type(sample_ref_ts):
+            logger.warning(f"Type mismatch between timestamp columns: {type(sample_new_ts)} vs {type(sample_ref_ts)}")
+            logger.warning("Attempting to convert for comparison...")
+
+            # If either is a string, try to standardize format for comparison
+            if isinstance(sample_new_ts, str) or isinstance(sample_ref_ts, str):
+                # Convert both to strings with standardized format if possible
+                try:
+                    # Convert reference timestamps to strings for comparison
+                    ref_train_timestamps = {str(ts) for ts in ref_train_timestamps}
+                    ref_val_timestamps = {str(ts) for ts in ref_val_timestamps}
+
+                    # Create a string version of the new timestamp column for comparison
+                    new_df['_temp_ts_str'] = new_df[timestamp_col].astype(str)
+                    timestamp_col_for_alignment = '_temp_ts_str'
+                    logger.info("Using string representation of timestamps for alignment")
+                except Exception as e:
+                    logger.error(f"Failed to convert timestamps for comparison: {e}")
+                    timestamp_col_for_alignment = timestamp_col
+            else:
+                timestamp_col_for_alignment = timestamp_col
+        else:
+            timestamp_col_for_alignment = timestamp_col
+    else:
+        timestamp_col_for_alignment = timestamp_col
 
     # Align based on timestamps
-    train_mask = new_df[timestamp_col].isin(ref_train_timestamps)
-    val_mask = new_df[timestamp_col].isin(ref_val_timestamps)
+    train_mask = new_df[timestamp_col_for_alignment].isin(ref_train_timestamps)
+    val_mask = new_df[timestamp_col_for_alignment].isin(ref_val_timestamps)
 
     new_df.loc[train_mask, 'split'] = 'train'
     new_df.loc[val_mask, 'split'] = 'val'
+
+    # Clean up temporary column if created
+    if '_temp_ts_str' in new_df.columns:
+        new_df.drop('_temp_ts_str', axis=1, inplace=True)
 
     # Count the data points in each split
     train_count = len(new_df[new_df['split'] == 'train'])
@@ -289,12 +337,10 @@ def align_reference_splits(new_df, ref_df, timestamp_col='timestamp', remove_fut
 
     # Check if there are future timestamps in train/val splits that weren't in reference data
     if remove_future:
-        # Find the latest timestamp in reference data
-        ref_latest = ref_df[timestamp_col].max()
-
-        # Identify records in train/val that have timestamps beyond the reference data
+        # Find any records in train/val that have timestamps not in the reference train/val sets
         future_records = new_df[(new_df['split'].isin(['train', 'val'])) &
-                                (~new_df[timestamp_col].isin(ref_train_timestamps.union(ref_val_timestamps)))]
+                                (~new_df[timestamp_col_for_alignment].isin(
+                                    ref_train_timestamps.union(ref_val_timestamps)))]
 
         if len(future_records) > 0:
             logger.warning(f"Found {len(future_records)} records in train/val with timestamps not in reference data")
@@ -325,6 +371,7 @@ def prepare_data_splits(df, args, ref_df=None):
             df,
             ref_df,
             timestamp_col=args.timestamp_col,
+            ref_timestamp_col=args.reference_timestamp_col,
             remove_future=args.remove_future_train_val
         )
 
@@ -353,6 +400,123 @@ def prepare_data_splits(df, args, ref_df=None):
     logger.info(f"Test data: {test_df.shape}")
 
     return train_df, val_df, test_df, df
+
+
+# def align_reference_splits(new_df, ref_df, timestamp_col='timestamp', remove_future=False):
+#     """
+#     Align the train/val/test splits between new data and reference data
+#     based on timestamps.
+#
+#     Args:
+#         new_df: New DataFrame to be split
+#         ref_df: Reference DataFrame with existing splits
+#         timestamp_col: Column containing timestamps for alignment
+#         remove_future: If True, remove timestamps from train/val that didn't exist in reference data
+#
+#     Returns:
+#         DataFrame with aligned split column
+#     """
+#     if 'split' not in ref_df.columns:
+#         logger.warning("No 'split' column found in reference data, cannot align splits")
+#         return new_df
+#
+#     logger.info("Aligning train/val/test splits with reference data")
+#
+#     # Ensure timestamp column exists in both dataframes
+#     if timestamp_col not in new_df.columns or timestamp_col not in ref_df.columns:
+#         logger.warning(f"Timestamp column '{timestamp_col}' not found in both datasets, cannot align splits")
+#         return new_df
+#
+#     # Create split column in new DataFrame
+#     new_df['split'] = 'test'  # Default all to test
+#
+#     # Get reference timestamps for each split
+#     ref_train_timestamps = set(ref_df[ref_df['split'] == 'train'][timestamp_col])
+#     ref_val_timestamps = set(ref_df[ref_df['split'] == 'val'][timestamp_col])
+#
+#     # Align based on timestamps
+#     train_mask = new_df[timestamp_col].isin(ref_train_timestamps)
+#     val_mask = new_df[timestamp_col].isin(ref_val_timestamps)
+#
+#     new_df.loc[train_mask, 'split'] = 'train'
+#     new_df.loc[val_mask, 'split'] = 'val'
+#
+#     # Count the data points in each split
+#     train_count = len(new_df[new_df['split'] == 'train'])
+#     val_count = len(new_df[new_df['split'] == 'val'])
+#     test_count = len(new_df[new_df['split'] == 'test'])
+#
+#     logger.info(f"Split alignment results:")
+#     logger.info(f"  - Train: {train_count} records")
+#     logger.info(f"  - Validation: {val_count} records")
+#     logger.info(f"  - Test: {test_count} records")
+#
+#     # Check if there are future timestamps in train/val splits that weren't in reference data
+#     if remove_future:
+#         # Find the latest timestamp in reference data
+#         ref_latest = ref_df[timestamp_col].max()
+#
+#         # Identify records in train/val that have timestamps beyond the reference data
+#         future_records = new_df[(new_df['split'].isin(['train', 'val'])) &
+#                                 (~new_df[timestamp_col].isin(ref_train_timestamps.union(ref_val_timestamps)))]
+#
+#         if len(future_records) > 0:
+#             logger.warning(f"Found {len(future_records)} records in train/val with timestamps not in reference data")
+#             logger.warning("Moving these records to test split")
+#
+#             # Move these records to test split
+#             new_df.loc[future_records.index, 'split'] = 'test'
+#
+#             # Log updated counts
+#             train_count = len(new_df[new_df['split'] == 'train'])
+#             val_count = len(new_df[new_df['split'] == 'val'])
+#             test_count = len(new_df[new_df['split'] == 'test'])
+#
+#             logger.info(f"Updated split counts after moving future records:")
+#             logger.info(f"  - Train: {train_count} records")
+#             logger.info(f"  - Validation: {val_count} records")
+#             logger.info(f"  - Test: {test_count} records")
+#
+#     return new_df
+#
+#
+# def prepare_data_splits(df, args, ref_df=None):
+#     """Prepare data splits for training, validation, and testing"""
+#     # If we have a reference dataset and need to freeze train/val splits
+#     if ref_df is not None and args.freeze_train_val:
+#         logger.info("Using train/val splits from reference dataset")
+#         df = align_reference_splits(
+#             df,
+#             ref_df,
+#             timestamp_col=args.timestamp_col,
+#             remove_future=args.remove_future_train_val
+#         )
+#
+#         # Extract each split
+#         train_df = df[df['split'] == 'train'].copy()
+#         val_df = df[df['split'] == 'val'].copy()
+#         test_df = df[df['split'] == 'test'].copy()
+#
+#     else:
+#         # Create time-based splits as in the original code
+#         total_rows = len(df)
+#         train_end = int(total_rows * args.train_ratio)
+#         val_end = train_end + int(total_rows * args.val_ratio)
+#
+#         train_df = df.iloc[:train_end].copy()
+#         val_df = df.iloc[train_end:val_end].copy()
+#         test_df = df.iloc[val_end:].copy()
+#
+#         # Add split column for later use
+#         df['split'] = 'test'
+#         df.loc[:train_end, 'split'] = 'train'
+#         df.loc[train_end:val_end, 'split'] = 'val'
+#
+#     logger.info(f"Train data: {train_df.shape}")
+#     logger.info(f"Validation data: {val_df.shape}")
+#     logger.info(f"Test data: {test_df.shape}")
+#
+#     return train_df, val_df, test_df, df
 
 
 def prepare_features_targets(df, args, feature_cols=None, exclude_cols=None):
@@ -845,6 +1009,119 @@ def save_execution_summary(args, metrics, feature_importance, output_file, refer
     return summary_file
 
 
+# def main():
+#     """Main function for the optimized feature selection workflow"""
+#     start_time = time.time()
+#
+#     # Parse arguments
+#     args = parse_args()
+#
+#     # Create output directory
+#     os.makedirs(args.output_dir, exist_ok=True)
+#
+#     # Set random seed
+#     set_seed(args.seed)
+#
+#     # Load reference data if specified
+#     ref_df = None
+#     ref_features = None
+#     if args.reference_csv:
+#         ref_df = load_reference_data(args)
+#         if args.freeze_features:
+#             ref_features = identify_features_from_reference(ref_df, args.timestamp_col, args.exclude_cols.split(','))
+#
+#     # Step 1: Load and prepare data
+#     logger.info("STEP 1: Loading and preparing data")
+#
+#     # Load data and ensure target column exists
+#     df = load_data(args)
+#
+#     # Create data splits (aligned with reference if needed)
+#     train_df, val_df, test_df, full_df_with_split = prepare_data_splits(df, args, ref_df)
+#
+#     # Prepare features and targets (using reference features if specified)
+#     train_X, train_y, feature_cols = prepare_features_targets(train_df, args, feature_cols=ref_features)
+#     val_X, val_y, _ = prepare_features_targets(val_df, args, feature_cols=ref_features)
+#     test_X, test_y, _ = prepare_features_targets(test_df, args, feature_cols=ref_features)
+#
+#     # Track reference information for summary
+#     reference_info = None
+#     if args.reference_csv:
+#         reference_info = {
+#             'reference_file': args.reference_csv,
+#             'using_reference_features': args.freeze_features,
+#             'using_reference_splits': args.freeze_train_val,
+#             'num_reference_features': len(ref_features) if ref_features else 0,
+#             'train_size': len(train_df),
+#             'val_size': len(val_df),
+#             'test_size': len(test_df)
+#         }
+#         logger.info(f"Using reference data: {args.reference_csv}")
+#         if args.freeze_features:
+#             logger.info(f"Using {len(ref_features)} features from reference data")
+#         if args.freeze_train_val:
+#             logger.info(f"Using train/val splits from reference data")
+#
+#     # If we're using a reference but not freezing features, we need to run optimization
+#     if not args.freeze_features:
+#         # Step 2: Optimize LightGBM on full dataset
+#         logger.info("STEP 2: Optimizing LightGBM on full dataset")
+#         study = optimize_lightgbm(train_X, train_y, val_X, val_y, args)
+#
+#         # Step 3: Train final model with best parameters
+#         logger.info("STEP 3: Training final model with best hyperparameters")
+#         model = train_final_model(study.best_params, train_X, train_y, val_X, val_y, args)
+#
+#         # Step 4: Evaluate model on test set
+#         logger.info("STEP 4: Evaluating model on test set")
+#         test_metrics = evaluate_model(model, test_X, test_y, name="Test")
+#
+#         # Step 5: Calculate feature importance from optimized model
+#         logger.info("STEP 5: Calculating feature importance from optimized model")
+#         feature_importance, top_features = calculate_feature_importance(model, feature_cols, args)
+#
+#         # Save model
+#         logger.info("Saving LightGBM model")
+#         model_file = os.path.join(args.output_dir, 'optimized_lightgbm_model.joblib')
+#         joblib.dump(model, model_file)
+#     else:
+#         # Skip optimization and use reference features
+#         logger.info("Skipping optimization and using reference features")
+#         top_features = ref_features
+#         # Create a dummy feature importance DataFrame
+#         feature_importance = pd.DataFrame({
+#             'Feature': top_features,
+#             'SplitImportance': range(len(top_features), 0, -1),
+#             'GainImportance': range(len(top_features), 0, -1),
+#             'SplitImportanceNorm': [1.0 / len(top_features)] * len(top_features),
+#             'GainImportanceNorm': [1.0 / len(top_features)] * len(top_features)
+#         })
+#         test_metrics = {'info': 'No model evaluation performed when using reference features'}
+#
+#     # Step 6: Create processed dataset with top features or PCA
+#     logger.info("STEP 6: Creating processed dataset")
+#     df_processed = create_processed_dataset(full_df_with_split, top_features, args)
+#
+#     # Step 7: Save processed dataset
+#     logger.info("STEP 7: Saving processed dataset")
+#     # Add a suffix to indicate this is a reference-based processing if applicable
+#     suffix = "refbased" if args.reference_csv else None
+#     output_file = save_processed_dataset(df_processed, args, suffix)
+#
+#     # Save execution summary
+#     summary_file = save_execution_summary(args, test_metrics, feature_importance, output_file, reference_info)
+#
+#     # Log completion
+#     total_time = time.time() - start_time
+#     logger.info(f"Completed optimized feature selection workflow in {total_time:.2f} seconds")
+#     logger.info(f"All outputs saved to: {args.output_dir}")
+#     logger.info(f"Processed dataset ready for transformer model: {output_file}")
+#     logger.info(f"Execution summary: {summary_file}")
+#
+#
+# if __name__ == "__main__":
+#     main()
+
 def main():
     """Main function for the optimized feature selection workflow"""
     start_time = time.time()
@@ -858,13 +1135,21 @@ def main():
     # Set random seed
     set_seed(args.seed)
 
+    # Set reference timestamp column if not specified
+    if args.reference_timestamp_col is None:
+        args.reference_timestamp_col = args.timestamp_col
+        logger.info(f"Using '{args.timestamp_col}' as reference timestamp column")
+    else:
+        logger.info(f"Using '{args.reference_timestamp_col}' as reference timestamp column")
+
     # Load reference data if specified
     ref_df = None
     ref_features = None
     if args.reference_csv:
         ref_df = load_reference_data(args)
         if args.freeze_features:
-            ref_features = identify_features_from_reference(ref_df, args.timestamp_col, args.exclude_cols.split(','))
+            ref_features = identify_features_from_reference(ref_df, args.reference_timestamp_col,
+                                                            args.exclude_cols.split(','))
 
     # Step 1: Load and prepare data
     logger.info("STEP 1: Loading and preparing data")
@@ -887,6 +1172,8 @@ def main():
             'reference_file': args.reference_csv,
             'using_reference_features': args.freeze_features,
             'using_reference_splits': args.freeze_train_val,
+            'timestamp_column': args.timestamp_col,
+            'reference_timestamp_column': args.reference_timestamp_col,
             'num_reference_features': len(ref_features) if ref_features else 0,
             'train_size': len(train_df),
             'val_size': len(val_df),
