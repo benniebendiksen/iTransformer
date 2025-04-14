@@ -1,113 +1,160 @@
 #!/bin/bash
-#SBATCH --job-name=iTransformer_training
-#SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --mail-user=b.bendiksen001@umb.edu
-##SBATCH -p DGXA100
-#SBATCH -p Intel6240,Intel6248
-#SBATCH -A pi_funda.durupinarbabur
-#SBATCH --qos=scavenger
-##SBATCH -w chimera12
-#SBATCH -n 2                       # Number of cores
-##SBATCH -N 1                       # Ensure all cores are on one machine
-##SBATCH --gres=gpu:2               # Request 2 GPUs
-#SBATCH --export=HOME              # Export HOME environment variable for miniconda access
-#SBATCH --mem=64G                  # 64GB memory
-#SBATCH -t 3-23:59:59              # near 4 days runtime
-#SBATCH --output=slurm_outputs/itransformer_%A_%a.out
-#SBATCH --error=slurm_outputs/itransformer_%A_%a.err
-#SBATCH --array=0                # 0 = benchmark datasets, 1 = logits dataset
 
-. /etc/profile
+source ~/.bashrc
 eval "$(conda shell.bash hook)"
 conda activate gpu_env_copy
 
-echo "Job started at $(date)"
-echo "Running on host: $(hostname)"
-echo "Using $SLURM_CPUS_ON_NODE CPUs"
-echo "Using SLURM_ARRAY_TASK_ID: $SLURM_ARRAY_TASK_ID"
+# Debugging: Print the active environment and Python path
+echo "Activated Conda environment: $(conda info --envs | grep \*)"
+echo "Python path: $(which python)"
+python -c "import sys; print('Python version:', sys.version)"
+python -c "import torch; print('Torch version:', torch.__version__)"
+python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available())"
 
-# Function to run benchmark datasets on GPU 0
-run_benchmark_datasets() {
-    # Set environment to use GPU 0
-    #export CUDA_VISIBLE_DEVICES=0
+model_name=iTransformer
 
-    echo "============================================================"
-    echo "Running benchmark datasets on GPU 0"
-    echo "============================================================"
+# extended by 14 testing
+data_path="btcusd_pca_components_lightboost_12h_4h_reduced_extended_14_70_7_5_1_2_1_old.csv"
+seq_len=96
+pred_len=1
+#enc_in=65
+enc_in=75
+d_model=512
+data_file=$(basename "$data_path" .csv)
+python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/ \
+  --data_path $data_path \
+  --model_id "${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model $model_name \
+  --data logits \
+  --features MS \
+  --seq_len $seq_len \
+  --pred_len $pred_len \
+  --e_layers 4 \
+  --enc_in $enc_in \
+  --dec_in $enc_in \
+  --c_out 1 \
+  --des 'Logits' \
+  --d_model $d_model \
+  --d_ff $d_model \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 7 \
+  --exp_name logits \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1 \
+  --freq 12h \
 
+  exit 0
 
-    # Navigate to the project directory
-    cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
+data_path="btcusd_pca_components_lightboost_12h_4h_reduced_60_7_5_1_2_1_old.csv"
+seq_len=96
+pred_len=1
+enc_in=61
+d_model=512
+data_file=$(basename "$data_path" .csv)
+python -u run.py \
+  --is_training 1 \
+  --root_path ./dataset/logits/ \
+  --data_path $data_path \
+  --model_id "1_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+  --model $model_name \
+  --data logits \
+  --features MS \
+  --seq_len $seq_len \
+  --pred_len $pred_len \
+  --e_layers 4 \
+  --enc_in $enc_in \
+  --dec_in $enc_in \
+  --c_out 1 \
+  --des 'Logits' \
+  --d_model $d_model \
+  --d_ff $d_model \
+  --batch_size 32 \
+  --learning_rate 0.001 \
+  --itr 5 \
+  --train_epochs 50 \
+  --patience 7 \
+  --exp_name logits \
+  --target close \
+  --is_shorting 1 \
+  --precision_factor 2.0 \
+  --auto_weight 1 \
+  --freq 12h \
 
-    # Run the BCEWithLogitsLoss model
-    echo "Running logits dataset..."
-    bash ./scripts/increasing_lookback/Logits/iTransformer3.sh
-
-    echo "logits dataset completed"
-
-}
-
-
-run_logits_dataset() {
-    # Set environment to use GPU 1
-   # export CUDA_VISIBLE_DEVICES=1
-
-    echo "============================================================"
-    echo "Running logits dataset on GPU 1"
-    echo "============================================================"
-
-    # Navigate to the project directory
-    cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
-
-    # Run the BCEWithLogitsLoss model
-    echo "Running logits_2 dataset..."
-    bash ./scripts/increasing_lookback/Logits/iTransformer3.sh
-
-#    # Navigate to the project directory
-#    cd /hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/iTransformer
 #
-#    # Define the multivariate forecasting directory
-#    MULTI_DIR="./scripts/multivariate_forecasting"
+#seq_len=96
+#pred_len=1
+#enc_in=45
+#d_model=512
+#data_file=$(basename "$data_path" .csv)
+#python -u run.py \
+#  --is_training 1 \
+#  --root_path ./dataset/logits/ \
+#  --data_path $data_path \
+#  --model_id "1_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+#  --model $model_name \
+#  --data logits \
+#  --features MS \
+#  --seq_len $seq_len \
+#  --pred_len $pred_len \
+#  --e_layers 4 \
+#  --enc_in $enc_in \
+#  --dec_in $enc_in \
+#  --c_out 1 \
+#  --des 'Logits' \
+#  --d_model $d_model \
+#  --d_ff $d_model \
+#  --batch_size 32 \
+#  --learning_rate 0.001 \
+#  --itr 5 \
+#  --train_epochs 50 \
+#  --patience 7 \
+#  --exp_name logits \
+#  --target close \
+#  --is_shorting 1 \
+#  --precision_factor 2.0 \
+#  --auto_weight 1 \
+#  --freq 12h \
+#  --dropout 0.15 \
 #
-#    # ECL dataset
-#    echo "Running ECL dataset..."
-#    bash $MULTI_DIR/ECL/iTransformer.sh
 #
-#    # ETT dataset
-#    echo "Running ETT dataset..."
-#    bash $MULTI_DIR/ETT/iTransformer.sh
-#
-#    # Exchange dataset
-#    echo "Running Exchange dataset..."
-#    bash $MULTI_DIR/Exchange/iTransformer.sh
-#
-#    # PEMS dataset
-#    echo "Running PEMS dataset..."
-#    bash $MULTI_DIR/PEMS/iTransformer.sh
-#
-#    # Solar Energy dataset
-#    echo "Running Solar Energy dataset..."
-#    bash $MULTI_DIR/SolarEnergy/iTransformer.sh
-#
-#    # Traffic dataset
-#    echo "Running Traffic dataset..."
-#    bash $MULTI_DIR/Traffic/iTransformer.sh
-#
-#    # Weather dataset
-#    echo "Running Weather dataset..."
-#    bash $MULTI_DIR/Weather/iTransformer.sh
-#
-#    echo "All benchmark datasets completed"
-}
-
-# Main execution based on SLURM array task ID
-if [ $SLURM_ARRAY_TASK_ID -eq 0 ]; then
-    run_benchmark_datasets
-elif [ $SLURM_ARRAY_TASK_ID -eq 1 ]; then
-    run_logits_dataset
-else
-    echo "Unknown task ID: $SLURM_ARRAY_TASK_ID"
-    run_benchmark_datasets
-fi
-
-echo "Job completed at $(date)"
+#seq_len=96
+#pred_len=1
+#enc_in=45
+#d_model=512
+#data_file=$(basename "$data_path" .csv)
+#python -u run.py \
+#  --is_training 1 \
+#  --root_path ./dataset/logits/ \
+#  --data_path $data_path \
+#  --model_id "1_${data_file}_${seq_len}_${pred_len}_${enc_in}" \
+#  --model $model_name \
+#  --data logits \
+#  --features MS \
+#  --seq_len $seq_len \
+#  --pred_len $pred_len \
+#  --e_layers 4 \
+#  --enc_in $enc_in \
+#  --dec_in $enc_in \
+#  --c_out 1 \
+#  --des 'Logits' \
+#  --d_model $d_model \
+#  --d_ff $d_model \
+#  --batch_size 32 \
+#  --learning_rate 0.001 \
+#  --itr 5 \
+#  --train_epochs 50 \
+#  --patience 7 \
+#  --exp_name logits \
+#  --target close \
+#  --is_shorting 1 \
+#  --precision_factor 2.0 \
+#  --auto_weight 1 \
+#  --freq 12h \
+#  --dropout 0.2 \
