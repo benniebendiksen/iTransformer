@@ -87,7 +87,7 @@ def parse_args():
     # "Freeze" arguments for maintaining feature selection and train/val splits given a reference dataset and new data
     # parser.add_argument('--reference_csv', type=str, default=None,
     #                     help='reference CSV file to maintain consistent feature selection')
-    parser.add_argument('--reference_csv', type=str, default='./optimized_features_light/btcusdt_12h_4h_complete_top_150_features_light_gbm_reproduced.csv',
+    parser.add_argument('--reference_csv', type=str, default='./optimized_features_light/btcusdt_12h_4h_complete_top_150_features_light_gbm.csv',
                         help='reference CSV file to maintain consistent feature selection and splits')
     # parser.add_argument('--freeze_features', action='store_true',
     #                     help='use features from reference CSV instead of running feature selection')
