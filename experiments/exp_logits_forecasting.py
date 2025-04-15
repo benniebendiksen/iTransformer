@@ -1297,6 +1297,55 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             similar_indices = self._find_similar_samples(
                 test_embed, train_embeddings, test_embeddings, top_n=top_n
             )
+            # get mean probability of similar samples
+            mean_probs = []
+            for i in range(len(train_data)):
+                for sim_sample in similar_indices:
+                    if sim_sample[0] == "train":
+                        if sim_sample[1] == i:
+                            # get the probability of the sample
+                            batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
+                            batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
+                            batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
+                            batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
+                            batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
+
+                            # Create decoder input for similar samples
+                            dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
+                            dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim], dim=1).float().to(
+                                self.device)
+                            # Get the probability of the sample
+                            if self.args.output_attention:
+                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[0]
+                            else:
+                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
+                            outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
+                            output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
+                            mean_probs.append(output_prob_sim)
+
+            for i in range(len(test_data)):
+                for sim_sample in similar_indices:
+                    if sim_sample[0] == "val":
+                        if sim_sample[1] == i:
+                            # get the probability of the sample
+                            batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
+                            batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
+                            batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
+                            batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
+                            batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
+
+                            # Create decoder input for similar samples
+                            dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
+                            dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim], dim=1).float().to(
+                                self.device)
+                            # Get the probability of the sample
+                            if self.args.output_attention:
+                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[0]
+                            else:
+                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
+                            outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
+                            output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
+                            mean_probs.append(output_prob_sim)
 
             # Step 4: Fine-tune on similar samples
             # load the trained model from the checkpoints dir
@@ -1334,6 +1383,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             adaptive_trues.append(true_label)
             adaptive_probs.append(output_prob)
             print(f"Adaptive prediction for sample {i + 1}: {output_binary}, True Label: {true_label}, Probability: {output_prob}")
+            # print mean probabilities of similar samples
+            print(f"Mean probabilities of similar samples: {sum(mean_probs) / len(mean_probs)}")
 
             # standard model single test sample prediction
             if self.args.output_attention:
