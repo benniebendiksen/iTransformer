@@ -1212,6 +1212,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         print("\nExtracting embeddings from training and validation samples...")
         train_embeddings = self._extract_embeddings(train_data)
         val_embeddings = self._extract_embeddings(val_data)
+        # test_embeddings = self._extract_embeddings(test_data)
 
         # Create a new model with the same architecture
         # Only pass the arguments that the model constructor expects
@@ -1290,11 +1291,11 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
             # # Step 2: Extract embedding for test samples
             test_embed = self._extract_embedding_single(batch_x, batch_x_mark)
-            # test_embeddings = self._extract_embeddings(test_data)
+            test_embeddings = self._extract_embeddings(test_data, i)
 
             # Step 3: Find similar samples in train and validation set
             similar_indices = self._find_similar_samples(
-                test_embed, train_embeddings, val_embeddings, top_n=top_n
+                test_embed, train_embeddings, test_embeddings, top_n=top_n
             )
 
             # Step 4: Fine-tune on similar samples
@@ -1391,7 +1392,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             'adaptive': adaptive_metrics,
         }
 
-    def _extract_embeddings(self, dataset):
+    def _extract_embeddings(self, dataset, index=None):
         """
         Extract embeddings for all samples in a dataset
 
@@ -1406,6 +1407,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         self.model.eval()
         with torch.no_grad():
             for i in range(len(dataset)):
+                if index is not None and i == index:
+                    continue
                 batch_x, batch_y, batch_x_mark, batch_y_mark = dataset[i]
 
                 # Add batch dimension
