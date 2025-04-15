@@ -1299,6 +1299,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             )
             # get mean probability of similar samples
             mean_probs = []
+            mean_labels = []
             for i in range(len(train_data)):
                 for sim_sample in similar_indices:
                     if sim_sample[0] == "train":
@@ -1322,6 +1323,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                             outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
                             output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
                             mean_probs.append(output_prob_sim)
+                            mean_labels.append(batch_y_last_sim.detach().cpu().numpy()[0, 0])
 
             for i in range(len(test_data)):
                 for sim_sample in similar_indices:
@@ -1346,6 +1348,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                             outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
                             output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
                             mean_probs.append(output_prob_sim)
+                            mean_labels.append(batch_y_last_sim.detach().cpu().numpy()[0, 0])
 
             # Step 4: Fine-tune on similar samples
             # load the trained model from the checkpoints dir
@@ -1385,6 +1388,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print(f"Adaptive prediction for sample {i + 1}: {output_binary}, True Label: {true_label}, Probability: {output_prob}")
             # print mean probabilities of similar samples
             print(f"Mean probabilities of similar samples: {sum(mean_probs) / len(mean_probs)}")
+            # print mean labels of similar samples
+            print(f"Mean labels of similar samples: {sum(mean_labels) / len(mean_labels)}")
             # get mean probability of similar samples
             mean_adaptive_probs = []
             for i in range(len(train_data)):
