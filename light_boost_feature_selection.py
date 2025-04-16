@@ -127,6 +127,46 @@ def find_problematic_features(feature_names):
     return problematic
 
 
+def ensure_unique_feature_names(X):
+    """Ensure all feature names are unique by adding a suffix to duplicates"""
+    if isinstance(X, pd.DataFrame):
+        # Get column names
+        cols = X.columns.tolist()
+
+        # Check for duplicates
+        seen = {}
+        duplicates = []
+        for col in cols:
+            if col in seen:
+                duplicates.append(col)
+            else:
+                seen[col] = 1
+
+        # If duplicates found, rename them with a suffix
+        if duplicates:
+            print(f"Found {len(duplicates)} duplicate column names")
+            for dup in duplicates:
+                # Find all occurrences of this column name
+                indices = [i for i, col in enumerate(cols) if col == dup]
+
+                # Rename all but the first occurrence
+                for i, idx in enumerate(indices[1:], 1):
+                    new_name = f"{dup}_{i}"
+                    # Make sure the new name doesn't already exist
+                    while new_name in cols:
+                        i += 1
+                        new_name = f"{dup}_{i}"
+
+                    cols[idx] = new_name
+                    print(f"  Renamed duplicate column '{dup}' to '{new_name}'")
+
+            # Update DataFrame column names
+            X = X.copy()
+            X.columns = cols
+
+    return X
+
+
 def generate_target_column(df, price_col, seq_len, pred_len, target_col='price_direction'):
     """
     Generate binary labels for future price direction prediction.
@@ -273,9 +313,13 @@ def prepare_features_targets(df, args, exclude_cols=None):
     # Handle missing values using the non-deprecated methods
     X = X.ffill().bfill().fillna(0)
 
-    # Sanitize feature names
+    # First sanitize feature names
     X = sanitize_feature_names(X)
-    # Also update feature_cols to match the sanitized names
+
+    # Then ensure uniqueness after sanitization
+    X = ensure_unique_feature_names(X)
+
+    # Update feature_cols to match the final column names
     feature_cols = X.columns.tolist()
 
     print(f"Prepared features shape: {X.shape}")
