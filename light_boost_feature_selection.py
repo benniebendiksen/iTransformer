@@ -39,10 +39,10 @@ def parse_args():
     # Basic arguments
     parser.add_argument('--root_path', type=str, default='./dataset/logits/',
                         help='root path of the data file')
-    # parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_reattempt.csv',
-    #                      help='data file')
-    parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_april_15.csv',
-                        help='data file')
+    parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_reattempt.csv',
+                         help='data file')
+    #parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_april_15.csv',
+    #                    help='data file')
     parser.add_argument('--target', type=str, default='price_direction',
                         help='target column for binary prediction')
     parser.add_argument('--price_col', type=str, default='close',
