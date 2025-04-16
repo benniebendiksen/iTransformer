@@ -60,9 +60,9 @@ def parse_args():
     #                     help='ratio of data to use for training')
     # parser.add_argument('--val_ratio', type=float, default=0.07,
     #                     help='ratio of data to use for validation')
-    parser.add_argument('--train_ratio', type=float, default=0.90,
+    parser.add_argument('--train_ratio', type=float, default=0.9,
                         help='ratio of data to use for training')
-    parser.add_argument('--val_ratio', type=float, default=0.10,
+    parser.add_argument('--val_ratio', type=float, default=0.1,
                         help='ratio of data to use for validation')
 
     # Optimization arguments
