@@ -1,5 +1,7 @@
 import os
 import argparse
+import re
+
 import numpy as np
 import pandas as pd
 import torch
@@ -37,10 +39,10 @@ def parse_args():
     # Basic arguments
     parser.add_argument('--root_path', type=str, default='./dataset/logits/',
                         help='root path of the data file')
-    parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_reattempt.csv',
-                         help='data file')
-    # parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_april_15.csv',
-    #                     help='data file')
+    # parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_reattempt.csv',
+    #                      help='data file')
+    parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_april_15.csv',
+                        help='data file')
     parser.add_argument('--target', type=str, default='price_direction',
                         help='target column for binary prediction')
     parser.add_argument('--price_col', type=str, default='close',
@@ -68,7 +70,7 @@ def parse_args():
     # Optimization arguments
     # parser.add_argument('--n_trials', type=int, default=100,
     #                    help='number of hyperparameter optimization trials')
-    parser.add_argument('--n_trials', type=int, default=100,
+    parser.add_argument('--n_trials', type=int, default=150,
                         help='number of hyperparameter optimization trials')
     parser.add_argument('--cv_splits', type=int, default=3,
                         help='number of CV splits for time series evaluation')
@@ -106,6 +108,23 @@ def set_seed(seed):
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
     optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+def sanitize_feature_names(X):
+    """Clean feature names to make them compatible with LightGBM"""
+    if isinstance(X, pd.DataFrame):
+        # Replace problematic characters in column names
+        X = X.copy()
+        X.columns = [re.sub(r'[^\w_]+', '_', col) for col in X.columns]
+    return X
+
+def find_problematic_features(feature_names):
+    """Find feature names with special JSON characters"""
+    import re
+    problematic = []
+    for name in feature_names:
+        if re.search(r'[^\w_]+', name):
+            problematic.append(name)
+    return problematic
 
 
 def generate_target_column(df, price_col, seq_len, pred_len, target_col='price_direction'):
@@ -207,6 +226,32 @@ def prepare_data_splits(df, args):
     return train_df, val_df, test_df, df
 
 
+# def prepare_features_targets(df, args, exclude_cols=None):
+#     """Prepare feature matrix and target vector"""
+#     if exclude_cols is None:
+#         exclude_cols = args.exclude_cols.split(',')
+#
+#     # Make sure we add the target to exclude columns
+#     if args.target not in exclude_cols:
+#         exclude_cols.append(args.target)
+#
+#     # Add 'split' to exclude columns if present
+#     if 'split' in df.columns and 'split' not in exclude_cols:
+#         exclude_cols.append('split')
+#
+#     # Get features and target
+#     feature_cols = [col for col in df.columns if col not in exclude_cols]
+#     X = df[feature_cols]
+#     y = df[args.target].values
+#
+#     # Handle missing values using the non-deprecated methods
+#     X = X.ffill().bfill().fillna(0)
+#
+#     logger.info(f"Prepared features shape: {X.shape}")
+#     logger.info(f"Prepared target shape: {y.shape}")
+#
+#     return X, y, feature_cols
+
 def prepare_features_targets(df, args, exclude_cols=None):
     """Prepare feature matrix and target vector"""
     if exclude_cols is None:
@@ -228,8 +273,13 @@ def prepare_features_targets(df, args, exclude_cols=None):
     # Handle missing values using the non-deprecated methods
     X = X.ffill().bfill().fillna(0)
 
-    logger.info(f"Prepared features shape: {X.shape}")
-    logger.info(f"Prepared target shape: {y.shape}")
+    # Sanitize feature names
+    X = sanitize_feature_names(X)
+    # Also update feature_cols to match the sanitized names
+    feature_cols = X.columns.tolist()
+
+    print(f"Prepared features shape: {X.shape}")
+    print(f"Prepared target shape: {y.shape}")
 
     return X, y, feature_cols
 
@@ -468,7 +518,7 @@ def calculate_feature_importance(model, feature_names, args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Save feature importance to CSV
-    output_file = os.path.join(args.output_dir, 'feature_importance_lightboost.csv')
+    output_file = os.path.join(args.output_dir, 'feature_importance_lightboost_full_binance.csv')
     feature_importance.to_csv(output_file, index=False)
     logger.info(f"Saved feature importance to {output_file}")
 
@@ -584,95 +634,6 @@ def create_processed_dataset(df, top_features, args):
 
     return df_selected
 
-# def create_processed_dataset(df, top_features, args):
-#     """Create a processed dataset with only the top features or PCA components"""
-#     logger.info("Creating processed dataset")
-#
-#     # Ensure required columns are included
-#     essential_cols = ['split']
-#     if args.target not in top_features:
-#         essential_cols.append(args.target)
-#
-#     # Get time column if specified
-#     time_cols = []
-#     for col in df.columns:
-#         if 'time' in col.lower() or 'date' in col.lower():
-#             time_cols.append(col)
-#
-#     # Combine essential, time, and top feature columns
-#     all_cols = list(set(essential_cols + time_cols + top_features))
-#
-#     # Check if all columns exist in the dataframe
-#     missing_cols = [col for col in all_cols if col not in df.columns]
-#     if missing_cols:
-#         logger.warning(f"The following columns are missing in the dataset: {missing_cols}")
-#         all_cols = [col for col in all_cols if col in df.columns]
-#
-#     # Create DataFrame with selected columns
-#     df_selected = df[all_cols].copy()
-#     logger.info(f"Created dataset with top features, shape: {df_selected.shape}")
-#
-#     # Apply PCA if requested
-#     if args.use_pca:
-#         logger.info(f"Applying PCA to reduce dimensions from {len(top_features)} to {args.pca_components}")
-#
-#         # Extract feature data
-#         X = df_selected[top_features].values
-#
-#         # Handle missing values
-#         X = np.nan_to_num(X, nan=0.0)
-#
-#         # Apply PCA
-#         n_components = min(args.pca_components, len(top_features))
-#         pca = PCA(n_components=n_components)
-#         pca_result = pca.fit_transform(X)
-#
-#         # Create PCA component names and DataFrame
-#         pca_cols = [f'pca_comp_{i + 1}' for i in range(n_components)]
-#         pca_df = pd.DataFrame(pca_result, columns=pca_cols)
-#
-#         # Add essential columns back
-#         for col in essential_cols + time_cols:
-#             if col in df.columns:
-#                 pca_df[col] = df[col].values
-#
-#         # Replace selected DataFrame with PCA results
-#         df_selected = pca_df
-#         logger.info(f"Created PCA dataset with shape: {df_selected.shape}")
-#         logger.info(f"Total explained variance: {sum(pca.explained_variance_ratio_):.4f}")
-#
-#         # Save PCA model
-#         joblib.dump(pca, os.path.join(args.output_dir, 'pca_model.joblib'))
-#
-#         # Save PCA component details
-#         pca_info = pd.DataFrame({
-#             'Component': pca_cols,
-#             'ExplainedVariance': pca.explained_variance_ratio_,
-#             'CumulativeVariance': np.cumsum(pca.explained_variance_ratio_)
-#         })
-#         pca_info.to_csv(os.path.join(args.output_dir, 'pca_components.csv'), index=False)
-#
-#         # Create feature contribution to PCA components
-#         pca_feature_mapping = pd.DataFrame(index=range(len(pca_cols)))
-#         pca_feature_mapping['component'] = pca_cols
-#         pca_feature_mapping['explained_variance'] = pca.explained_variance_ratio_
-#
-#         # Add top 3 contributing features per component
-#         for i, comp in enumerate(pca_cols):
-#             loadings = pca.components_[i]
-#             top_indices = np.argsort(np.abs(loadings))[-3:]
-#             top_features_pca = [top_features[idx] for idx in top_indices]
-#             top_loadings = [loadings[idx] for idx in top_indices]
-#
-#             for j in range(3):
-#                 pca_feature_mapping.loc[i, f'top_feature_{j + 1}'] = top_features_pca[j]
-#                 pca_feature_mapping.loc[i, f'loading_{j + 1}'] = top_loadings[j]
-#
-#         pca_feature_mapping.to_csv(os.path.join(args.output_dir, 'pca_feature_mapping.csv'), index=False)
-#
-#     return df_selected
-
-
 def save_processed_dataset(df_processed, args):
     """Save the processed dataset for use in transformer models"""
     # Create filename based on processing method
@@ -787,6 +748,18 @@ def main():
 
     # Prepare features and targets
     train_X, train_y, feature_cols = prepare_features_targets(train_df, args)
+
+    problematic_features = find_problematic_features(feature_cols)
+    if problematic_features:
+        logger.warning(f"Found {len(problematic_features)} features with potentially problematic characters:")
+        for i, feat in enumerate(problematic_features[:10]):
+            print(f"  {i + 1}. {feat}")
+        if len(problematic_features) > 10:
+            print(f"  ... and {len(problematic_features) - 10} more")
+
+
+
+
     val_X, val_y, _ = prepare_features_targets(val_df, args)
     test_X, test_y, _ = prepare_features_targets(test_df, args)
 
