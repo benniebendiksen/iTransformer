@@ -56,13 +56,19 @@ def parse_args():
     parser.add_argument('--exclude_cols', type=str,
                         default='date,timestamp,unix_timestamp,open_time,close_time,12h_unix_timestamp,4h_batch1_unix_timestamp,4h_batch2_unix_timestamp,4h_batch3_unix_timestamp',
                         help='comma-separated columns to exclude from feature selection')
-    parser.add_argument('--train_ratio', type=float, default=0.88,
+    # parser.add_argument('--train_ratio', type=float, default=0.88,
+    #                     help='ratio of data to use for training')
+    # parser.add_argument('--val_ratio', type=float, default=0.07,
+    #                     help='ratio of data to use for validation')
+    parser.add_argument('--train_ratio', type=float, default=0.90,
                         help='ratio of data to use for training')
-    parser.add_argument('--val_ratio', type=float, default=0.07,
+    parser.add_argument('--val_ratio', type=float, default=0.10,
                         help='ratio of data to use for validation')
 
     # Optimization arguments
-    parser.add_argument('--n_trials', type=int, default=100,
+    # parser.add_argument('--n_trials', type=int, default=100,
+    #                    help='number of hyperparameter optimization trials')
+    parser.add_argument('--n_trials', type=int, default=120,
                         help='number of hyperparameter optimization trials')
     parser.add_argument('--cv_splits', type=int, default=3,
                         help='number of CV splits for time series evaluation')
@@ -462,7 +468,7 @@ def calculate_feature_importance(model, feature_names, args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Save feature importance to CSV
-    output_file = os.path.join(args.output_dir, 'feature_importance_lightboost.csv')
+    output_file = os.path.join(args.output_dir, 'feature_importance_lightboost_full_binance_data.csv')
     feature_importance.to_csv(output_file, index=False)
     logger.info(f"Saved feature importance to {output_file}")
 
