@@ -37,7 +37,9 @@ def parse_args():
     # Basic arguments
     parser.add_argument('--root_path', type=str, default='./dataset/logits/',
                         help='root path of the data file')
-    parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_reattempt.csv',
+    # parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_reattempt.csv',
+    #                     help='data file')
+    parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_april_15.csv',
                         help='data file')
     parser.add_argument('--target', type=str, default='price_direction',
                         help='target column for binary prediction')
@@ -71,7 +73,9 @@ def parse_args():
                         help='timeout for hyperparameter optimization in seconds')
 
     # Feature selection arguments
-    parser.add_argument('--top_n_features', type=int, default=150,
+    # parser.add_argument('--top_n_features', type=int, default=150,
+    #                     help='number of top features to select')
+    parser.add_argument('--top_n_features', type=int, default=180,
                         help='number of top features to select')
     parser.add_argument('--use_pca', action='store_true',
                         help='whether to apply PCA to the top features')
