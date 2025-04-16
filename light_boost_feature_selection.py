@@ -468,7 +468,7 @@ def calculate_feature_importance(model, feature_names, args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Save feature importance to CSV
-    output_file = os.path.join(args.output_dir, 'feature_importance_lightboost_full_binance_data.csv')
+    output_file = os.path.join(args.output_dir, 'feature_importance_lightboost.csv')
     feature_importance.to_csv(output_file, index=False)
     logger.info(f"Saved feature importance to {output_file}")
 
