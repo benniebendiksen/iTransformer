@@ -18,11 +18,12 @@ model_name=iTransformer
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old.csv"
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_reattempt_70_7_5_1_2_1_old.csv"
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_baseline.csv"
-data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_reordered.csv"
+#data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_reordered.csv"
+data_path="pca_components_btcusdt_71_april_15.csv"
 seq_len=96
 pred_len=1
 #enc_in=65
-enc_in=75
+enc_in=76
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
