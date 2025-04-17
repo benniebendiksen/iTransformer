@@ -800,7 +800,7 @@ def calculate_feature_importance(model, feature_names, args):
     top_n = min(args.top_n_features, len(feature_importance))
     top_features = feature_importance.head(top_n)['Feature'].tolist()
 
-    top_features_file = os.path.join(args.output_dir, 'top_features_lightboost_baseline.txt')
+    top_features_file = os.path.join(args.output_dir, 'top_features_lightboost_full_binance.txt')
     with open(top_features_file, 'w') as f:
         for feature in top_features:
             f.write(f"{feature}\n")
@@ -990,7 +990,7 @@ def save_execution_summary(args, metrics, feature_importance, output_file, refer
         'execution_time': time.strftime('%Y-%m-%d %H:%M:%S'),
         'metrics': metrics,
         'feature_importance_file': os.path.join(args.output_dir, 'feature_importance_lightboost.csv'),
-        'top_features_file': os.path.join(args.output_dir, 'top_features_lightboost_baseline.txt'),
+        'top_features_file': os.path.join(args.output_dir, 'top_features_lightboost_full_binance.txt'),
         'processed_dataset': output_file,
         'top_10_features': feature_importance.head(10)[['Feature', 'GainImportanceNorm']].to_dict('records')
     }
