@@ -11,6 +11,10 @@ python -c "import sys; print('Python version:', sys.version)"
 python -c "import torch; print('Torch version:', torch.__version__)"
 python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available())"
 
+
+exit 0
+
+
 model_name=iTransformer
 # data_path="btcusdt_pca_components_12h_1d_53_07_05.csv"
 # juice-testing
