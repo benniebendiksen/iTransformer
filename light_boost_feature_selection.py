@@ -62,9 +62,9 @@ def parse_args():
     #                     help='ratio of data to use for training')
     # parser.add_argument('--val_ratio', type=float, default=0.07,
     #                     help='ratio of data to use for validation')
-    parser.add_argument('--train_ratio', type=float, default=0.88,
+    parser.add_argument('--train_ratio', type=float, default=0.90,
                         help='ratio of data to use for training')
-    parser.add_argument('--val_ratio', type=float, default=0.07,
+    parser.add_argument('--val_ratio', type=float, default=0.05,
                         help='ratio of data to use for validation')
 
     # Optimization arguments
@@ -83,7 +83,7 @@ def parse_args():
     # Feature selection arguments
     # parser.add_argument('--top_n_features', type=int, default=150,
     #                     help='number of top features to select')
-    parser.add_argument('--top_n_features', type=int, default=180,
+    parser.add_argument('--top_n_features', type=int, default=150,
                         help='number of top features to select')
     parser.add_argument('--use_pca', action='store_true',
                         help='whether to apply PCA to the top features')
