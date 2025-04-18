@@ -17,10 +17,11 @@ model_name=iTransformer
 # juice-testing
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_fixed_val_start.csv"
 #data_path="pca_components_btcusdt_78_april_15_reduced.csv"
-data_path="pca_components_btcusdt_45_reattempt_12h.csv"
+#data_path="pca_components_btcusdt_45_reattempt_12h.csv"
+data_path="pca_components_btcusdt_49_12h_full_binance_4884_382.csv"
 seq_len=96
 pred_len=1
-enc_in=50
+enc_in=54
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
