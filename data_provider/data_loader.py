@@ -493,7 +493,6 @@ class Dataset_Crypto(Dataset):
             cols.remove(self.target)
             # Always remove date (processed separately)
             cols.remove('date')
-            print(f"{self.flag}: Removing date column")
 
             # Save feature list for summary
             self.feature_list = cols
@@ -551,7 +550,6 @@ class Dataset_Crypto(Dataset):
             # Automatic time features
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
-            print(f"the shape of data_stamp is: {data_stamp.shape}")
             self.time_encoding = 'auto'
         else:
             raise ValueError(f"Invalid timeenc argument: {self.timeenc}")

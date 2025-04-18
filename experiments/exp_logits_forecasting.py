@@ -1,3 +1,5 @@
+import sys
+
 import pandas as pd
 
 from data_provider.data_factory import data_provider
@@ -431,30 +433,29 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         print(f"Collected {len(all_preds)} predictions from test set")
 
-        # Show detailed label verification
-        # TODO: handle this debug case
-        print("\nLabel Verification with Detailed Metadata:")
-        print("-" * 140)
-        print(
-            f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
-        print("-" * 140)
+        # # Show detailed label verification
+        # print("\nLabel Verification with Detailed Metadata:")
+        # print("-" * 140)
+        # print(
+        #     f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
+        # print("-" * 140)
 
-        for i, meta in enumerate(all_metadata):
-            if i >= len(all_trues) or meta is None:
-                continue
-
-            orig_idx = meta['orig_start_idx']
-            pred_idx = meta['pred_idx']
-            pred_price = meta['pred_price']
-            future_price = meta['future_price']
-            price_change = meta['price_change']
-            stored_label = meta['label']
-            model_true = all_trues[i]
-            match = "✓" if abs(stored_label - model_true) < 0.01 else "✗"
-            timestamp = meta['timestamp']
-
-            print(
-                f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5} | {timestamp:<5}")
+        # for i, meta in enumerate(all_metadata):
+        #     if i >= len(all_trues) or meta is None:
+        #         continue
+        #
+        #     orig_idx = meta['orig_start_idx']
+        #     pred_idx = meta['pred_idx']
+        #     pred_price = meta['pred_price']
+        #     future_price = meta['future_price']
+        #     price_change = meta['price_change']
+        #     stored_label = meta['label']
+        #     model_true = all_trues[i]
+        #     match = "✓" if abs(stored_label - model_true) < 0.01 else "✗"
+        #     timestamp = meta['timestamp']
+        #
+        #     print(
+        #         f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5} | {timestamp:<5}")
 
         # Show summary statistics
         matches = sum(
@@ -463,6 +464,10 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             abs(meta['label'] - all_trues[i]) < 0.01)
         total = len([meta for meta in all_metadata if meta is not None])
         print(f"\nLabel Match Rate: {matches}/{total} ({matches / total * 100:.2f}%)")
+        # exit program if match rate is less than 100%
+        if matches / total < 1.0:
+            print(f"Label match rate is less than 100%. Exiting program: {matches / total}")
+            sys.exit(1)
 
         # Extract actual price changes from metadata
         actual_changes = []
@@ -662,14 +667,14 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             'pos_weight': negative_ratio / positive_ratio if positive_ratio > 0 else 1.0
         }
 
-        print(f"\nClass distribution in training data:")
-        print(f"Positive examples (price increases): {positive_ratio:.2%}")
-        print(f"Negative examples (price decreases or stays): {negative_ratio:.2%}")
-        print(f"Pos_weight for BCEWithLogitsLoss: {self.class_distribution['pos_weight']:.4f}")
-        print(f"Strategy: {'Shorting enabled' if self.is_shorting else 'No shorting (holding only)'}")
-        if not self.is_shorting:
-            print(f"Precision factor for non-shorting strategy: {self.precision_factor}")
-        print()
+        # print(f"\nClass distribution in training data:")
+        # print(f"Positive examples (price increases): {positive_ratio:.2%}")
+        # print(f"Negative examples (price decreases or stays): {negative_ratio:.2%}")
+        # print(f"Pos_weight for BCEWithLogitsLoss: {self.class_distribution['pos_weight']:.4f}")
+        # # print(f"Strategy: {'Shorting enabled' if self.is_shorting else 'No shorting (holding only)'}")
+        # # if not self.is_shorting:
+        # #     print(f"Precision factor for non-shorting strategy: {self.precision_factor}")
+        # print()
 
         # print test label distribution
         test_data, _ = self._get_data(flag='test')
@@ -1170,7 +1175,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         return
 
     # Adaptive fine-tuning method and helper methods
-    def adaptive_test(self, setting, test=0, top_n=10, epochs=5, learning_rate=0.0001, batch_size=4):
+    def adaptive_test(self, setting, test=0, top_n=50, epochs=5, learning_rate=0.0001, batch_size=4):
         """
         Test method with per-sample adaptive fine-tuning.
 
@@ -1212,7 +1217,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         print("\nExtracting embeddings from training and validation samples...")
         train_embeddings = self._extract_embeddings(train_data)
         val_embeddings = self._extract_embeddings(val_data)
-        # test_embeddings = self._extract_embeddings(test_data)
 
         # Create a new model with the same architecture
         # Only pass the arguments that the model constructor expects
@@ -1273,9 +1277,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         # Process each test sample individually
         for i in range(len(test_data)):
-            if i % 10 == 0:
-                print(f"Processing test sample {i + 1}/{len(test_data)}")
-
             # Get current test sample
             batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
 
@@ -1295,13 +1296,15 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
             # Step 3: Find similar samples in train and validation set
             similar_indices = self._find_similar_samples(
-                test_embed, train_embeddings, test_embeddings, top_n=top_n
+                test_embed, train_embeddings, val_embeddings, test_embeddings, top_n=top_n
             )
-            # get mean probability of similar samples
-            mean_probs = []
-            mean_labels = []
+            # get mean probability of similar samples once inferred
+            mean_probs_train = []
+            mean_sim_labels_train = []
+            mean_sim_preds_train = []
+            false_sim_train_pred_counter = 0
             for i in range(len(train_data)):
-                for sim_sample in similar_indices:
+                for sim_count, sim_sample in enumerate(similar_indices):
                     if sim_sample[0] == "train":
                         if sim_sample[1] == i:
                             # get the probability of the sample
@@ -1322,11 +1325,24 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                                 outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
                             outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
                             output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
-                            mean_probs.append(output_prob_sim)
-                            mean_labels.append(batch_y_last_sim.detach().cpu().numpy()[0, 0])
+                            # check if the prediction is correct
+                            output_binary_sim = (output_prob_sim > 0.5).astype(np.float32)
+                            true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
+                            if output_binary_sim != true_label_sim:
+                                false_sim_train_pred_counter += 1
+                                continue
+                            mean_probs_train.append(output_prob_sim)
+                            mean_sim_preds_train.append(output_binary_sim)
+                            mean_sim_labels_train.append(true_label_sim)
+                            if sim_count == 15:
+                                break
 
+            mean_probs_val = []
+            mean_sim_labels_val = []
+            mean_sim_preds_val = []
+            false_sim_val_pred_counter = 0
             for i in range(len(test_data)):
-                for sim_sample in similar_indices:
+                for sim_count, sim_sample in enumerate(similar_indices):
                     if sim_sample[0] == "val":
                         if sim_sample[1] == i:
                             # get the probability of the sample
@@ -1347,103 +1363,150 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                                 outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
                             outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
                             output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
-                            mean_probs.append(output_prob_sim)
-                            mean_labels.append(batch_y_last_sim.detach().cpu().numpy()[0, 0])
+                            output_binary_sim = (output_prob_sim > 0.5).astype(np.float32)
+                            true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
+                            if output_binary_sim != true_label_sim:
+                                false_sim_val_pred_counter += 1
+                                continue
 
-            # Step 4: Fine-tune on similar samples
-            # load the trained model from the checkpoints dir
-            checkpoint_path = os.path.join('./checkpoints/' + setting, 'checkpoint.pth')
-            state_dict = torch.load(checkpoint_path)
-            exp = Exp_Logits_Forecast(self.args)
-            exp.model.load_state_dict(state_dict)
-            per_sample_model = exp.model
-            per_sample_model.to(self.device)
+                            mean_probs_val.append(output_prob_sim)
+                            mean_sim_preds_val.append(output_binary_sim)
+                            mean_sim_labels_val.append(true_label_sim)
+                            if sim_count == 15:
+                                break
 
-            # Fine-tune adaptive model
-            self._fine_tune_model(
-                per_sample_model,
-                train_data,
-                val_data,
-                similar_indices,
-                epochs=epochs,
-                lr=learning_rate,
-                batch_size=batch_size
-            )
+            mean_probs_test = []
+            mean_sim_labels_test = []
+            mean_sim_preds_test = []
+            false_sim_test_pred_counter = 0
+            for i in range(len(test_data)):
+                for sim_count, sim_sample in enumerate(similar_indices):
+                    if sim_sample[0] == "test":
+                        if sim_sample[1] == i:
+                            # get the probability of the sample
+                            batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
+                            batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
+                            batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
+                            batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
+                            batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
 
-            # Get standard prediction from current model
-            if self.args.output_attention:
-                outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-            else:
-                outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                            # Create decoder input for similar samples
+                            dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
+                            dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim],
+                                                    dim=1).float().to(
+                                self.device)
+                            # Get the probability of the sample
+                            if self.args.output_attention:
+                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[
+                                    0]
+                            else:
+                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
+                            outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
+                            output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
+                            output_binary_sim = (output_prob_sim > 0.5).astype(np.float32)
+                            true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
+                            if output_binary_sim != true_label_sim:
+                                false_sim_test_pred_counter += 1
+                                continue
 
-            outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
-            output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
-            output_binary = (output_prob > 0.5).astype(np.float32)
-            true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+                            mean_probs_test.append(output_prob_sim)
+                            mean_sim_preds_test.append(output_binary_sim)
+                            mean_sim_labels_test.append(true_label_sim)
+                            if sim_count == 15:
+                                break
 
-            # Store adaptive prediction
-            adaptive_preds.append(output_binary)
-            adaptive_trues.append(true_label)
-            adaptive_probs.append(output_prob)
-            print(f"Adaptive prediction for sample {i + 1}: {output_binary}, True Label: {true_label}, Probability: {output_prob}")
+            # # Step 4: Fine-tune on similar samples
+            # # load the trained model from the checkpoints dir
+            # checkpoint_path = os.path.join('./checkpoints/' + setting, 'checkpoint.pth')
+            # state_dict = torch.load(checkpoint_path)
+            # exp = Exp_Logits_Forecast(self.args)
+            # exp.model.load_state_dict(state_dict)
+            # per_sample_model = exp.model
+            # per_sample_model.to(self.device)
+            #
+            # # Fine-tune adaptive model
+            # self._fine_tune_model(
+            #     per_sample_model,
+            #     train_data,
+            #     val_data,
+            #     similar_indices,
+            #     epochs=epochs,
+            #     lr=learning_rate,
+            #     batch_size=batch_size
+            # )
+            #
+            # # Get standard prediction from current model
+            # if self.args.output_attention:
+            #     outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+            # else:
+            #     outputs = per_sample_model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+            #
+            # outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+            # output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+            # output_binary = (output_prob > 0.5).astype(np.float32)
+            # true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+            #
+            # # Store adaptive prediction
+            # adaptive_preds.append(output_binary)
+            # adaptive_trues.append(true_label)
+            # adaptive_probs.append(output_prob)
+            # print(f"Adaptive prediction for sample {i + 1}: {output_binary}, True Label: {true_label}, Probability: {output_prob}")
+
             # print mean probabilities of similar samples
-            print(f"Mean probabilities of similar samples: {sum(mean_probs) / len(mean_probs)}")
-            # print mean labels of similar samples
-            print(f"Mean labels of similar samples: {sum(mean_labels) / len(mean_labels)}")
             # get mean probability of similar samples
-            mean_adaptive_probs = []
-            for i in range(len(train_data)):
-                for sim_sample in similar_indices:
-                    if sim_sample[0] == "train":
-                        if sim_sample[1] == i:
-                            # get the probability of the sample
-                            batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
-                            batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
-                            batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
+            # mean_adaptive_probs = []
+            # for i in range(len(train_data)):
+            #     for sim_sample in similar_indices:
+            #         if sim_sample[0] == "train":
+            #             if sim_sample[1] == i:
+            #                 # get the probability of the sample
+            #                 batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
+            #                 batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
+            #                 batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
+            #                 batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
+            #                 batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
+            #
+            #                 # Create decoder input for similar samples
+            #                 dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
+            #                 dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim],
+            #                                         dim=1).float().to(
+            #                     self.device)
+            #                 # Get the probability of the sample
+            #                 if self.args.output_attention:
+            #                     outputs_sim = per_sample_model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[
+            #                         0]
+            #                 else:
+            #                     outputs_sim = per_sample_model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
+            #                 outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
+            #                 output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
+            #                 mean_adaptive_probs.append(output_prob_sim)
 
-                            # Create decoder input for similar samples
-                            dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
-                            dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim],
-                                                    dim=1).float().to(
-                                self.device)
-                            # Get the probability of the sample
-                            if self.args.output_attention:
-                                outputs_sim = per_sample_model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[
-                                    0]
-                            else:
-                                outputs_sim = per_sample_model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
-                            outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
-                            output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
-                            mean_adaptive_probs.append(output_prob_sim)
-
-            for i in range(len(test_data)):
-                for sim_sample in similar_indices:
-                    if sim_sample[0] == "val":
-                        if sim_sample[1] == i:
-                            # get the probability of the sample
-                            batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
-                            batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
-                            batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
-
-                            # Create decoder input for similar samples
-                            dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
-                            dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim],
-                                                    dim=1).float().to(
-                                self.device)
-                            # Get the probability of the sample
-                            if self.args.output_attention:
-                                outputs_sim = per_sample_model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[
-                                    0]
-                            else:
-                                outputs_sim = per_sample_model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
-                            outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
-                            output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
-                            mean_adaptive_probs.append(output_prob_sim)
-            print(f"Mean probabilities of adaptive similar samples: {sum(mean_adaptive_probs) / len(mean_adaptive_probs)}")
+            # for i in range(len(test_data)):
+            #     for sim_sample in similar_indices:
+            #         if sim_sample[0] == "val":
+            #             if sim_sample[1] == i:
+            #                 # get the probability of the sample
+            #                 batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
+            #                 batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
+            #                 batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
+            #                 batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
+            #                 batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
+            #
+            #                 # Create decoder input for similar samples
+            #                 dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
+            #                 dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim],
+            #                                         dim=1).float().to(
+            #                     self.device)
+            #                 # Get the probability of the sample
+            #                 if self.args.output_attention:
+            #                     outputs_sim = per_sample_model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[
+            #                         0]
+            #                 else:
+            #                     outputs_sim = per_sample_model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
+            #                 outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
+            #                 output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
+            #                 mean_adaptive_probs.append(output_prob_sim)
+            # print(f"Mean probabilities of adaptive similar samples: {sum(mean_adaptive_probs) / len(mean_adaptive_probs)}")
 
             # standard model single test sample prediction
             if self.args.output_attention:
@@ -1454,53 +1517,57 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             outputs_last_std, batch_y_last_std, _, _ = self._process_outputs(outputs_std, batch_y)
             output_prob_std = torch.sigmoid(outputs_last_std).detach().cpu().numpy()[0, 0]
             output_binary_std = (output_prob_std > 0.5).astype(np.float32)
-            print(f"Standard prediction for sample {i + 1}: {output_binary_std}, True Label: {true_label}, Probability: {output_prob_std}")
+            print(f"Prediction for sample {i + 1}: {output_binary_std}, True Label: {true_label}, Probability: {output_prob_std}")
+            print(f"Train mean predictions for Sim samples: {sum(mean_sim_preds_train) / len(mean_sim_preds_train)}, Mean Label: {sum(mean_sim_labels_train) / len(mean_sim_labels_train)}, Mean Probs: {sum(mean_probs_train) / len(mean_probs_train)}, skipped: {false_sim_train_pred_counter}")
+            print(f"Val mean predictions for Sim samples: {sum(mean_sim_preds_val) / len(mean_sim_preds_val)}, Mean Label: {sum(mean_sim_labels_val) / len(mean_sim_labels_val)}, Mean Probs: {sum(mean_probs_val) / len(mean_probs_val)}, skipped: {false_sim_val_pred_counter}")
+            print(f"Test mean predictions for Sim samples: {sum(mean_sim_preds_test) / len(mean_sim_preds_test)}, Mean Label: {sum(mean_sim_labels_test) / len(mean_sim_labels_test)}, Mean Probs: {sum(mean_probs_test) / len(mean_probs_test)}, skipped: {false_sim_test_pred_counter}")
+            print(f"Combined mean predictions for Sim samples: {(sum(mean_sim_preds_train) + sum(mean_sim_preds_val) + sum(mean_sim_preds_test)) / (len(mean_sim_preds_train) + len(mean_sim_preds_val) + len(mean_sim_preds_test))}, Mean Label: {(sum(mean_sim_labels_train) + sum(mean_sim_labels_val) + sum(mean_sim_labels_test)) / (len(mean_sim_labels_train) + len(mean_sim_labels_val) + len(mean_sim_labels_test))}, Mean Probs: {(sum(mean_probs_train) + sum(mean_probs_val) + sum(mean_probs_test)) / (len(mean_probs_train) + len(mean_probs_val) + len(mean_probs_test))}, skipped: {false_sim_train_pred_counter + false_sim_val_pred_counter + false_sim_test_pred_counter}")
 
         # Convert results to numpy arrays
-        standard_preds = np.array(standard_preds)
-        standard_trues = np.array(standard_trues)
-        standard_probs = np.array(standard_probs)
-        adaptive_preds = np.array(adaptive_preds)
-        adaptive_trues = np.array(adaptive_trues)
-        adaptive_probs = np.array(adaptive_probs)
+        # standard_preds = np.array(standard_preds)
+        # standard_trues = np.array(standard_trues)
+        # standard_probs = np.array(standard_probs)
+        # adaptive_preds = np.array(adaptive_preds)
+        # adaptive_trues = np.array(adaptive_trues)
+        # adaptive_probs = np.array(adaptive_probs)
 
         # Calculate metrics for both methods
-        standard_metrics = self._calculate_test_metrics(standard_trues, standard_preds, standard_probs)
-        adaptive_metrics = self._calculate_test_metrics(adaptive_trues, adaptive_preds, adaptive_probs)
+        # standard_metrics = self._calculate_test_metrics(standard_trues, standard_preds, standard_probs)
+        # adaptive_metrics = self._calculate_test_metrics(adaptive_trues, adaptive_preds, adaptive_probs)
 
         # Compare the two methods
-        print("\n============= COMPARISON OF METHODS =============")
-        print("Standard Method:")
-        self._print_test_metrics(standard_metrics)
+        # print("\n============= COMPARISON OF METHODS =============")
+        # print("Standard Method:")
+        # self._print_test_metrics(standard_metrics)
 
-        print("\nAdaptive Fine-tuning Method:")
-        self._print_test_metrics(adaptive_metrics)
+        # print("\nAdaptive Fine-tuning Method:")
+        # self._print_test_metrics(adaptive_metrics)
 
         # Sample-by-sample comparison
-        correct_standard = (standard_preds == standard_trues).sum()
-        correct_adaptive = (adaptive_preds == adaptive_trues).sum()
-        improved = ((standard_preds != standard_trues) & (adaptive_preds == adaptive_trues)).sum()
-        degraded = ((standard_preds == standard_trues) & (adaptive_preds != adaptive_trues)).sum()
+        # correct_standard = (standard_preds == standard_trues).sum()
+        # correct_adaptive = (adaptive_preds == adaptive_trues).sum()
+        # improved = ((standard_preds != standard_trues) & (adaptive_preds == adaptive_trues)).sum()
+        # degraded = ((standard_preds == standard_trues) & (adaptive_preds != adaptive_trues)).sum()
 
-        print("\nSample-by-sample comparison:")
-        print(f"Samples improved by adaptive method: {improved} ({improved / len(test_data):.2%})")
-        print(f"Samples degraded by adaptive method: {degraded} ({degraded / len(test_data):.2%})")
-        print(f"Net improvement: {improved - degraded} samples ({(improved - degraded) / len(test_data):.2%})")
+        # print("\nSample-by-sample comparison:")
+        # print(f"Samples improved by adaptive method: {improved} ({improved / len(test_data):.2%})")
+        # print(f"Samples degraded by adaptive method: {degraded} ({degraded / len(test_data):.2%})")
+        # print(f"Net improvement: {improved - degraded} samples ({(improved - degraded) / len(test_data):.2%})")
 
         # Save results
-        folder_path = './results/' + setting + '/adaptive/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-
-        np.save(folder_path + 'standard_metrics.npy', standard_metrics)
-        np.save(folder_path + 'adaptive_metrics.npy', adaptive_metrics)
-        np.save(folder_path + 'standard_preds.npy', standard_preds)
-        np.save(folder_path + 'adaptive_preds.npy', adaptive_preds)
-
-        return {
-            'standard': standard_metrics,
-            'adaptive': adaptive_metrics,
-        }
+        # folder_path = './results/' + setting + '/adaptive/'
+        # if not os.path.exists(folder_path):
+        #     os.makedirs(folder_path)
+        #
+        # np.save(folder_path + 'standard_metrics.npy', standard_metrics)
+        # np.save(folder_path + 'adaptive_metrics.npy', adaptive_metrics)
+        # np.save(folder_path + 'standard_preds.npy', standard_preds)
+        # np.save(folder_path + 'adaptive_preds.npy', adaptive_preds)
+        #
+        # return {
+        #     'standard': standard_metrics,
+        #     'adaptive': adaptive_metrics,
+        # }
 
     def _extract_embeddings(self, dataset, index=None):
         """
@@ -1611,7 +1678,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         return embedding
 
-    def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, top_n=10, similarity='euclidean'):
+    def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, test_embeddings, similarity='cosine'):
         """
         Find the most similar samples to the test sample using per-timestep similarity.
 
@@ -1646,8 +1713,16 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 dist = np.linalg.norm(test_embedding - embed)
                 similarities.append(('val', idx, -dist))
 
+        for idx, embed in test_embeddings.items():
+            if similarity == 'cosine':
+                sim = avg_cosine_similarity(test_embedding, embed)
+                similarities.append(('test', idx, sim))
+            else:
+                dist = np.linalg.norm(test_embedding - embed)
+                similarities.append(('test', idx, -dist))
+
         similarities.sort(key=lambda x: x[2], reverse=True)
-        return similarities[:top_n]
+        return similarities
 
     # def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, top_n=10, similarity='cosine'):
     #     """
@@ -1957,7 +2032,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             cls['accuracy'] * 100, cls['precision'] * 100, cls['recall'] * 100, cls['f1'] * 100))
 
         print('\nTrading Performance:')
-        print('  Strategy: {}'.format('Short enabled' if trading['is_shorting'] else 'No shorting (holding only)'))
+        # print('  Strategy: {}'.format('Short enabled' if trading['is_shorting'] else 'No shorting (holding only)'))
         print('  Profitable Trades: {}, Total Trades: {}'.format(
             trading['profitable_trades'], trading['total_trades']))
         print('  Win Rate: {:.2f}%'.format(trading['win_rate'] * 100))
