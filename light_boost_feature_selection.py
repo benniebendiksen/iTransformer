@@ -39,7 +39,7 @@ def parse_args():
     # Basic arguments
     parser.add_argument('--root_path', type=str, default='./dataset/logits/',
                         help='root path of the data file')
-    parser.add_argument('--data_path', type=str, default='btcusdt_12h_historical_reduced_python_processed_1_2_1_old_reattempt.csv',
+    parser.add_argument('--data_path', type=str, default='btcusdt_12h_features_numeriques_april_15_reduced.csv',
                          help='data file')
     #parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_april_15.csv',
     #                    help='data file')
