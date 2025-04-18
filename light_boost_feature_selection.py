@@ -39,7 +39,7 @@ def parse_args():
     # Basic arguments
     parser.add_argument('--root_path', type=str, default='./dataset/logits/',
                         help='root path of the data file')
-    parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_april_15.csv',
+    parser.add_argument('--data_path', type=str, default='btcusdt_12h_historical_reduced_python_processed_1_2_1_old_reattempt.csv',
                          help='data file')
     #parser.add_argument('--data_path', type=str, default='btcusdt_12h_4h_complete_april_15.csv',
     #                    help='data file')
@@ -62,9 +62,9 @@ def parse_args():
     #                     help='ratio of data to use for training')
     # parser.add_argument('--val_ratio', type=float, default=0.07,
     #                     help='ratio of data to use for validation')
-    parser.add_argument('--train_ratio', type=float, default=0.90,
+    parser.add_argument('--train_ratio', type=float, default=0.88,
                         help='ratio of data to use for training')
-    parser.add_argument('--val_ratio', type=float, default=0.05,
+    parser.add_argument('--val_ratio', type=float, default=0.07,
                         help='ratio of data to use for validation')
 
     # Optimization arguments
@@ -83,7 +83,7 @@ def parse_args():
     # Feature selection arguments
     # parser.add_argument('--top_n_features', type=int, default=150,
     #                     help='number of top features to select')
-    parser.add_argument('--top_n_features', type=int, default=150,
+    parser.add_argument('--top_n_features', type=int, default=80,
                         help='number of top features to select')
     parser.add_argument('--use_pca', action='store_true',
                         help='whether to apply PCA to the top features')
@@ -562,7 +562,7 @@ def calculate_feature_importance(model, feature_names, args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Save feature importance to CSV
-    output_file = os.path.join(args.output_dir, 'feature_importance_lightboost_full_binance.csv')
+    output_file = os.path.join(args.output_dir, 'feature_importance_lightboost_12h_reduced__only.csv')
     feature_importance.to_csv(output_file, index=False)
     logger.info(f"Saved feature importance to {output_file}")
 
