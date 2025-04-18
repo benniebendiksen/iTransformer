@@ -72,7 +72,7 @@ def parse_args():
     #                    help='number of hyperparameter optimization trials')
     parser.add_argument('--n_trials', type=int, default=150,
                         help='number of hyperparameter optimization trials')
-    parser.add_argument('--cv_splits', type=int, default=3,
+    parser.add_argument('--cv_splits', type=int, default=5,
                         help='number of CV splits for time series evaluation')
     parser.add_argument('--optimize_metric', type=str, default='accuracy',
                         choices=['accuracy', 'precision', 'recall', 'f1', 'win_rate', 'profit_factor'],
