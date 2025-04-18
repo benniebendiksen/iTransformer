@@ -15,11 +15,12 @@ model_name=iTransformer
 
 # extended by 14 testing
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_60_7_5_1_2_1_old.csv"
-data_path="pca_components_btcusdt_57_12h_full_binance_reduced_07_05.csv"
+#data_path="pca_components_btcusdt_57_12h_full_binance_reduced_07_05.csv"
+data_path="pca_components_btcusdt_65_reattempt_12h.csv"
 seq_len=96
 pred_len=1
 #enc_in=65
-enc_in=62
+enc_in=70
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
