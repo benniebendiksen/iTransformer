@@ -18,16 +18,18 @@ model_name=iTransformer
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old.csv"
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_reattempt_70_7_5_1_2_1_old.csv"
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_baseline.csv"
-data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_reordered.csv"
 #data_path="pca_components_btcusdt_70_april_15_reduced.csv"
 #data_path="pca_components_btcusdt_70_april_15_reduced_extended_14_fixed_sizes.csv"
 #data_path="pca_components_btcusdt_68_april_15_reduced_extended_28_fixed_sizes.csv"
 #data_path="pca_components_btcusdt_70_april_15_reduced_extended_14_double_fixed_sizes.csv"
 # data_path="pca_components_btcusdt_70_april_15_to_date_fixed_train_val_size.csv"
+
+#data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_reordered.csv"
+data_path="pca_components_btcusdt_40_reattempt_12h_80_top.csv"
 seq_len=96
 pred_len=1
 #enc_in=65
-enc_in=75
+enc_in=45
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \

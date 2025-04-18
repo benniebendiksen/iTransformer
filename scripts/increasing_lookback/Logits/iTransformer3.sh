@@ -13,14 +13,12 @@ python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available(
 
 model_name=iTransformer
 
-exit 0
-
 # extended by 14 testing
-data_path="btcusd_pca_components_lightboost_12h_4h_reduced_extended_14_70_7_5_1_2_1_old.csv"
+data_path="btcusd_pca_components_lightboost_12h_4h_reduced_60_7_5_1_2_1_old.csv"
 seq_len=96
 pred_len=1
 #enc_in=65
-enc_in=75
+enc_in=65
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
