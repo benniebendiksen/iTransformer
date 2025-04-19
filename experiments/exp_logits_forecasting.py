@@ -1302,7 +1302,10 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             mean_probs_train = []
             mean_sim_labels_train = []
             false_sim_train_pred_counter = 0
+            break_outer = False
             for i in range(len(train_data)):
+                if break_outer:
+                    break
                 for sim_count, sim_sample in enumerate(similar_indices):
                     if sim_sample[0] == "train":
                         if sim_sample[1] == i:
@@ -1329,16 +1332,20 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                             true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
                             if output_binary_sim != true_label_sim:
                                 false_sim_train_pred_counter += 1
-                                continue
+                                break
                             mean_probs_train.append(output_prob_sim)
                             mean_sim_labels_train.append(true_label_sim)
-                            if sim_count == 15:
-                                break
+                            if len(mean_probs_train) == 15:
+                                break_outer = True
+                            break
 
             mean_probs_val = []
             mean_sim_labels_val = []
             false_sim_val_pred_counter = 0
+            break_outer = False
             for i in range(len(val_data)):
+                if break_outer:
+                    break
                 for sim_count, sim_sample in enumerate(similar_indices):
                     if sim_sample[0] == "val":
                         if sim_sample[1] == i:
@@ -1364,17 +1371,20 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                             true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
                             if output_binary_sim != true_label_sim:
                                 false_sim_val_pred_counter += 1
-                                continue
-
+                                break
                             mean_probs_val.append(output_prob_sim)
                             mean_sim_labels_val.append(true_label_sim)
-                            if sim_count == 15:
-                                break
+                            if len(mean_probs_val) == 15:
+                                break_outer = True
+                            break
 
             mean_probs_test = []
             mean_sim_labels_test = []
             false_sim_test_pred_counter = 0
+            break_outer = False
             for i in range(len(test_data)):
+                if break_outer:
+                    break
                 for sim_count, sim_sample in enumerate(similar_indices):
                     if sim_sample[0] == "test":
                         if sim_sample[1] == i:
@@ -1402,12 +1412,13 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                             true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
                             if output_binary_sim != true_label_sim:
                                 false_sim_test_pred_counter += 1
-                                continue
+                                break
 
                             mean_probs_test.append(output_prob_sim)
                             mean_sim_labels_test.append(true_label_sim)
-                            if sim_count == 15:
-                                break
+                            if len(mean_probs_test) == 15:
+                                break_outer = True
+                            break
 
             # # Step 4: Fine-tune on similar samples
             # # load the trained model from the checkpoints dir
