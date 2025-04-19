@@ -614,9 +614,10 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 f"{i:<8} | {ts_str:<20} | {prices[i]:<12.2f} | {all_preds[i]:<5.0f} | "
                 f"{all_trues[i]:<5.0f} | {all_probs[i]:<8.4f} | {actual_changes[i] * 100:>10.2f}% | {combined_returns[i]:>8.4%} | {cum_returns[i]:>12.4%}")
 
-        print(f"all preds: {all_preds}")
+        print(f"all preds: {', '.join(str(int(p)) for p in all_preds)}")
         print()
-        print(f"all trues: {all_trues}")
+        print(f"all trues: {', '.join(str(int(t)) for t in all_trues)}")
+
         # Return the results for further analysis
         return {
             'predictions': all_preds,
