@@ -1517,6 +1517,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print(f"Val Mean Label: {sum(mean_sim_labels_val) / len(mean_sim_labels_val)}, Mean Probs: {sum(mean_probs_val) / len(mean_probs_val)}, skipped: {false_sim_val_pred_counter}")
             print(f"Test Mean Label: {sum(mean_sim_labels_test) / len(mean_sim_labels_test)}, Mean Probs: {sum(mean_probs_test) / len(mean_probs_test)}, skipped: {false_sim_test_pred_counter}")
             print(f"Combined Mean Label: {(sum(mean_sim_labels_train) + sum(mean_sim_labels_val) + sum(mean_sim_labels_test)) / (len(mean_sim_labels_train) + len(mean_sim_labels_val) + len(mean_sim_labels_test))}, Mean Probs: {(sum(mean_probs_train) + sum(mean_probs_val) + sum(mean_probs_test)) / (len(mean_probs_train) + len(mean_probs_val) + len(mean_probs_test))}, skipped: {false_sim_train_pred_counter + false_sim_val_pred_counter + false_sim_test_pred_counter}")
+            print()
 
         # Convert results to numpy arrays
         # standard_preds = np.array(standard_preds)
