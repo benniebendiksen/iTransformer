@@ -1278,7 +1278,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         # Process each test sample individually
         for idx in range(len(test_data)):
             # Get current test sample
-            batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
+            batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[idx]
 
             # Add batch dimension
             batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
