@@ -1292,6 +1292,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
             # # Step 2: Extract embedding for test samples
             test_embed = self._extract_embedding_single(batch_x, batch_x_mark)
+            print(f"test_embed: {test_embed}")
             test_embeddings = self._extract_embeddings(test_data, idx)
 
             # Step 3: Find similar samples in train and validation set
@@ -1622,7 +1623,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             # This is model-specific and needs to be adapted to the actual model architecture
             try:
                 if hasattr(self.model, 'enc_embedding'):
-                    print("Using enc_embedding to extract embedding")
                     # For iTransformer model
                     embedding = self.model.enc_embedding(batch_x, batch_x_mark)
                     embedding, _attns = self.model.encoder(embedding, attn_mask=None)
@@ -1652,7 +1652,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 print(f"Error extracting embedding: {e}")
                 # Fall back to using raw features
                 embedding = batch_x.mean(dim=1).cpu().numpy()
-        print(f"Embedding: {embedding}")
         return embedding
 
     def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, test_embeddings, similarity='cosine'):
