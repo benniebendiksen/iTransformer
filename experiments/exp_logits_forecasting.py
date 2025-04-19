@@ -1296,7 +1296,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
             # Step 3: Find similar samples in train and validation set
             similar_indices = self._find_similar_samples(
-                test_embed, train_embeddings, val_embeddings, test_embeddings, top_n=top_n
+                test_embed, train_embeddings, val_embeddings, test_embeddings
             )
             # get mean probability of similar samples once inferred
             mean_probs_train = []

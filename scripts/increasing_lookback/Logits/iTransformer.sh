@@ -31,7 +31,7 @@ data_path="btcusdt_12h_historical_reduced_python_processed_1_2_1_old_reattempt_c
 seq_len=96
 pred_len=1
 #enc_in=65
-enc_in=72
+enc_in=73
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
