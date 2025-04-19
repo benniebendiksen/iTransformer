@@ -30,7 +30,8 @@ model_name=iTransformer
 # data_path="btcusdt_12h_historical_reduced_python_processed_1_2_1_old_reattempt_corr_removed.csv"
 
 #data_path="pca_components_btcusdt_12h_56_reduced.csv"
-data_path="pca_components_btcusdt_12h_55_reduced_attempt_2.csv"
+#data_path="pca_components_btcusdt_12h_55_reduced_attempt_2.csv"
+data_path="pca_components_btcusdt_12h_55_reduced_lance_seed.csv"
 
 seq_len=96
 pred_len=1
