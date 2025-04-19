@@ -1292,7 +1292,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
             # # Step 2: Extract embedding for test samples
             test_embed = self._extract_embedding_single(batch_x, batch_x_mark)
-            test_embeddings = self._extract_embeddings(test_data, i)
+            test_embeddings = self._extract_embeddings(test_data, idx)
 
             # Step 3: Find similar samples in train and validation set
             similar_indices = self._find_similar_samples(
