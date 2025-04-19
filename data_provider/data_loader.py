@@ -425,7 +425,7 @@ class Dataset_Crypto(Dataset):
             orig_idx = self.active_indices[i]
             pred_idx = orig_idx + self.seq_len
 
-            if pred_idx < len(close_prices) and pred_idx + self.pred_len < len(close_prices):
+            if pred_idx <= len(close_prices) and pred_idx + self.pred_len <= len(close_prices):
                 pred_price = close_prices[pred_idx]
                 future_price = close_prices[pred_idx + self.pred_len]
                 label = binary_labels[orig_idx, 0]  # Get the label that was calculated

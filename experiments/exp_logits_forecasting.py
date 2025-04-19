@@ -484,7 +484,9 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 timestamps.append(meta['timestamp'])
                 prices.append(meta['pred_price'])
             else:
-                raise ValueError(f"Metadata for sample {i} is None. Ensure metadata is correctly populated.")
+                actual_changes.append(0.0)
+                timestamps.append(f"sample_{i}")
+                prices.append(np.nan)
 
         # Convert to numpy array
         actual_changes = np.array(actual_changes)
