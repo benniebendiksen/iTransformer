@@ -1276,7 +1276,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 standard_probs.append(output_prob)
 
         # Process each test sample individually
-        for i in range(len(test_data)):
+        for idx in range(len(test_data)):
             # Get current test sample
             batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
 
@@ -1301,7 +1301,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             # get mean probability of similar samples once inferred
             mean_probs_train = []
             mean_sim_labels_train = []
-            mean_sim_preds_train = []
             false_sim_train_pred_counter = 0
             for i in range(len(train_data)):
                 for sim_count, sim_sample in enumerate(similar_indices):
@@ -1332,16 +1331,14 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                                 false_sim_train_pred_counter += 1
                                 continue
                             mean_probs_train.append(output_prob_sim)
-                            mean_sim_preds_train.append(output_binary_sim)
                             mean_sim_labels_train.append(true_label_sim)
                             if sim_count == 15:
                                 break
 
             mean_probs_val = []
             mean_sim_labels_val = []
-            mean_sim_preds_val = []
             false_sim_val_pred_counter = 0
-            for i in range(len(test_data)):
+            for i in range(len(val_data)):
                 for sim_count, sim_sample in enumerate(similar_indices):
                     if sim_sample[0] == "val":
                         if sim_sample[1] == i:
@@ -1370,14 +1367,12 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                                 continue
 
                             mean_probs_val.append(output_prob_sim)
-                            mean_sim_preds_val.append(output_binary_sim)
                             mean_sim_labels_val.append(true_label_sim)
                             if sim_count == 15:
                                 break
 
             mean_probs_test = []
             mean_sim_labels_test = []
-            mean_sim_preds_test = []
             false_sim_test_pred_counter = 0
             for i in range(len(test_data)):
                 for sim_count, sim_sample in enumerate(similar_indices):
@@ -1410,7 +1405,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                                 continue
 
                             mean_probs_test.append(output_prob_sim)
-                            mean_sim_preds_test.append(output_binary_sim)
                             mean_sim_labels_test.append(true_label_sim)
                             if sim_count == 15:
                                 break
@@ -1518,11 +1512,11 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             true_label_sim = batch_y_last_std.detach().cpu().numpy()[0, 0]
             output_prob_std = torch.sigmoid(outputs_last_std).detach().cpu().numpy()[0, 0]
             output_binary_std = (output_prob_std > 0.5).astype(np.float32)
-            print(f"Prediction for sample {i + 1}: {output_binary_std}, True Label: {true_label_sim}, Probability: {output_prob_std}")
-            print(f"Train mean predictions for Sim samples: {sum(mean_sim_preds_train) / len(mean_sim_preds_train)}, Mean Label: {sum(mean_sim_labels_train) / len(mean_sim_labels_train)}, Mean Probs: {sum(mean_probs_train) / len(mean_probs_train)}, skipped: {false_sim_train_pred_counter}")
-            print(f"Val mean predictions for Sim samples: {sum(mean_sim_preds_val) / len(mean_sim_preds_val)}, Mean Label: {sum(mean_sim_labels_val) / len(mean_sim_labels_val)}, Mean Probs: {sum(mean_probs_val) / len(mean_probs_val)}, skipped: {false_sim_val_pred_counter}")
-            print(f"Test mean predictions for Sim samples: {sum(mean_sim_preds_test) / len(mean_sim_preds_test)}, Mean Label: {sum(mean_sim_labels_test) / len(mean_sim_labels_test)}, Mean Probs: {sum(mean_probs_test) / len(mean_probs_test)}, skipped: {false_sim_test_pred_counter}")
-            print(f"Combined mean predictions for Sim samples: {(sum(mean_sim_preds_train) + sum(mean_sim_preds_val) + sum(mean_sim_preds_test)) / (len(mean_sim_preds_train) + len(mean_sim_preds_val) + len(mean_sim_preds_test))}, Mean Label: {(sum(mean_sim_labels_train) + sum(mean_sim_labels_val) + sum(mean_sim_labels_test)) / (len(mean_sim_labels_train) + len(mean_sim_labels_val) + len(mean_sim_labels_test))}, Mean Probs: {(sum(mean_probs_train) + sum(mean_probs_val) + sum(mean_probs_test)) / (len(mean_probs_train) + len(mean_probs_val) + len(mean_probs_test))}, skipped: {false_sim_train_pred_counter + false_sim_val_pred_counter + false_sim_test_pred_counter}")
+            print(f"Prediction for sample {idx + 1}: {output_binary_std}, True Label: {true_label_sim}, Probability: {output_prob_std}")
+            print(f"Train Mean Label: {sum(mean_sim_labels_train) / len(mean_sim_labels_train)}, Mean Probs: {sum(mean_probs_train) / len(mean_probs_train)}, skipped: {false_sim_train_pred_counter}")
+            print(f"Val Mean Label: {sum(mean_sim_labels_val) / len(mean_sim_labels_val)}, Mean Probs: {sum(mean_probs_val) / len(mean_probs_val)}, skipped: {false_sim_val_pred_counter}")
+            print(f"Test Mean Label: {sum(mean_sim_labels_test) / len(mean_sim_labels_test)}, Mean Probs: {sum(mean_probs_test) / len(mean_probs_test)}, skipped: {false_sim_test_pred_counter}")
+            print(f"Combined Mean Label: {(sum(mean_sim_labels_train) + sum(mean_sim_labels_val) + sum(mean_sim_labels_test)) / (len(mean_sim_labels_train) + len(mean_sim_labels_val) + len(mean_sim_labels_test))}, Mean Probs: {(sum(mean_probs_train) + sum(mean_probs_val) + sum(mean_probs_test)) / (len(mean_probs_train) + len(mean_probs_val) + len(mean_probs_test))}, skipped: {false_sim_train_pred_counter + false_sim_val_pred_counter + false_sim_test_pred_counter}")
 
         # Convert results to numpy arrays
         # standard_preds = np.array(standard_preds)
