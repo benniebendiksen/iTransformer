@@ -1292,7 +1292,6 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
             # # Step 2: Extract embedding for test samples
             test_embed = self._extract_embedding_single(batch_x, batch_x_mark)
-            print(f"test_embed: {test_embed}")
             test_embeddings = self._extract_embeddings(test_data, idx)
 
             # Step 3: Find similar samples in train and validation set
@@ -1303,124 +1302,108 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             mean_probs_train = []
             mean_sim_labels_train = []
             false_sim_train_pred_counter = 0
-            break_outer = False
-            for i in range(len(train_data)):
-                if break_outer:
-                    break
-                for sim_count, sim_sample in enumerate(similar_indices):
-                    if sim_sample[0] == "train":
-                        if sim_sample[1] == i:
-                            # get the probability of the sample
-                            batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
-                            batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
-                            batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
+            # Get top 15 similar train samples that are accurate
+            for sim_count, sim_sample in enumerate(similar_indices):
+                if sim_sample[0] == "train":
+                    # get the probability of the sample
+                    batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[sim_sample[1]]
+                    batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
+                    batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
+                    batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
+                    batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
 
-                            # Create decoder input for similar samples
-                            dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
-                            dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim], dim=1).float().to(
-                                self.device)
-                            # Get the probability of the sample
-                            if self.args.output_attention:
-                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[0]
-                            else:
-                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
-                            outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
-                            output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
-                            # check if the prediction is correct
-                            output_binary_sim = (output_prob_sim > 0.5).astype(np.float32)
-                            true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
-                            if output_binary_sim != true_label_sim:
-                                false_sim_train_pred_counter += 1
-                                break
-                            print(f"MeAN Sample {i}: output_prob_sim={output_prob_sim}, label={true_label_sim}")
-                            mean_probs_train.append(output_prob_sim)
-                            mean_sim_labels_train.append(true_label_sim)
-                            if len(mean_probs_train) == 15:
-                                break_outer = True
-                            break
+                    # Create decoder input for similar samples
+                    dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
+                    dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim], dim=1).float().to(
+                        self.device)
+                    # Get the probability of the sample
+                    if self.args.output_attention:
+                        outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[0]
+                    else:
+                        outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
+                    outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
+                    output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
+                    # check if the prediction is correct
+                    output_binary_sim = (output_prob_sim > 0.5).astype(np.float32)
+                    true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
+                    if output_binary_sim != true_label_sim:
+                        false_sim_train_pred_counter += 1
+                        continue
+                    mean_probs_train.append(output_prob_sim)
+                    mean_sim_labels_train.append(true_label)
+                    if len(mean_probs_train) == 15:
+                        break
+
 
             mean_probs_val = []
             mean_sim_labels_val = []
             false_sim_val_pred_counter = 0
-            break_outer = False
-            for i in range(len(val_data)):
-                if break_outer:
-                    break
-                for sim_count, sim_sample in enumerate(similar_indices):
-                    if sim_sample[0] == "val":
-                        if sim_sample[1] == i:
-                            # get the probability of the sample
-                            batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
-                            batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
-                            batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
+            # Get top 15 similar validation samples that are accurate
+            for sim_count, sim_sample in enumerate(similar_indices):
+                if sim_sample[0] == "val":
+                    # get the probability of the sample
+                    batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[sim_sample[1]]
+                    batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
+                    batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
+                    batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
+                    batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
 
-                            # Create decoder input for similar samples
-                            dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
-                            dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim], dim=1).float().to(
-                                self.device)
-                            # Get the probability of the sample
-                            if self.args.output_attention:
-                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[0]
-                            else:
-                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
-                            outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
-                            output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
-                            output_binary_sim = (output_prob_sim > 0.5).astype(np.float32)
-                            true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
-                            if output_binary_sim != true_label_sim:
-                                false_sim_val_pred_counter += 1
-                                break
-                            mean_probs_val.append(output_prob_sim)
-                            mean_sim_labels_val.append(true_label_sim)
-                            if len(mean_probs_val) == 15:
-                                break_outer = True
-                            break
+                    # Create decoder input for similar samples
+                    dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
+                    dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim], dim=1).float().to(
+                        self.device)
+                    # Get the probability of the sample
+                    if self.args.output_attention:
+                        outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[0]
+                    else:
+                        outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
+                    outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
+                    output_prob_val = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
+                    # check if the prediction is correct
+                    output_binary_val = (output_prob_val > 0.5).astype(np.float32)
+                    true_label_val = batch_y_last_sim.detach().cpu().numpy()[0, 0]
+                    if output_binary_val != true_label_val:
+                        false_sim_val_pred_counter += 1
+                        continue
+                    mean_probs_val.append(output_prob_val)
+                    mean_sim_labels_val.append(true_label)
+                    if len(mean_probs_val) == 15:
+                        break
 
             mean_probs_test = []
             mean_sim_labels_test = []
             false_sim_test_pred_counter = 0
-            break_outer = False
-            for i in range(len(test_data)):
-                if break_outer:
-                    break
-                for sim_count, sim_sample in enumerate(similar_indices):
-                    if sim_sample[0] == "test":
-                        if sim_sample[1] == i:
-                            # get the probability of the sample
-                            batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[i]
-                            batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
-                            batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
-                            batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
+            # Get top 15 similar test samples that are accurate
+            for sim_count, sim_sample in enumerate(similar_indices):
+                if sim_sample[0] == "test":
+                    # get the probability of the sample
+                    batch_x_sim, batch_y_sim, batch_x_mark_sim, batch_y_mark_sim = train_data[sim_sample[1]]
+                    batch_x_sim = torch.tensor(batch_x_sim).unsqueeze(0).float().to(self.device)
+                    batch_y_sim = torch.tensor(batch_y_sim).unsqueeze(0).float().to(self.device)
+                    batch_x_mark_sim = torch.tensor(batch_x_mark_sim).unsqueeze(0).float().to(self.device)
+                    batch_y_mark_sim = torch.tensor(batch_y_mark_sim).unsqueeze(0).float().to(self.device)
 
-                            # Create decoder input for similar samples
-                            dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
-                            dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim],
-                                                    dim=1).float().to(
-                                self.device)
-                            # Get the probability of the sample
-                            if self.args.output_attention:
-                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[
-                                    0]
-                            else:
-                                outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
-                            outputs_last_sim, batch_y_last_sim, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
-                            output_prob_sim = torch.sigmoid(outputs_last_sim).detach().cpu().numpy()[0, 0]
-                            output_binary_sim = (output_prob_sim > 0.5).astype(np.float32)
-                            true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
-                            if output_binary_sim != true_label_sim:
-                                false_sim_test_pred_counter += 1
-                                break
-
-                            mean_probs_test.append(output_prob_sim)
-                            mean_sim_labels_test.append(true_label_sim)
-                            if len(mean_probs_test) == 15:
-                                break_outer = True
-                            break
+                    # Create decoder input for similar samples
+                    dec_inp_sim = torch.zeros_like(batch_y_sim[:, -self.args.pred_len:, :]).float()
+                    dec_inp_sim = torch.cat([batch_y_sim[:, :self.args.label_len, :], dec_inp_sim], dim=1).float().to(
+                        self.device)
+                    # Get the probability of the sample
+                    if self.args.output_attention:
+                        outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)[0]
+                    else:
+                        outputs_sim = self.model(batch_x_sim, batch_x_mark_sim, dec_inp_sim, batch_y_mark_sim)
+                    outputs_last_test, batch_y_last_test, _, _ = self._process_outputs(outputs_sim, batch_y_sim)
+                    output_prob_test = torch.sigmoid(outputs_last_test).detach().cpu().numpy()[0, 0]
+                    # check if the prediction is correct
+                    output_binary_test = (output_prob_test > 0.5).astype(np.float32)
+                    true_label_test = batch_y_last_test.detach().cpu().numpy()[0, 0]
+                    if output_binary_test != true_label_test:
+                        false_sim_test_pred_counter += 1
+                        continue
+                    mean_probs_test.append(output_prob_test)
+                    mean_sim_labels_test.append(true_label)
+                    if len(mean_probs_test) == 15:
+                        break
 
             # # Step 4: Fine-tune on similar samples
             # # load the trained model from the checkpoints dir
