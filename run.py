@@ -100,7 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--auto_weight', type=int, default=0, help='automatically adjust weighting if set to 1')
 
     # command-line arguments for adaptive testing
-    parser.add_argument('--adaptive_test', default=True,
+    parser.add_argument('--adaptive_test', default=False,
                         help='whether to perform adaptive fine-tuning per test sample')
     parser.add_argument('--adaptive_top_n', type=int, default=10,
                         help='number of similar samples to use for adaptive fine-tuning')
