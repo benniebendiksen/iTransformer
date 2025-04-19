@@ -1330,7 +1330,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                         false_sim_train_pred_counter += 1
                         continue
                     mean_probs_train.append(output_prob_sim)
-                    mean_sim_labels_train.append(true_label)
+                    mean_sim_labels_train.append(true_label_sim)
                     if len(mean_probs_train) == 15:
                         break
 
@@ -1366,7 +1366,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                         false_sim_val_pred_counter += 1
                         continue
                     mean_probs_val.append(output_prob_val)
-                    mean_sim_labels_val.append(true_label)
+                    mean_sim_labels_val.append(true_label_val)
                     if len(mean_probs_val) == 15:
                         break
 
@@ -1401,7 +1401,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                         false_sim_test_pred_counter += 1
                         continue
                     mean_probs_test.append(output_prob_test)
-                    mean_sim_labels_test.append(true_label)
+                    mean_sim_labels_test.append(true_label_test)
                     if len(mean_probs_test) == 15:
                         break
 
