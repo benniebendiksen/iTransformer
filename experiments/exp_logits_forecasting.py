@@ -1333,6 +1333,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                             if output_binary_sim != true_label_sim:
                                 false_sim_train_pred_counter += 1
                                 break
+                            print(f"MeAN Sample {i}: output_prob_sim={output_prob_sim}, label={true_label_sim}")
                             mean_probs_train.append(output_prob_sim)
                             mean_sim_labels_train.append(true_label_sim)
                             if len(mean_probs_train) == 15:
