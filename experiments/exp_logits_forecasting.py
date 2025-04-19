@@ -481,16 +481,10 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 # Extract timestamp if available from test_df
                 orig_idx = meta['orig_start_idx']
                 pred_idx = meta['pred_idx']
-                if test_df is not None and pred_idx < len(test_df):
-                    timestamp = test_df.iloc[pred_idx]['date']
-                else:
-                    timestamp = f"sample_{i}"
-                timestamps.append(timestamp)
+                timestamps.append(meta['timestamp'])
                 prices.append(meta['pred_price'])
             else:
-                actual_changes.append(0.0)
-                timestamps.append(f"sample_{i}")
-                prices.append(np.nan)
+                raise ValueError(f"Metadata for sample {i} is None. Ensure metadata is correctly populated.")
 
         # Convert to numpy array
         actual_changes = np.array(actual_changes)
