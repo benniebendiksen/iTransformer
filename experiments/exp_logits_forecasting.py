@@ -1622,13 +1622,13 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             # This is model-specific and needs to be adapted to the actual model architecture
             try:
                 if hasattr(self.model, 'enc_embedding'):
+                    print("Using enc_embedding to extract embedding")
                     # For iTransformer model
                     embedding = self.model.enc_embedding(batch_x, batch_x_mark)
+                    embedding, _attns = self.model.encoder(embedding, attn_mask=None)
                     # print(f"Embedding shape orig: {embedding.shape}") # [1, 75, 512]
 
                     # Flatten embedding for easier distance calculation
-                    # Take mean across sequence dimension to get a single vector per sample
-                    # embedding = embedding.mean(dim=1).cpu().numpy()
                     embedding = embedding.squeeze(0).cpu().numpy()  # [75, 512]
                     # print(f"Embedding shape after mean: {embedding.shape}")
 
@@ -1636,8 +1636,10 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     # Another common architecture pattern
                     # First get the embedding
                     if hasattr(self.model, 'enc_embedding'):
+                        print("Using alternative enc_embedding to extract embedding")
                         enc_out = self.model.enc_embedding(batch_x, batch_x_mark)
                     else:
+                        print("Using batch_x directly to extract embedding")
                         # If no embedding layer, use input directly
                         enc_out = batch_x.transpose(1, 2)  # [B, N, L]
 
@@ -1645,45 +1647,12 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     enc_out = self.model.encoder.attn_layers[0](enc_out)
                     embedding = enc_out.mean(dim=1).cpu().numpy()
                 else:
-                    # For other model architectures, we'll use a feature-based approach
-                    print("Using feature-based embeddings as model architecture is different")
-                    # Combine both input features and time marks as a feature vector
-                    # Normalize batch_x if needed
-                    if self.args.use_norm:
-                        batch_mean = batch_x.mean(1, keepdim=True)
-                        batch_std = torch.sqrt(torch.var(batch_x, dim=1, keepdim=True, unbiased=False) + 1e-5)
-                        batch_x = (batch_x - batch_mean) / batch_std
-
-                    # Flatten and combine features
-                    x_flat = batch_x.reshape(batch_x.shape[0], -1)
-                    x_mark_flat = batch_x_mark.reshape(batch_x_mark.shape[0], -1)
-                    combined = torch.cat([x_flat, x_mark_flat], dim=1).cpu().numpy()
-
-                    # Apply dimensionality reduction if very high-dimensional
-                    if combined.shape[1] > 1000:
-                        # Simple dimensionality reduction by taking statistics
-                        # Mean, std, min, max, and a few percentiles for each channel
-                        stats = []
-                        for i in range(batch_x.shape[2]):  # For each channel
-                            channel_data = batch_x[:, :, i].cpu().numpy()
-                            channel_stats = [
-                                np.mean(channel_data, axis=1),
-                                np.std(channel_data, axis=1),
-                                np.min(channel_data, axis=1),
-                                np.max(channel_data, axis=1),
-                                np.percentile(channel_data, 25, axis=1),
-                                np.percentile(channel_data, 75, axis=1)
-                            ]
-                            stats.append(np.concatenate(channel_stats, axis=0))
-
-                        embedding = np.concatenate(stats, axis=0)
-                    else:
-                        embedding = combined
+                    raise ValueError("Model does not have enc_embedding or encoder with attn_layers")
             except Exception as e:
                 print(f"Error extracting embedding: {e}")
                 # Fall back to using raw features
                 embedding = batch_x.mean(dim=1).cpu().numpy()
-
+        print(f"Embedding: {embedding}")
         return embedding
 
     def _find_similar_samples(self, test_embedding, train_embeddings, val_embeddings, test_embeddings, similarity='cosine'):
