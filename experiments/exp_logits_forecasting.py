@@ -1197,6 +1197,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print('loading model')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
 
+        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
         # Load data
         train_data, _ = self._get_data(flag='train')
         val_data, _ = self._get_data(flag='val')
@@ -1306,6 +1307,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             true_sim_train_pred_counter = 0
             false_sim_train_pred_counter = 0
             total_counter = 0
+            trues = []
+            preds = []
             # Get top similar train samples across inaccurate and accurate predictions
             for sim_count, sim_sample in enumerate(similar_indices):
                 if sim_sample[0] == "train":
@@ -1330,6 +1333,9 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     # check if the prediction is correct
                     output_binary_sim = (output_prob_sim > 0.5).astype(np.float32)
                     true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
+                    # Store standard prediction
+                    preds.append(output_binary_sim)
+                    trues.append(true_label_sim)
                     if total_counter == 25:
                         break
                     if output_binary_sim == true_label_sim:
@@ -1344,6 +1350,16 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     mean_sim_labels_train.append(true_label_sim)
 
             train_prop_sim_accurate = true_sim_train_pred_counter / (true_sim_train_pred_counter + false_sim_train_pred_counter)
+            cm = confusion_matrix(trues, preds)
+            TN, FP = cm[0, 0], cm[0, 1]  # True Negative, False Positive
+            FN, TP = cm[1, 0], cm[1, 1]  # False Negative, True Positive
+            print(f'\nConfusion Matrix Test Sample {idx}:')
+            print(f'  True Positives: {TP}')
+            print(f'  True Negatives: {TN}')
+            print(f'  False Positives: {FP}')
+            print(f'  False Negatives: {FN}')
+            print(f'  Total Similarity Cases: {TP + TN + FP + FN}')
+
 
             mean_probs_val = []
             mean_sim_labels_val = []
