@@ -1350,6 +1350,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     mean_sim_labels_train.append(true_label_sim)
 
             train_prop_sim_accurate = true_sim_train_pred_counter / (true_sim_train_pred_counter + false_sim_train_pred_counter)
+            train_prop_sim_negative = false_sim_train_pred_counter / (true_sim_train_pred_counter + false_sim_train_pred_counter)
             cm = confusion_matrix(trues, preds)
             TN, FP = cm[0, 0], cm[0, 1]  # True Negative, False Positive
             FN, TP = cm[1, 0], cm[1, 1]  # False Negative, True Positive
@@ -1358,6 +1359,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print(f'  True Negatives: {TN}')
             print(f'  False Positives: {FP}')
             print(f'  False Negatives: {FN}')
+            print(f"Proportion of Accurate Positive Predictions: {train_prop_sim_accurate:.2f}")
+            print(f"Proportion of Accurate Negative Predictions: {train_prop_sim_negative:.2f}")
             print(f'  Total Similarity Cases: {TP + TN + FP + FN}')
 
 
