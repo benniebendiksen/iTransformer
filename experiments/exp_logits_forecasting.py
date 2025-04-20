@@ -1336,7 +1336,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     # Store standard prediction
                     preds.append(output_binary_sim)
                     trues.append(true_label_sim)
-                    if total_counter == 25:
+                    if total_counter == 10:
                         break
                     if output_binary_sim == true_label_sim:
                         true_sim_train_pred_counter += 1
@@ -1359,8 +1359,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print(f'  True Negatives: {TN}')
             print(f'  False Positives: {FP}')
             print(f'  False Negatives: {FN}')
-            print(f"Proportion of Accurate Positive Predictions: {train_prop_sim_accurate:.2f}")
-            print(f"Proportion of Accurate Negative Predictions: {train_prop_sim_negative:.2f}")
+            print(f"Proportion of Accurate Positive Predictions: {TP / (TP + FP):.2f}")
+            print(f"Proportion of Accurate Negative Predictions: {TN / (TN + FN):.2f}")
             print(f'  Total Similarity Cases: {TP + TN + FP + FN}')
 
 
