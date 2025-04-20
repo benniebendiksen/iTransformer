@@ -1541,33 +1541,47 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             true_label_sim = batch_y_last_std.detach().cpu().numpy()[0, 0]
             output_prob_std = torch.sigmoid(outputs_last_std).detach().cpu().numpy()[0, 0]
             output_binary_std = (output_prob_std > 0.5).astype(np.float32)
+
+            total_cases = TP + TN + FP + FN
+            total_pos = TP + FP
+            total_prop_pos = total_pos / total_cases
+            prop_pos_acc = TP / (TP + FP)
+            total_neg = TN + FN
+            total_prop_neg = total_neg / total_cases
+            prop_neg_acc = TN / (TN + FN)
             print(f"Prediction for sample {idx}: {output_binary_std}, True Label: {true_label_sim}, Probability: {output_prob_std}")
             print(f'\nTrain Confusion Matrix:')
             print(f'  True Positives: {TP}')
             print(f'  True Negatives: {TN}')
             print(f'  False Positives: {FP}')
             print(f'  False Negatives: {FN}')
-            print(f"Proportion of Accurate Positive Predictions: {TP / (TP + FP):.2f}")
-            print(f"Proportion of Accurate Negative Predictions: {TN / (TN + FN):.2f}")
-            print(f'  Total Similarity Cases: {TP + TN + FP + FN}')
+            print(f"Proportion of Accurate Positive Predictions: {prop_pos_acc:.2f}")
+            print(f"Proportion of Accurate Negative Predictions: {prop_neg_acc:.2f}")
+            print(f'  Total Similarity Cases: {total_cases}')
             # print expected value across positive and negative predictions
-            exp_val = ((TP + FP) / (TP + TN + FP + FN))(TP / (TP + FP)) - ((TN + FN) / (TP + TN + FP + FN))(TN / (TN + FN))
+            exp_val = total_prop_pos * prop_pos_acc - total_prop_neg * prop_neg_acc
             if exp_val > 0:
                 print(f"Expected Value of Similarity Cases: 1")
             else:
                 print(f"Expected Value of Similarity Cases: 0")
 
+            total_cases = TP_VAL + TN_VAL + FP_VAL + FN_VAL
+            total_pos = TP_VAL + FP_VAL
+            total_prop_pos = total_pos / total_cases
+            prop_pos_acc = TP_VAL / (TP_VAL + FP_VAL)
+            total_neg = TN_VAL + FN_VAL
+            total_prop_neg = total_neg / total_cases
+            prop_neg_acc = TN_VAL / (TN_VAL + FN_VAL)
             print(f'\nVal Confusion Matrix:')
             print(f'  True Positives: {TP_VAL}')
             print(f'  True Negatives: {TN_VAL}')
             print(f'  False Positives: {FP_VAL}')
             print(f'  False Negatives: {FN_VAL}')
-            print(f"Proportion of Accurate Positive Predictions: {TP_VAL / (TP_VAL + FP_VAL):.2f}")
-            print(f"Proportion of Accurate Negative Predictions: {TN_VAL / (TN_VAL + FN_VAL):.2f}")
-            print(f'  Total Similarity Cases: {TP_VAL + TN_VAL + FP_VAL + FN_VAL}')
+            print(f"Proportion of Accurate Positive Predictions: {prop_pos_acc:.2f}")
+            print(f"Proportion of Accurate Negative Predictions: {prop_neg_acc:.2f}")
+            print(f'  Total Similarity Cases: {total_cases}')
             # print expected value across positive and negative predictions
-            exp_val = ((TP_VAL + FP_VAL) / (TP_VAL + TN_VAL + FP_VAL + FN_VAL))(TP_VAL / (TP_VAL + FP_VAL)) - ((TN_VAL + FN_VAL) / (TP_VAL + TN_VAL + FP_VAL + FN_VAL))(
-                TN_VAL / (TN_VAL + FN_VAL))
+            exp_val = total_prop_pos * prop_pos_acc - total_prop_neg * prop_neg_acc
             if exp_val > 0:
                 print(f"Expected Value of Similarity Cases: 1")
             else:
