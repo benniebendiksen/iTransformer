@@ -38,7 +38,7 @@ data_path="pca_components_btcusdt_12h_46_07_05_lance_seed_april_15.csv"
 seq_len=96
 pred_len=1
 # enc_in=73
-enc_in=53
+enc_in=51
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
