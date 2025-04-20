@@ -10,16 +10,151 @@ from utils.metrics import metric
 import torch
 import torch.nn as nn
 from torch import optim
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+import matplotlib.pyplot as plt
 import os
 import time
 import warnings
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
+
 # Import our custom trading loss
 from utils.trading_loss import TradingBCELoss
 
 warnings.filterwarnings('ignore')
+
+
+# Define a simple FFN model
+class SimilarityPredictor(nn.Module):
+    def __init__(self, input_size=6, hidden_size=8, output_size=1):
+        super(SimilarityPredictor, self).__init__()
+        self.layer1 = nn.Linear(input_size, hidden_size)
+        self.relu = nn.ReLU()
+        self.layer2 = nn.Linear(hidden_size, hidden_size)
+        self.layer3 = nn.Linear(hidden_size, output_size)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.relu(x)
+        x = self.layer2(x)
+        x = self.relu(x)
+        x = self.layer3(x)
+        x = self.sigmoid(x)
+        return x
+
+
+# Function to train the model
+def train_consensus_model(features, labels, epochs=100, lr=0.01, batch_size=32):
+    # Convert to PyTorch tensors
+    X = torch.FloatTensor(features)
+    y = torch.FloatTensor(labels).view(-1, 1)
+
+    # Create dataset and dataloader
+    dataset = TensorDataset(X, y)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    # Initialize model, loss function, and optimizer
+    model = SimilarityPredictor()
+    criterion = nn.BCELoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+
+    # Training loop
+    losses = []
+    for epoch in range(epochs):
+        epoch_loss = 0
+        for batch_X, batch_y in dataloader:
+            # Forward pass
+            outputs = model(batch_X)
+            loss = criterion(outputs, batch_y)
+
+            # Backward and optimize
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item()
+
+        avg_loss = epoch_loss / len(dataloader)
+        losses.append(avg_loss)
+
+        if (epoch + 1) % 10 == 0:
+            print(f'Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}')
+
+    # Plot the training loss
+    plt.figure(figsize=(10, 5))
+    plt.plot(losses)
+    plt.title('Training Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    plt.show()
+
+    return model
+
+
+# Modified code for your original snippet with the FFN model
+def process_confusion_matrix(TP, TN, FP, FN, output_binary_std, output_prob_std, true_label_sim, idx=None,
+                             model=None, features_history=None, labels_history=None, is_test_sample=False):
+    total_cases = TP + TN + FP + FN
+    total_pos = TP + FP
+    total_prop_pos = total_pos / total_cases
+    prop_pos_acc = TP / (TP + FP) if (TP + FP) > 0 else 0
+    total_neg = TN + FN
+    total_prop_neg = total_neg / total_cases
+    prop_neg_acc = TN / (TN + FN) if (TN + FN) > 0 else 0
+
+    # Calculate the simple expected value as before
+    simple_exp_val = total_prop_pos * prop_pos_acc - total_prop_neg * prop_neg_acc
+    simple_prediction = 1 if simple_exp_val > 0 else 0
+
+    # Display basic information
+    if idx is not None:
+        print(
+            f"Prediction for sample {idx}: {output_binary_std}, True Label: {true_label_sim}, Probability: {output_prob_std:.4f}")
+
+    print(f'\nConfusion Matrix:')
+    print(f'  True Positives: {TP}')
+    print(f'  True Negatives: {TN}')
+    print(f'  False Positives: {FP}')
+    print(f'  False Negatives: {FN}')
+    print(f"Proportion of Accurate Positive Predictions: {prop_pos_acc:.2f}")
+    print(f"Proportion of Accurate Negative Predictions: {prop_neg_acc:.2f}")
+    print(f'  Total Similarity Cases: {total_cases}')
+
+    # Store the features and labels for model training (only for training data)
+    if features_history is not None and labels_history is not None and not is_test_sample:
+        features = [output_binary_std, output_prob_std, TP, TN, FP, FN]
+        features_history.append(features)
+        labels_history.append(true_label_sim)
+
+    # Make prediction using the model if available
+    if model is not None:
+        # Prepare features
+        input_features = torch.FloatTensor([output_binary_std, output_prob_std, TP, TN, FP, FN])
+
+        # Get model prediction
+        with torch.no_grad():
+            model_pred_prob = model(input_features).item()
+            model_pred = 1 if model_pred_prob >= 0.5 else 0
+
+        sample_type = "TEST SAMPLE" if is_test_sample else "TRAINING SAMPLE"
+        print(f"[{sample_type}]")
+        print(f"Simple Expected Value: {simple_exp_val:.4f} → Prediction: {simple_prediction}")
+        print(f"FFN Model Prediction: {model_pred} (Probability: {model_pred_prob:.4f})")
+
+        return model_pred, model_pred_prob
+    else:
+        # Fall back to simple expected value if no model is available
+        print(f"Simple Expected Value of Similarity Cases: {simple_exp_val:.4f}")
+        if simple_exp_val > 0:
+            print(f"Expected Value Prediction: 1")
+        else:
+            print(f"Expected Value Prediction: 0")
+
+        return simple_prediction, abs(simple_exp_val)
 
 
 class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
@@ -1203,6 +1338,11 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         val_data, _ = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
 
+        # Initialize empty lists to store features and labels for similarity results across test samples, then to train
+        features_history = []
+        labels_history = []
+        consensus_model = None
+
         # Prepare for storing results
         standard_preds = []
         standard_trues = []
@@ -1538,7 +1678,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 outputs_std = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
             outputs_last_std, batch_y_last_std, _, _ = self._process_outputs(outputs_std, batch_y)
-            true_label_sim = batch_y_last_std.detach().cpu().numpy()[0, 0]
+            true_label_std = batch_y_last_std.detach().cpu().numpy()[0, 0]
             output_prob_std = torch.sigmoid(outputs_last_std).detach().cpu().numpy()[0, 0]
             output_binary_std = (output_prob_std > 0.5).astype(np.float32)
 
@@ -1549,21 +1689,11 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             total_neg = TN + FN
             total_prop_neg = total_neg / total_cases
             prop_neg_acc = TN / (TN + FN)
-            print(f"Prediction for sample {idx}: {output_binary_std}, True Label: {true_label_sim}, Probability: {output_prob_std}")
-            print(f'\nTrain Confusion Matrix:')
-            print(f'  True Positives: {TP}')
-            print(f'  True Negatives: {TN}')
-            print(f'  False Positives: {FP}')
-            print(f'  False Negatives: {FN}')
-            print(f"Proportion of Accurate Positive Predictions: {prop_pos_acc:.2f}")
-            print(f"Proportion of Accurate Negative Predictions: {prop_neg_acc:.2f}")
-            print(f'  Total Similarity Cases: {total_cases}')
-            # print expected value across positive and negative predictions
-            exp_val = total_prop_pos * prop_pos_acc - total_prop_neg * prop_neg_acc
-            if exp_val > 0:
-                print(f"Expected Value of Similarity Cases: 1")
-            else:
-                print(f"Expected Value of Similarity Cases: 0")
+
+            # Process and collect data
+            process_confusion_matrix(TP, TN, FP, FN, output_binary_std, output_prob_std, true_label_std,
+                                     idx=i, features_history=features_history, labels_history=labels_history)
+
 
             total_cases = TP_VAL + TN_VAL + FP_VAL + FN_VAL
             total_pos = TP_VAL + FP_VAL
@@ -1594,6 +1724,58 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print(f"Test Mean Label: {sum(mean_sim_labels_test) / len(mean_sim_labels_test)}, Mean Probs: {sum(mean_probs_test) / len(mean_probs_test)}, skipped: {false_sim_test_pred_counter}")
             print(f"Combined Mean Label: {(sum(mean_sim_labels_train) + sum(mean_sim_labels_val) + sum(mean_sim_labels_test)) / (len(mean_sim_labels_train) + len(mean_sim_labels_val) + len(mean_sim_labels_test))}, Mean Probs: {(sum(mean_probs_train) + sum(mean_probs_val) + sum(mean_probs_test)) / (len(mean_probs_train) + len(mean_probs_val) + len(mean_probs_test))}, skipped: {false_sim_train_pred_counter + false_sim_val_pred_counter + false_sim_test_pred_counter}")
             print()
+
+        # Phase 2: Split data into training and testing sets
+        print("\nPhase 2: Preparing training and testing data...")
+        features_array = np.array(features_history)
+        labels_array = np.array(labels_history)
+
+        # Randomly select 20% of the data as test set
+        test_size = 0.2
+        indices = np.arange(len(features_array))
+        np.random.shuffle(indices)
+        test_split_idx = int(len(indices) * test_size)
+        test_indices = indices[:test_split_idx]
+        train_indices = indices[test_split_idx:]
+
+        # Create train and test sets
+        X_train = features_array[train_indices]
+        y_train = labels_array[train_indices]
+        X_test = features_array[test_indices]
+        y_test = labels_array[test_indices]
+
+        print(f"Data split: {len(X_train)} training samples, {len(X_test)} testing samples")
+
+        # Train the model
+        print("\nPhase 3: Training consensus model...")
+        consensus_model = train_consensus_model(X_train, y_train, epochs=100)
+        print("Model training complete!")
+
+        # Phase 4: Evaluate on test set
+        print("\nPhase 4: Evaluating model on test set...")
+        correct_predictions = 0
+        total_test_samples = len(X_test)
+
+        for i in range(total_test_samples):
+            # Extract features for this test sample
+            TP, TN, FP, FN = int(X_test[i][2]), int(X_test[i][3]), int(X_test[i][4]), int(X_test[i][5])
+            output_binary = int(X_test[i][0])
+            output_prob = float(X_test[i][1])
+            true_label = int(y_test[i])
+
+            print(f"\nTest Sample {i + 1}:")
+            pred, prob = process_confusion_matrix(TP, TN, FP, FN, output_binary, output_prob, true_label,
+                                                  model=consensus_model, is_test_sample=True)
+
+            # Evaluate prediction
+            if pred == true_label:
+                correct_predictions += 1
+                print(f"✓ Correct prediction! (Confidence: {prob:.4f})")
+            else:
+                print(f"✗ Incorrect prediction. (Confidence: {prob:.4f})")
+
+        test_accuracy = correct_predictions / total_test_samples
+        print(f"\nTest Set Accuracy: {test_accuracy:.4f} ({correct_predictions}/{total_test_samples})")
 
         # Convert results to numpy arrays
         # standard_preds = np.array(standard_preds)
