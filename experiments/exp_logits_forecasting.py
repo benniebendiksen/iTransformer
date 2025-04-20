@@ -1695,35 +1695,35 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                                      idx=i, features_history=features_history, labels_history=labels_history)
 
 
-            total_cases = TP_VAL + TN_VAL + FP_VAL + FN_VAL
-            total_pos = TP_VAL + FP_VAL
-            total_prop_pos = total_pos / total_cases
-            prop_pos_acc = TP_VAL / (TP_VAL + FP_VAL)
-            total_neg = TN_VAL + FN_VAL
-            total_prop_neg = total_neg / total_cases
-            prop_neg_acc = TN_VAL / (TN_VAL + FN_VAL)
-            print(f'\nVal Confusion Matrix:')
-            print(f'  True Positives: {TP_VAL}')
-            print(f'  True Negatives: {TN_VAL}')
-            print(f'  False Positives: {FP_VAL}')
-            print(f'  False Negatives: {FN_VAL}')
-            print(f"Proportion of Accurate Positive Predictions: {prop_pos_acc:.2f}")
-            print(f"Proportion of Accurate Negative Predictions: {prop_neg_acc:.2f}")
-            print(f'  Total Similarity Cases: {total_cases}')
-            # print expected value across positive and negative predictions
-            exp_val = total_prop_pos * prop_pos_acc - total_prop_neg * prop_neg_acc
-            if exp_val > 0:
-                print(f"Expected Value of Similarity Cases: 1")
-            else:
-                print(f"Expected Value of Similarity Cases: 0")
-
-            # print(f"Proportion of accurate predictions from top 25 similar training samples: {train_prop_sim_accurate}")
-            # print(f"Train Mean False Probs: {sum(mean_false_probs_train) / len(mean_false_probs_train)}")
-            # print(f"Train Mean Label: {sum(mean_sim_labels_train) / len(mean_sim_labels_train)}, Mean Probs: {sum(mean_probs_train) / len(mean_probs_train)}, skipped: {false_sim_train_pred_counter}")
-            print(f"Val Mean Label: {sum(mean_sim_labels_val) / len(mean_sim_labels_val)}, Mean Probs: {sum(mean_probs_val) / len(mean_probs_val)}, skipped: {false_sim_val_pred_counter}")
-            print(f"Test Mean Label: {sum(mean_sim_labels_test) / len(mean_sim_labels_test)}, Mean Probs: {sum(mean_probs_test) / len(mean_probs_test)}, skipped: {false_sim_test_pred_counter}")
-            print(f"Combined Mean Label: {(sum(mean_sim_labels_train) + sum(mean_sim_labels_val) + sum(mean_sim_labels_test)) / (len(mean_sim_labels_train) + len(mean_sim_labels_val) + len(mean_sim_labels_test))}, Mean Probs: {(sum(mean_probs_train) + sum(mean_probs_val) + sum(mean_probs_test)) / (len(mean_probs_train) + len(mean_probs_val) + len(mean_probs_test))}, skipped: {false_sim_train_pred_counter + false_sim_val_pred_counter + false_sim_test_pred_counter}")
-            print()
+            # total_cases = TP_VAL + TN_VAL + FP_VAL + FN_VAL
+            # total_pos = TP_VAL + FP_VAL
+            # total_prop_pos = total_pos / total_cases
+            # prop_pos_acc = TP_VAL / (TP_VAL + FP_VAL)
+            # total_neg = TN_VAL + FN_VAL
+            # total_prop_neg = total_neg / total_cases
+            # prop_neg_acc = TN_VAL / (TN_VAL + FN_VAL)
+            # print(f'\nVal Confusion Matrix:')
+            # print(f'  True Positives: {TP_VAL}')
+            # print(f'  True Negatives: {TN_VAL}')
+            # print(f'  False Positives: {FP_VAL}')
+            # print(f'  False Negatives: {FN_VAL}')
+            # print(f"Proportion of Accurate Positive Predictions: {prop_pos_acc:.2f}")
+            # print(f"Proportion of Accurate Negative Predictions: {prop_neg_acc:.2f}")
+            # print(f'  Total Similarity Cases: {total_cases}')
+            # # print expected value across positive and negative predictions
+            # exp_val = total_prop_pos * prop_pos_acc - total_prop_neg * prop_neg_acc
+            # if exp_val > 0:
+            #     print(f"Expected Value of Similarity Cases: 1")
+            # else:
+            #     print(f"Expected Value of Similarity Cases: 0")
+            #
+            # # print(f"Proportion of accurate predictions from top 25 similar training samples: {train_prop_sim_accurate}")
+            # # print(f"Train Mean False Probs: {sum(mean_false_probs_train) / len(mean_false_probs_train)}")
+            # # print(f"Train Mean Label: {sum(mean_sim_labels_train) / len(mean_sim_labels_train)}, Mean Probs: {sum(mean_probs_train) / len(mean_probs_train)}, skipped: {false_sim_train_pred_counter}")
+            # print(f"Val Mean Label: {sum(mean_sim_labels_val) / len(mean_sim_labels_val)}, Mean Probs: {sum(mean_probs_val) / len(mean_probs_val)}, skipped: {false_sim_val_pred_counter}")
+            # print(f"Test Mean Label: {sum(mean_sim_labels_test) / len(mean_sim_labels_test)}, Mean Probs: {sum(mean_probs_test) / len(mean_probs_test)}, skipped: {false_sim_test_pred_counter}")
+            # print(f"Combined Mean Label: {(sum(mean_sim_labels_train) + sum(mean_sim_labels_val) + sum(mean_sim_labels_test)) / (len(mean_sim_labels_train) + len(mean_sim_labels_val) + len(mean_sim_labels_test))}, Mean Probs: {(sum(mean_probs_train) + sum(mean_probs_val) + sum(mean_probs_test)) / (len(mean_probs_train) + len(mean_probs_val) + len(mean_probs_test))}, skipped: {false_sim_train_pred_counter + false_sim_val_pred_counter + false_sim_test_pred_counter}")
+            # print()
 
         # Phase 2: Split data into training and testing sets
         print("\nPhase 2: Preparing training and testing data...")
