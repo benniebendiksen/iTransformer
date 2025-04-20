@@ -1539,6 +1539,12 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print(f"Proportion of Accurate Positive Predictions: {TP / (TP + FP):.2f}")
             print(f"Proportion of Accurate Negative Predictions: {TN / (TN + FN):.2f}")
             print(f'  Total Similarity Cases: {TP + TN + FP + FN}')
+            # print expected value across positive and negative predictions
+            exp_val = ((TP + FP) / (TP + TN + FP + FN))(TP / (TP + FP)) - ((TN + FN) / (TP + TN + FP + FN))(TN / (TN + FN))
+            if exp_val > 0:
+                print(f"Expected Value of Similarity Cases: 1")
+            else:
+                print(f"Expected Value of Similarity Cases: 0")
 
             # print(f"Proportion of accurate predictions from top 25 similar training samples: {train_prop_sim_accurate}")
             # print(f"Train Mean False Probs: {sum(mean_false_probs_train) / len(mean_false_probs_train)}")
