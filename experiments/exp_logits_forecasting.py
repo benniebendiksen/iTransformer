@@ -1360,7 +1360,9 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             mean_probs_val = []
             mean_sim_labels_val = []
             false_sim_val_pred_counter = 0
-            # Get top 15 similar validation samples that are accurate
+            trues_vals = []
+            preds_vals = []
+            total_counter = 0
             for sim_count, sim_sample in enumerate(similar_indices):
                 if sim_sample[0] == "val":
                     # get the probability of the sample
@@ -1384,6 +1386,11 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     # check if the prediction is correct
                     output_binary_val = (output_prob_val > 0.5).astype(np.float32)
                     true_label_val = batch_y_last_sim.detach().cpu().numpy()[0, 0]
+                    preds_vals.append(output_binary_val)
+                    trues_vals.append(true_label_val)
+                    if total_counter == 10:
+                        break
+                    total_counter += 1
                     if output_binary_val != true_label_val:
                         false_sim_val_pred_counter += 1
                         continue
@@ -1391,6 +1398,10 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     mean_sim_labels_val.append(true_label_val)
                     if len(mean_probs_val) == 15:
                         break
+
+            cm_vals = confusion_matrix(trues_vals, preds_vals)
+            TN_VAL, FP_VAL = cm_vals[0, 0], cm_vals[0, 1]  # True Negative, False Positive
+            FN_VAL, TP_VAL = cm_vals[1, 0], cm_vals[1, 1]  # False Negative, True Positive
 
             mean_probs_test = []
             mean_sim_labels_test = []
@@ -1530,8 +1541,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             true_label_sim = batch_y_last_std.detach().cpu().numpy()[0, 0]
             output_prob_std = torch.sigmoid(outputs_last_std).detach().cpu().numpy()[0, 0]
             output_binary_std = (output_prob_std > 0.5).astype(np.float32)
-            print(f"Prediction for sample {idx + 1}: {output_binary_std}, True Label: {true_label_sim}, Probability: {output_prob_std}")
-            print(f'\nConfusion Matrix Test Sample {idx}:')
+            print(f"Prediction for sample {idx}: {output_binary_std}, True Label: {true_label_sim}, Probability: {output_prob_std}")
+            print(f'\nTrain Confusion Matrix:')
             print(f'  True Positives: {TP}')
             print(f'  True Negatives: {TN}')
             print(f'  False Positives: {FP}')
@@ -1541,6 +1552,22 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             print(f'  Total Similarity Cases: {TP + TN + FP + FN}')
             # print expected value across positive and negative predictions
             exp_val = ((TP + FP) / (TP + TN + FP + FN))(TP / (TP + FP)) - ((TN + FN) / (TP + TN + FP + FN))(TN / (TN + FN))
+            if exp_val > 0:
+                print(f"Expected Value of Similarity Cases: 1")
+            else:
+                print(f"Expected Value of Similarity Cases: 0")
+
+            print(f'\nVal Confusion Matrix:')
+            print(f'  True Positives: {TP_VAL}')
+            print(f'  True Negatives: {TN_VAL}')
+            print(f'  False Positives: {FP_VAL}')
+            print(f'  False Negatives: {FN_VAL}')
+            print(f"Proportion of Accurate Positive Predictions: {TP_VAL / (TP_VAL + FP_VAL):.2f}")
+            print(f"Proportion of Accurate Negative Predictions: {TN_VAL / (TN_VAL + FN_VAL):.2f}")
+            print(f'  Total Similarity Cases: {TP_VAL + TN_VAL + FP_VAL + FN_VAL}')
+            # print expected value across positive and negative predictions
+            exp_val = ((TP_VAL + FP_VAL) / (TP_VAL + TN_VAL + FP_VAL + FN_VAL))(TP_VAL / (TP_VAL + FP_VAL)) - ((TN_VAL + FN_VAL) / (TP_VAL + TN_VAL + FP_VAL + FN_VAL))(
+                TN_VAL / (TN_VAL + FN_VAL))
             if exp_val > 0:
                 print(f"Expected Value of Similarity Cases: 1")
             else:
