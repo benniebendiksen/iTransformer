@@ -1241,6 +1241,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         print(f"\nProcessing {len(test_data)} test samples with adaptive fine-tuning...")
 
         self.model.eval()
+        # get test samples' predictions
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
                 batch_x = batch_x.float().to(self.device)
@@ -1300,9 +1301,12 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             )
             # get mean probability of similar samples once inferred
             mean_probs_train = []
+            mean_false_probs_train = []
             mean_sim_labels_train = []
+            true_sim_train_pred_counter = 0
             false_sim_train_pred_counter = 0
-            # Get top 15 similar train samples that are accurate
+            total_counter = 0
+            # Get top similar train samples across inaccurate and accurate predictions
             for sim_count, sim_sample in enumerate(similar_indices):
                 if sim_sample[0] == "train":
                     # get the probability of the sample
@@ -1326,14 +1330,20 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     # check if the prediction is correct
                     output_binary_sim = (output_prob_sim > 0.5).astype(np.float32)
                     true_label_sim = batch_y_last_sim.detach().cpu().numpy()[0, 0]
-                    if output_binary_sim != true_label_sim:
+                    if total_counter == 25:
+                        break
+                    if output_binary_sim == true_label_sim:
+                        true_sim_train_pred_counter += 1
+                        total_counter += 1
+                    else:
                         false_sim_train_pred_counter += 1
+                        mean_false_probs_train.append(output_prob_sim)
+                        total_counter += 1
                         continue
                     mean_probs_train.append(output_prob_sim)
                     mean_sim_labels_train.append(true_label_sim)
-                    if len(mean_probs_train) == 15:
-                        break
 
+            train_prop_sim_accurate = true_sim_train_pred_counter / (true_sim_train_pred_counter + false_sim_train_pred_counter)
 
             mean_probs_val = []
             mean_sim_labels_val = []
@@ -1509,6 +1519,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             output_prob_std = torch.sigmoid(outputs_last_std).detach().cpu().numpy()[0, 0]
             output_binary_std = (output_prob_std > 0.5).astype(np.float32)
             print(f"Prediction for sample {idx + 1}: {output_binary_std}, True Label: {true_label_sim}, Probability: {output_prob_std}")
+            print(f"Proportion of accurate predictions from top 25 similar training samples: {train_prop_sim_accurate}")
+            print(f"Train Mean False Probs: {sum(mean_false_probs_train) / len(mean_false_probs_train)}")
             print(f"Train Mean Label: {sum(mean_sim_labels_train) / len(mean_sim_labels_train)}, Mean Probs: {sum(mean_probs_train) / len(mean_probs_train)}, skipped: {false_sim_train_pred_counter}")
             print(f"Val Mean Label: {sum(mean_sim_labels_val) / len(mean_sim_labels_val)}, Mean Probs: {sum(mean_probs_val) / len(mean_probs_val)}, skipped: {false_sim_val_pred_counter}")
             print(f"Test Mean Label: {sum(mean_sim_labels_test) / len(mean_sim_labels_test)}, Mean Probs: {sum(mean_probs_test) / len(mean_probs_test)}, skipped: {false_sim_test_pred_counter}")
