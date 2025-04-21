@@ -188,7 +188,7 @@ def parse_args():
     # Add these arguments to your parse_args function
     parser.add_argument('--use_embedding_approach', type=int, default=1,
                         help='whether to use embedding-based approach')
-    parser.add_argument('--similar_samples', type=int, default=20,
+    parser.add_argument('--similar_samples', type=int, default=25,
                         help='number of similar samples for embedding-based approach')
     parser.add_argument('--embedding_ffn_epochs', type=int, default=50,
                         help='number of epochs for embedding-based FFN training')
@@ -776,6 +776,74 @@ def get_test_data(args):
 #     return preds, trues, probs, timestamps, original_indices, prediction_indices, prices
 
 
+def run_inference_for_training(model, train_data, args, device):
+    """Generate predictions and confusion matrices for training data"""
+    print(f"Running inference on {len(train_data)} training samples...")
+    model.eval()
+    train_confusion_matrices = []
+
+    # Initialize running confusion matrix for tracking metrics
+    TP, TN, FP, FN = 0, 0, 0, 0
+
+    with torch.no_grad():
+        for i in range(len(train_data)):
+            # Get sample
+            batch_x, batch_y, batch_x_mark, batch_y_mark = train_data[i]
+
+            # Add batch dimension and convert to tensor
+            batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
+            batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(device)
+            batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
+            batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(device)
+
+            # Decoder input
+            dec_inp = torch.zeros_like(batch_y[:, -args.pred_len:, :]).float()
+            dec_inp = torch.cat([batch_y[:, :args.label_len, :], dec_inp], dim=1).float().to(device)
+
+            # Generate prediction
+            if args.output_attention:
+                outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+            else:
+                outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+            # Process outputs for binary classification
+            f_dim = -1 if args.features == 'MS' else 0
+            outputs_last = outputs[:, -1, f_dim:]
+            batch_y_last = batch_y[:, -1, f_dim:].to(device)
+
+            # Get prediction probability and binary prediction
+            output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+            output_binary = (output_prob > 0.5).astype(np.float32)
+            true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+
+            # Update confusion matrix values
+            if output_binary == 1 and true_label == 1:
+                TP += 1
+            elif output_binary == 0 and true_label == 0:
+                TN += 1
+            elif output_binary == 1 and true_label == 0:
+                FP += 1
+            elif output_binary == 0 and true_label == 1:
+                FN += 1
+
+            # Store confusion matrix for this prediction
+            train_confusion_matrices.append({
+                'TP': TP,
+                'TN': TN,
+                'FP': FP,
+                'FN': FN,
+                'output_binary': output_binary,
+                'output_prob': output_prob,
+                'true_label': true_label
+            })
+
+            # Progress indication
+            if (i + 1) % 100 == 0 or i == len(train_data) - 1:
+                print(f'Processed {i + 1}/{len(train_data)} training samples')
+
+    return train_confusion_matrices
+
+
 def run_inference(model, test_data, test_loader, args, device):
     """Generate predictions on test data with improved timestamp and prediction index tracking"""
     print(f"Running inference on {len(test_data)} test samples...")
@@ -925,28 +993,62 @@ def run_inference(model, test_data, test_loader, args, device):
     return preds, trues, probs, timestamps, original_indices, prediction_indices, prices, confusion_matrices
 
 
-def apply_ffn_consensus_model(confusion_matrices, args):
+def apply_ffn_consensus_model(confusion_matrices, train_confusion_matrices, args):
     """
-    Train and apply the FFN consensus model to improve predictions
+    Train and apply the FFN consensus model using only training data
 
     Parameters:
     -----------
     confusion_matrices : list
-        List of dictionaries containing confusion matrix values and predictions
+        List of dictionaries containing confusion matrix values and predictions for test data
+    train_confusion_matrices : list
+        List of dictionaries containing confusion matrix values and predictions for training data
     args : argparse.Namespace
         Command line arguments
 
     Returns:
     --------
     tuple
-        (ffn_preds, ffn_probs, consensus_model, train_indices, test_indices, losses)
+        (ffn_preds, ffn_probs, consensus_model, losses)
     """
     print("\nApplying FFN Consensus Model...")
 
-    # Convert confusion matrix data to features and labels
-    features = []
-    labels = []
+    # Convert training data to features and labels
+    train_features = []
+    train_labels = []
 
+    for cm in train_confusion_matrices:
+        feature = [
+            cm['output_binary'],
+            cm['output_prob'],
+            cm['TP'],
+            cm['TN'],
+            cm['FP'],
+            cm['FN']
+        ]
+        train_features.append(feature)
+        train_labels.append(cm['true_label'])
+
+    # Convert to numpy arrays
+    train_features_array = np.array(train_features)
+    train_labels_array = np.array(train_labels)
+
+    print(f"Training FFN model on {len(train_features_array)} training samples...")
+
+    # Train the consensus model on training data only
+    consensus_model, losses = train_consensus_model(
+        train_features_array, train_labels_array,
+        epochs=args.ffn_epochs,
+        lr=args.ffn_learning_rate,
+        batch_size=args.ffn_batch_size
+    )
+
+    # Generate FFN predictions for test samples
+    ffn_preds = []
+    ffn_probs = []
+
+    # Convert test data to features
+    test_features = []
     for cm in confusion_matrices:
         feature = [
             cm['output_binary'],
@@ -956,39 +1058,12 @@ def apply_ffn_consensus_model(confusion_matrices, args):
             cm['FP'],
             cm['FN']
         ]
-        features.append(feature)
-        labels.append(cm['true_label'])
+        test_features.append(feature)
 
-    # Convert to numpy arrays
-    features_array = np.array(features)
-    labels_array = np.array(labels)
+    test_features_array = np.array(test_features)
 
-    # Split data into training and testing sets
-    test_size = args.ffn_test_size
-    indices = np.arange(len(features_array))
-    np.random.shuffle(indices)
-    test_split_idx = int(len(indices) * test_size)
-    test_indices = indices[:test_split_idx]
-    train_indices = indices[test_split_idx:]
-
-    X_train = features_array[train_indices]
-    y_train = labels_array[train_indices]
-
-    print(f"Training FFN model on {len(X_train)} samples...")
-
-    # Train the consensus model
-    consensus_model, losses = train_consensus_model(
-        X_train, y_train,
-        epochs=args.ffn_epochs,
-        lr=args.ffn_learning_rate,
-        batch_size=args.ffn_batch_size
-    )
-
-    # Generate FFN predictions for all samples
-    ffn_preds = []
-    ffn_probs = []
-
-    for feature in features_array:
+    # Apply the model to test features
+    for feature in test_features_array:
         # Convert to tensor
         input_features = torch.FloatTensor(feature)
 
@@ -1000,7 +1075,85 @@ def apply_ffn_consensus_model(confusion_matrices, args):
         ffn_preds.append(model_pred)
         ffn_probs.append(model_pred_prob)
 
-    return np.array(ffn_preds), np.array(ffn_probs), consensus_model, train_indices, test_indices, losses
+    return np.array(ffn_preds), np.array(ffn_probs), consensus_model, losses
+
+
+# def apply_ffn_consensus_model(confusion_matrices, args):
+#     """
+#     Train and apply the FFN consensus model to improve predictions
+#
+#     Parameters:
+#     -----------
+#     confusion_matrices : list
+#         List of dictionaries containing confusion matrix values and predictions
+#     args : argparse.Namespace
+#         Command line arguments
+#
+#     Returns:
+#     --------
+#     tuple
+#         (ffn_preds, ffn_probs, consensus_model, train_indices, test_indices, losses)
+#     """
+#     print("\nApplying FFN Consensus Model...")
+#
+#     # Convert confusion matrix data to features and labels
+#     features = []
+#     labels = []
+#
+#     for cm in confusion_matrices:
+#         feature = [
+#             cm['output_binary'],
+#             cm['output_prob'],
+#             cm['TP'],
+#             cm['TN'],
+#             cm['FP'],
+#             cm['FN']
+#         ]
+#         features.append(feature)
+#         labels.append(cm['true_label'])
+#
+#     # Convert to numpy arrays
+#     features_array = np.array(features)
+#     labels_array = np.array(labels)
+#
+#     # Split data into training and testing sets
+#     test_size = args.ffn_test_size
+#     indices = np.arange(len(features_array))
+#     np.random.shuffle(indices)
+#     test_split_idx = int(len(indices) * test_size)
+#     test_indices = indices[:test_split_idx]
+#     train_indices = indices[test_split_idx:]
+#
+#     X_train = features_array[train_indices]
+#     y_train = labels_array[train_indices]
+#
+#     print(f"Training FFN model on {len(X_train)} samples...")
+#
+#     # Train the consensus model
+#     consensus_model, losses = train_consensus_model(
+#         X_train, y_train,
+#         epochs=args.ffn_epochs,
+#         lr=args.ffn_learning_rate,
+#         batch_size=args.ffn_batch_size
+#     )
+#
+#     # Generate FFN predictions for all samples
+#     ffn_preds = []
+#     ffn_probs = []
+#
+#     for feature in features_array:
+#         # Convert to tensor
+#         input_features = torch.FloatTensor(feature)
+#
+#         # Get prediction
+#         with torch.no_grad():
+#             model_pred_prob = consensus_model(input_features).item()
+#             model_pred = 1 if model_pred_prob >= 0.5 else 0
+#
+#         ffn_preds.append(model_pred)
+#         ffn_probs.append(model_pred_prob)
+#
+#     return np.array(ffn_preds), np.array(ffn_probs), consensus_model, train_indices, test_indices, losses
 
 
 def calculate_metrics(preds, trues, is_shorting=True):
@@ -1176,9 +1329,9 @@ def calculate_returns(preds, trues, probs, is_shorting=True, actual_changes=None
     }
 
 
-def print_consensus_comparison(preds, ffn_preds, trues, timestamps, test_indices):
+def print_consensus_comparison(preds, ffn_preds, trues, timestamps):
     """
-    Print comparison between original predictions and FFN consensus model predictions ON CONSENSUS MODEL TEST SET
+    Print comparison between original predictions and FFN consensus model predictions
 
     Parameters:
     -----------
@@ -1190,15 +1343,22 @@ def print_consensus_comparison(preds, ffn_preds, trues, timestamps, test_indices
         Actual binary labels (0 or 1)
     timestamps : list
         Timestamps for each prediction
-    test_indices : list
-        Indices of test samples used to evaluate the FFN model
     """
     print("\n----- ORIGINAL vs FFN MODEL PREDICTIONS -----")
     print("Sample | Timestamp | Original | FFN | True | Match?")
     print("------------------------------------------------")
 
-    # Filter to show only test samples used for FFN evaluation
-    for i in test_indices:
+    # Calculate where predictions differ for focused analysis
+    diff_indices = np.where(preds != ffn_preds)[0]
+
+    # Show some examples where predictions differ (up to 10)
+    samples_to_show = diff_indices[:min(10, len(diff_indices))]
+
+    if len(samples_to_show) == 0:
+        print("No differences in predictions between original and FFN models.")
+        samples_to_show = range(min(10, len(preds)))  # Show first 10 samples instead
+
+    for i in samples_to_show:
         # Format timestamp for display
         if timestamps[i] is None:
             ts_str = f"sample_{i}"
@@ -1220,16 +1380,80 @@ def print_consensus_comparison(preds, ffn_preds, trues, timestamps, test_indices
             ffn_result = "✗"
 
         # Print summary line for this sample
-        print(f"{i:<6} | {ts_str:<18} | {preds[i]:<8} {original_result} | {ffn_preds[i]:<3} {ffn_result} | {trues[i]:<4} | {'Yes' if ffn_preds[i] == trues[i] else 'No'}")
-    # Calculate and print metrics for test set
-    test_original_accuracy = accuracy_score(trues[test_indices], preds[test_indices])
-    test_ffn_accuracy = accuracy_score(trues[test_indices], ffn_preds[test_indices])
-    improvement = test_ffn_accuracy - test_original_accuracy
+        print(
+            f"{i:<6} | {ts_str:<18} | {preds[i]:<8} {original_result} | {ffn_preds[i]:<3} {ffn_result} | {trues[i]:<4} | {'Yes' if ffn_preds[i] == trues[i] else 'No'}")
 
-    print("\nTest Set Metrics:")
-    print(f"Original Model Accuracy: {test_original_accuracy:.4f}")
-    print(f"FFN Model Accuracy: {test_ffn_accuracy:.4f}")
+    # Calculate and print overall metrics
+    original_accuracy = accuracy_score(trues, preds)
+    ffn_accuracy = accuracy_score(trues, ffn_preds)
+    improvement = ffn_accuracy - original_accuracy
+
+    # Count samples where FFN improved or worsened prediction
+    improved = np.sum((preds != trues) & (ffn_preds == trues))
+    worsened = np.sum((preds == trues) & (ffn_preds != trues))
+
+    print("\nOverall Metrics:")
+    print(f"Original Model Accuracy: {original_accuracy:.4f}")
+    print(f"FFN Model Accuracy: {ffn_accuracy:.4f}")
     print(f"Improvement: {improvement * 100:.2f}%")
+    print(f"Number of predictions improved by FFN: {improved}")
+    print(f"Number of predictions worsened by FFN: {worsened}")
+
+
+# def print_consensus_comparison(preds, ffn_preds, trues, timestamps, test_indices):
+#     """
+#     Print comparison between original predictions and FFN consensus model predictions ON CONSENSUS MODEL TEST SET
+#
+#     Parameters:
+#     -----------
+#     preds : numpy.ndarray
+#         Original binary predictions (0 or 1)
+#     ffn_preds : numpy.ndarray
+#         FFN consensus model predictions (0 or 1)
+#     trues : numpy.ndarray
+#         Actual binary labels (0 or 1)
+#     timestamps : list
+#         Timestamps for each prediction
+#     test_indices : list
+#         Indices of test samples used to evaluate the FFN model
+#     """
+#     print("\n----- ORIGINAL vs FFN MODEL PREDICTIONS -----")
+#     print("Sample | Timestamp | Original | FFN | True | Match?")
+#     print("------------------------------------------------")
+#
+#     # Filter to show only test samples used for FFN evaluation
+#     for i in test_indices:
+#         # Format timestamp for display
+#         if timestamps[i] is None:
+#             ts_str = f"sample_{i}"
+#         elif isinstance(timestamps[i], pd.Timestamp):
+#             ts_str = timestamps[i].strftime('%Y-%m-%d %H:%M:%S')
+#         else:
+#             ts_str = str(timestamps[i])
+#
+#         # Check if original prediction was correct
+#         if preds[i] == trues[i]:
+#             original_result = "✓"
+#         else:
+#             original_result = "✗"
+#
+#         # Check if FFN prediction was correct
+#         if ffn_preds[i] == trues[i]:
+#             ffn_result = "✓"
+#         else:
+#             ffn_result = "✗"
+#
+#         # Print summary line for this sample
+#         print(f"{i:<6} | {ts_str:<18} | {preds[i]:<8} {original_result} | {ffn_preds[i]:<3} {ffn_result} | {trues[i]:<4} | {'Yes' if ffn_preds[i] == trues[i] else 'No'}")
+#     # Calculate and print metrics for test set
+#     test_original_accuracy = accuracy_score(trues[test_indices], preds[test_indices])
+#     test_ffn_accuracy = accuracy_score(trues[test_indices], ffn_preds[test_indices])
+#     improvement = test_ffn_accuracy - test_original_accuracy
+#
+#     print("\nTest Set Metrics:")
+#     print(f"Original Model Accuracy: {test_original_accuracy:.4f}")
+#     print(f"FFN Model Accuracy: {test_ffn_accuracy:.4f}")
+#     print(f"Improvement: {improvement * 100:.2f}%")
 
 
 def print_detailed_analysis(preds, trues, probs, timestamps, prices, actual_changes, returns, ffn_preds=None,
@@ -1730,6 +1954,9 @@ def main():
         val_data, _ = exp._get_data(flag='val')
         test_data, test_loader = get_test_data(args)
 
+        print("Running inference on training data...")
+        train_confusion_matrices = run_inference_for_training(model, train_data, args, device)
+
         # Run inference with improved timestamp and prediction index tracking
         print("Running inference with original model...")
         preds, trues, probs, timestamps, original_indices, prediction_indices, prices, confusion_matrices = run_inference(
@@ -1738,6 +1965,9 @@ def main():
         # Calculate metrics for original predictions
         print("Calculating metrics...")
         metrics = calculate_metrics(preds, trues, bool(args.is_shorting))
+
+        # explicitly show the original model's accuracy on test set
+        print(f"\nOriginal model accuracy on test set: {metrics['accuracy']:.4f}")
 
         # Extract actual price changes from the original dataset
         print("Extracting actual price changes...")
@@ -1770,8 +2000,10 @@ def main():
         # Apply FFN consensus model if enabled
         if args.use_consensus_model:
             print("\nApplying FFN consensus model...")
-            ffn_preds, ffn_probs, consensus_model, train_indices, test_indices, losses = apply_ffn_consensus_model(
-                confusion_matrices, args)
+            ffn_preds, ffn_probs, consensus_model, losses = apply_ffn_consensus_model(
+                confusion_matrices, train_confusion_matrices, args)
+            # ffn_preds, ffn_probs, consensus_model, train_indices, test_indices, losses = apply_ffn_consensus_model(
+            #     confusion_matrices, args)
 
             # Calculate metrics for FFN predictions
             ffn_metrics = calculate_metrics(ffn_preds, trues, bool(args.is_shorting))
@@ -1780,7 +2012,7 @@ def main():
             ffn_returns = calculate_returns(ffn_preds, trues, ffn_probs, bool(args.is_shorting), actual_changes)
 
             # Print comparison between original and FFN predictions
-            print_consensus_comparison(preds, ffn_preds, trues, timestamps, test_indices)
+            print_consensus_comparison(preds, ffn_preds, trues, timestamps)
 
         # Apply embedding-based approach if enabled
         if args.use_embedding_approach:
