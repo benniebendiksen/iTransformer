@@ -8,6 +8,97 @@ from experiments.exp_logits_forecasting import Exp_Logits_Forecast
 from data_provider.data_factory import data_provider
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+
+
+class EmbeddingFFN(nn.Module):
+    """
+    Neural network that takes flattened embeddings as input and predicts binary labels
+    """
+
+    def __init__(self, embedding_size, hidden_size=64, output_size=1):
+        super(EmbeddingFFN, self).__init__()
+        self.layer1 = nn.Linear(embedding_size, hidden_size)
+        self.dropout1 = nn.Dropout(0.2)
+        self.layer2 = nn.Linear(hidden_size, hidden_size // 2)
+        self.dropout2 = nn.Dropout(0.2)
+        self.layer3 = nn.Linear(hidden_size // 2, output_size)
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.relu(x)
+        x = self.dropout1(x)
+        x = self.layer2(x)
+        x = self.relu(x)
+        x = self.dropout2(x)
+        x = self.layer3(x)
+        x = self.sigmoid(x)
+        return x
+
+
+# Define the FFN Similarity Predictor model
+class SimilarityPredictor(nn.Module):
+    def __init__(self, input_size=6, hidden_size=8, output_size=1):
+        super(SimilarityPredictor, self).__init__()
+        self.layer1 = nn.Linear(input_size, hidden_size)
+        self.relu = nn.ReLU()
+        self.layer2 = nn.Linear(hidden_size, hidden_size)
+        self.layer3 = nn.Linear(hidden_size, output_size)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.relu(x)
+        x = self.layer2(x)
+        x = self.relu(x)
+        x = self.layer3(x)
+        x = self.sigmoid(x)
+        return x
+
+
+# Function to train the consensus model
+def train_consensus_model(features, labels, epochs=100, lr=0.01, batch_size=32):
+    # Convert to PyTorch tensors
+    X = torch.FloatTensor(features)
+    y = torch.FloatTensor(labels).view(-1, 1)
+
+    # Create dataset and dataloader
+    dataset = TensorDataset(X, y)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    # Initialize model, loss function, and optimizer
+    model = SimilarityPredictor()
+    criterion = nn.BCELoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+
+    # Training loop
+    losses = []
+    for epoch in range(epochs):
+        epoch_loss = 0
+        for batch_X, batch_y in dataloader:
+            # Forward pass
+            outputs = model(batch_X)
+            loss = criterion(outputs, batch_y)
+
+            # Backward and optimize
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item()
+
+        avg_loss = epoch_loss / len(dataloader)
+        losses.append(avg_loss)
+
+        if (epoch + 1) % 10 == 0:
+            print(f'Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}')
+
+    return model, losses
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='iTransformer Inference Script')
@@ -17,14 +108,14 @@ def parse_args():
     # parser.add_argument('--model_id', type=str, default='1_btcusd_pca_components_lightboost_12h_4h_reduced_60_7_5_1_2_1_old_96_1_65',
     #                     help='model id')
     parser.add_argument('--model_id', type=str,
-                        default='1_btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_96_1_75',
+                        default='pca_components_btcusdt_12h_45_reduced_lance_seed_96_1_50',
                         help='model id')
-    parser.add_argument('--projection_idx', type=str, default='4', help='projection identifier (0, 1, 2, 3, 4)')
+    parser.add_argument('--projection_idx', type=str, default='2', help='projection identifier (0, 1, 2, 3, 4)')
     parser.add_argument('--model', type=str, default='iTransformer', help='model name')
     # Data loader
     parser.add_argument('--data', type=str, default='logits', help='dataset type')
     parser.add_argument('--root_path', type=str, default='./dataset/logits/', help='root path of the data file')
-    parser.add_argument('--data_path', type=str, default='btcusdt_pca_components_12h_60_07_05.csv', help='data file')
+    parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_12h_45_reduced_lance_seed.csv', help='data file')
     parser.add_argument('--features', type=str, default='MS', help='forecasting task, options:[M, S, MS]')
     parser.add_argument('--target', type=str, default='close', help='target feature in S or MS task')
     parser.add_argument('--freq', type=str, default='12h', help='freq for time features encoding')
@@ -36,8 +127,8 @@ def parse_args():
     parser.add_argument('--pred_len', type=int, default=1, help='prediction sequence length')
 
     # Model definition
-    parser.add_argument('--enc_in', type=int, default=65, help='encoder input size')
-    parser.add_argument('--dec_in', type=int, default=10, help='decoder input size')
+    parser.add_argument('--enc_in', type=int, default=50, help='encoder input size')
+    parser.add_argument('--dec_in', type=int, default=50, help='decoder input size')
     parser.add_argument('--c_out', type=int, default=1, help='output size')
     parser.add_argument('--d_model', type=int, default=512, help='dimension of model')
     parser.add_argument('--n_heads', type=int, default=8, help='num of heads')
@@ -87,6 +178,33 @@ def parse_args():
     parser.add_argument('--auto_weight', type=int, default=0, help='auto weighting logic')
     parser.add_argument('--output_path', type=str, default='./outputs/', help='path to save inference results')
 
+    # Add the FFN consensus model parameters
+    parser.add_argument('--use_consensus_model', type=int, default=1, help='whether to use FFN consensus model')
+    parser.add_argument('--ffn_test_size', type=float, default=0.2, help='proportion of data to use for FFN testing')
+    parser.add_argument('--ffn_epochs', type=int, default=150, help='epochs for FFN consensus model training')
+    parser.add_argument('--ffn_learning_rate', type=float, default=0.01, help='learning rate for FFN consensus model')
+    parser.add_argument('--ffn_batch_size', type=int, default=32, help='batch size for FFN consensus model training')
+
+    # Add these arguments to your parse_args function
+    parser.add_argument('--use_embedding_approach', type=int, default=1,
+                        help='whether to use embedding-based approach')
+    parser.add_argument('--similar_samples', type=int, default=20,
+                        help='number of similar samples for embedding-based approach')
+    parser.add_argument('--embedding_ffn_epochs', type=int, default=50,
+                        help='number of epochs for embedding-based FFN training')
+    parser.add_argument('--embedding_ffn_lr', type=float, default=0.001,
+                        help='learning rate for embedding-based FFN training')
+
+    # Add the new trading approach arguments
+    parser.add_argument('--use_conditional_approach', type=int, default=1,
+                        help='whether to use conditional trading approach')
+    parser.add_argument('--use_ensemble_approach', type=int, default=1,
+                        help='whether to use ensemble trading approach')
+    parser.add_argument('--ensemble_method', type=str, default='weighted',
+                        help='ensemble method: weighted, confidence_based, or boosted')
+    parser.add_argument('--confidence_threshold', type=float, default=0.7,
+                        help='confidence threshold for boosted ensemble method')
+
     # Set timeenc based on embed
     args, _ = parser.parse_known_args()
     timeenc_value = 0 if args.embed != 'timeF' else 1
@@ -106,6 +224,399 @@ def parse_args():
     print('Args:')
     print(args)
     return args
+
+
+def extract_embeddings_for_test_samples(model, test_data, device):
+    """
+    Extract embeddings for all test samples, preserving temporal information
+
+    Parameters:
+    -----------
+    model : torch.nn.Module
+        iTransformer model
+    test_data : Dataset
+        Test dataset
+    device : torch.device
+        Device to run model on
+
+    Returns:
+    --------
+    dict
+        Dictionary of {idx: embedding [seq_len, embed_dim]} for test samples
+    """
+    print("Extracting embeddings for test samples...")
+    model.eval()
+    embeddings = {}
+
+    with torch.no_grad():
+        for i in range(len(test_data)):
+            # Get sample
+            batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
+
+            # Add batch dimension
+            batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
+            batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
+
+            # Get embedding using the specified approach
+            if hasattr(model, 'enc_embedding'):
+                # For iTransformer model
+                embedding = model.enc_embedding(batch_x, batch_x_mark)
+                embedding, _attns = model.encoder(embedding, attn_mask=None)
+
+                # Preserve temporal information - keep shape [seq_len, embed_dim]
+                embedding = embedding.squeeze(0).detach().cpu().numpy()  # [seq_len, d_model]
+            else:
+                # Fallback approach if enc_embedding isn't available
+                print("Warning: Model doesn't have enc_embedding attribute, using alternative method")
+                embedding = model.encoder(batch_x, batch_x_mark).detach().cpu().numpy()
+                embedding = embedding.squeeze(0)  # Ensure [seq_len, d_model]
+
+            embeddings[i] = embedding
+
+            # Progress indication
+            if (i + 1) % 20 == 0 or i == len(test_data) - 1:
+                print(f'Processed {i + 1}/{len(test_data)} test samples')
+
+    return embeddings
+
+
+def extract_embeddings_for_train_samples(model, train_data, device):
+    """
+    Extract embeddings for all training samples, preserving temporal information
+
+    Parameters:
+    -----------
+    model : torch.nn.Module
+        iTransformer model
+    train_data : Dataset
+        Training dataset
+    device : torch.device
+        Device to run model on
+
+    Returns:
+    --------
+    tuple
+        (embeddings dict, labels array) for training samples
+    """
+    print("Extracting embeddings for training samples...")
+    model.eval()
+    embeddings = {}
+    labels = []
+
+    with torch.no_grad():
+        for i in range(len(train_data)):
+            # Get sample
+            batch_x, batch_y, batch_x_mark, batch_y_mark = train_data[i]
+
+            # Add batch dimension
+            batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
+            batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
+            batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(device)
+
+            # Get embedding using the specified approach
+            if hasattr(model, 'enc_embedding'):
+                # For iTransformer model
+                embedding = model.enc_embedding(batch_x, batch_x_mark)
+                embedding, _attns = model.encoder(embedding, attn_mask=None)
+
+                # Preserve temporal information - keep shape [seq_len, embed_dim]
+                embedding = embedding.squeeze(0).detach().cpu().numpy()  # [seq_len, d_model]
+            else:
+                # Fallback approach if enc_embedding isn't available
+                print("Warning: Model doesn't have enc_embedding attribute, using alternative method")
+                embedding = model.encoder(batch_x, batch_x_mark).detach().cpu().numpy()
+                embedding = embedding.squeeze(0)  # Ensure [seq_len, d_model]
+
+            # Get label (last time step, last feature)
+            label = batch_y[:, -1, -1].detach().cpu().numpy()[0]
+
+            embeddings[i] = embedding
+            labels.append(label)
+
+            # Progress indication
+            if (i + 1) % 100 == 0 or i == len(train_data) - 1:
+                print(f'Processed {i + 1}/{len(train_data)} training samples')
+
+    return embeddings, np.array(labels)
+
+
+def extract_single_embedding(model, batch_x, batch_x_mark, device):
+    """
+    Extract embedding for a single sample
+
+    Parameters:
+    -----------
+    model : torch.nn.Module
+        iTransformer model
+    batch_x : torch.Tensor
+        Input tensor
+    batch_x_mark : torch.Tensor
+        Input mark tensor
+    device : torch.device
+        Device to run model on
+
+    Returns:
+    --------
+    numpy.ndarray
+        Embedding with shape [seq_len, embed_dim]
+    """
+    model.eval()
+    with torch.no_grad():
+        # Get embedding using the specified approach
+        if hasattr(model, 'enc_embedding'):
+            # For iTransformer model
+            embedding = model.enc_embedding(batch_x, batch_x_mark)
+            embedding, _attns = model.encoder(embedding, attn_mask=None)
+
+            # Preserve temporal information - keep shape [seq_len, embed_dim]
+            embedding = embedding.squeeze(0).detach().cpu().numpy()  # [seq_len, d_model]
+        else:
+            # Fallback approach if enc_embedding isn't available
+            print("Warning: Model doesn't have enc_embedding attribute, using alternative method")
+            embedding = model.encoder(batch_x, batch_x_mark).detach().cpu().numpy()
+            embedding = embedding.squeeze(0)  # Ensure [seq_len, d_model]
+
+    return embedding
+
+
+def find_similar_samples(test_embedding, train_embeddings, val_embeddings=None, test_embeddings=None, top_n=50,
+                         similarity='cosine'):
+    """
+    Find the most similar samples to the test sample using per-timestep similarity.
+
+    Parameters:
+    -----------
+    test_embedding : numpy.ndarray
+        Embedding of test sample [seq_len, embed_dim]
+    train_embeddings : dict
+        Dictionary of {idx: embedding [seq_len, embed_dim]} for training samples
+    val_embeddings : dict, optional
+        Dictionary of {idx: embedding [seq_len, embed_dim]} for validation samples
+    test_embeddings : dict, optional
+        Dictionary of {idx: embedding [seq_len, embed_dim]} for other test samples
+    top_n : int
+        Number of similar samples to return
+    similarity : str
+        Similarity metric to use ('cosine' or 'euclidean')
+
+    Returns:
+    --------
+    list
+        List of tuples (split, idx, similarity) for most similar samples
+    """
+
+    def avg_cosine_similarity(seq1, seq2):
+        # Assumes shape [T, D]
+        cos_sims = [
+            np.dot(seq1[t], seq2[t]) / (np.linalg.norm(seq1[t]) * np.linalg.norm(seq2[t]) + 1e-8)
+            for t in range(min(seq1.shape[0], seq2.shape[0]))
+        ]
+        return np.mean(cos_sims)
+
+    similarities = []
+
+    # Process training embeddings
+    for idx, embed in train_embeddings.items():
+        if similarity == 'cosine':
+            sim = avg_cosine_similarity(test_embedding, embed)
+            similarities.append(('train', idx, sim))
+        else:
+            dist = np.linalg.norm(test_embedding - embed)
+            similarities.append(('train', idx, -dist))
+
+    # Process validation embeddings if provided
+    if val_embeddings is not None:
+        for idx, embed in val_embeddings.items():
+            if similarity == 'cosine':
+                sim = avg_cosine_similarity(test_embedding, embed)
+                similarities.append(('val', idx, sim))
+            else:
+                dist = np.linalg.norm(test_embedding - embed)
+                similarities.append(('val', idx, -dist))
+
+    # Process other test embeddings if provided
+    if test_embeddings is not None:
+        for idx, embed in test_embeddings.items():
+            if similarity == 'cosine':
+                sim = avg_cosine_similarity(test_embedding, embed)
+                similarities.append(('test', idx, sim))
+            else:
+                dist = np.linalg.norm(test_embedding - embed)
+                similarities.append(('test', idx, -dist))
+
+    # Sort by similarity (highest first)
+    similarities.sort(key=lambda x: x[2], reverse=True)
+
+    # Return top_n most similar samples
+    return similarities[:top_n]
+
+
+def apply_embedding_based_approach(model, train_data, val_data, test_data, device, top_n=50, ffn_epochs=50,
+                                   ffn_lr=0.001):
+    """
+    Apply the embedding-based FFN approach
+
+    Parameters:
+    -----------
+    model : torch.nn.Module
+        iTransformer model
+    train_data : Dataset
+        Training dataset
+    val_data : Dataset
+        Validation dataset (can be None)
+    test_data : Dataset
+        Test dataset
+    device : torch.device
+        Device to run model on
+    top_n : int
+        Number of similar samples to use for training
+    ffn_epochs : int
+        Number of epochs for FFN training
+    ffn_lr : float
+        Learning rate for FFN training
+
+    Returns:
+    --------
+    dict
+        Results of embedding-based approach
+    """
+    print("Applying embedding-based FFN approach...")
+
+    # Extract embeddings for all datasets
+    train_embeddings, train_labels_array = extract_embeddings_for_train_samples(model, train_data, device)
+
+    # Extract validation embeddings if available
+    val_embeddings = None
+    if val_data is not None:
+        val_embeddings, _ = extract_embeddings_for_train_samples(model, val_data, device)
+
+    # Initialize results arrays
+    embedding_preds = []
+    embedding_probs = []
+    trues = []
+
+    # Process each test sample
+    for idx in range(len(test_data)):
+        print(f"\nProcessing test sample {idx + 1}/{len(test_data)}...")
+
+        # Get test sample
+        batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[idx]
+        true_label = batch_y[-1, -1]
+        trues.append(true_label)
+
+        # Add batch dimension
+        batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
+        batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
+
+        # Extract embedding for this test sample
+        test_embedding = extract_single_embedding(model, batch_x, batch_x_mark, device)
+
+        # Find similar samples
+        similar_samples = find_similar_samples(
+            test_embedding,
+            train_embeddings,
+            val_embeddings,
+            None,  # No need to compare with other test samples
+            top_n=top_n
+        )
+
+        # Get embeddings and labels for similar samples
+        similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
+
+        # Collect similar samples for FFN training
+        ffn_train_embeddings = []
+        ffn_train_labels = []
+
+        for train_idx in similar_train_indices:
+            # Use the flattened version for FFN input
+            flat_embedding = train_embeddings[train_idx].flatten()
+            ffn_train_embeddings.append(flat_embedding)
+            ffn_train_labels.append(train_labels_array[train_idx])
+
+        # Check if we have enough samples
+        if len(ffn_train_embeddings) < 10:
+            print(f"Warning: Not enough similar samples found ({len(ffn_train_embeddings)}), using original prediction")
+            # Get the original prediction
+            if hasattr(model, 'predict'):
+                pred, prob = model.predict(batch_x, batch_x_mark)
+            else:
+                # Fall back to manual prediction
+                dec_inp = torch.zeros_like(batch_y[:, -1:, :]).float().to(device)
+                outputs = model(batch_x, batch_x_mark, dec_inp, None)
+                pred_prob = torch.sigmoid(outputs[:, -1, -1]).item()
+                pred = 1 if pred_prob >= 0.5 else 0
+                prob = pred_prob
+
+            embedding_preds.append(pred)
+            embedding_probs.append(prob)
+            continue
+
+        print(f"Training FFN on {len(ffn_train_embeddings)} similar samples...")
+
+        # Train FFN on similar samples
+        embedding_size = ffn_train_embeddings[0].shape[0]
+        embedding_ffn = EmbeddingFFN(embedding_size=embedding_size)
+
+        # Convert to PyTorch tensors
+        X = torch.FloatTensor(ffn_train_embeddings)
+        y = torch.FloatTensor(ffn_train_labels).view(-1, 1)
+
+        # Create dataset and dataloader
+        dataset = TensorDataset(X, y)
+        dataloader = DataLoader(dataset, batch_size=min(16, len(X)), shuffle=True)
+
+        # Define loss function and optimizer
+        criterion = nn.BCELoss()
+        optimizer = optim.Adam(embedding_ffn.parameters(), lr=ffn_lr)
+
+        # Training loop
+        embedding_ffn.train()
+        for epoch in range(ffn_epochs):
+            epoch_loss = 0
+            for batch_X, batch_y in dataloader:
+                # Forward pass
+                outputs = embedding_ffn(batch_X)
+                loss = criterion(outputs, batch_y)
+
+                # Backward and optimize
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                epoch_loss += loss.item()
+
+            avg_loss = epoch_loss / len(dataloader)
+            if (epoch + 1) % 10 == 0:
+                print(f'Epoch [{epoch + 1}/{ffn_epochs}], Loss: {avg_loss:.4f}')
+
+        # Get prediction for current test sample
+        embedding_ffn.eval()
+        with torch.no_grad():
+            test_embedding_flat = torch.FloatTensor(test_embedding.flatten()).unsqueeze(0)
+            pred_prob = embedding_ffn(test_embedding_flat).item()
+            pred = 1 if pred_prob >= 0.5 else 0
+
+        embedding_preds.append(pred)
+        embedding_probs.append(pred_prob)
+
+        print(f"Embedding-based prediction: {pred}, True label: {true_label}, Probability: {pred_prob:.4f}")
+
+    # Calculate metrics
+    accuracy = accuracy_score(trues, embedding_preds)
+
+    # Create final results
+    embedding_preds = np.array(embedding_preds)
+    embedding_probs = np.array(embedding_probs)
+    trues = np.array(trues)
+
+    print(f"\nEmbedding-based approach accuracy: {accuracy:.4f}")
+
+    return {
+        'preds': embedding_preds,
+        'probs': embedding_probs,
+        'trues': trues,
+        'accuracy': accuracy
+    }
 
 
 def setup_experiment(args):
@@ -143,6 +654,128 @@ def get_test_data(args):
     return test_data, test_loader
 
 
+# def run_inference(model, test_data, test_loader, args, device):
+#     """Generate predictions on test data with improved timestamp and prediction index tracking"""
+#     print(f"Running inference on {len(test_data)} test samples...")
+#     model.eval()
+#     preds = []
+#     trues = []
+#     probs = []
+#     timestamps = []
+#     original_indices = []
+#     prediction_indices = []
+#     prices = []
+#
+#     # Load original data to get timestamps if not available in metadata
+#     try:
+#         original_df = pd.read_csv(os.path.join(args.root_path, args.data_path))
+#         if 'date' in original_df.columns:
+#             if pd.api.types.is_numeric_dtype(original_df['date']):
+#                 original_df['date'] = pd.to_datetime(original_df['date'], unit='s')
+#             else:
+#                 original_df['date'] = pd.to_datetime(original_df['date'])
+#     except Exception as e:
+#         print(f"Warning: Could not load original data for timestamp extraction: {e}")
+#         original_df = None
+#
+#     with torch.no_grad():
+#         # Process one sample at a time to ensure correct label tracking
+#         for i in range(len(test_data)):
+#             # Get sample
+#             batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
+#
+#             # Add batch dimension and convert to tensor
+#             batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
+#             batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(device)
+#             batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
+#             batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(device)
+#
+#             # Decoder input
+#             dec_inp = torch.zeros_like(batch_y[:, -args.pred_len:, :]).float()
+#             dec_inp = torch.cat([batch_y[:, :args.label_len, :], dec_inp], dim=1).float().to(device)
+#
+#             # Generate prediction
+#             if args.output_attention:
+#                 outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+#             else:
+#                 outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+#
+#             # Process outputs for binary classification
+#             f_dim = -1 if args.features == 'MS' else 0
+#             outputs_last = outputs[:, -1, f_dim:]
+#             batch_y_last = batch_y[:, -1, f_dim:].to(device)
+#
+#             # Get prediction probability and binary prediction
+#             output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+#             output_binary = (output_prob > 0.5).astype(np.float32)
+#             true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+#
+#             # Store results
+#             preds.append(output_binary)
+#             trues.append(true_label)
+#             probs.append(output_prob)
+#
+#             # Get timestamp, prediction index and metadata with better priority order
+#             timestamp = None
+#             price = None
+#             orig_idx = None
+#             pred_idx = None
+#
+#             # First try sequence_indices which has the most detailed info
+#             if hasattr(test_data, 'sequence_indices') and i in test_data.sequence_indices:
+#                 meta = test_data.sequence_indices[i]
+#                 orig_idx = meta.get('orig_start_idx')
+#                 pred_idx = meta.get('pred_idx')
+#                 price = meta.get('pred_price')
+#
+#                 # Get timestamp if available in original_df
+#                 if original_df is not None and pred_idx is not None and pred_idx < len(original_df):
+#                     timestamp = original_df.iloc[pred_idx]['date'] if 'date' in original_df.columns else None
+#
+#             # Then try sample_metadata
+#             if (timestamp is None or pred_idx is None) and hasattr(test_data, 'sample_metadata') and i < len(
+#                     test_data.sample_metadata):
+#                 meta = test_data.sample_metadata[i]
+#                 timestamp = meta.get('timestamp') if timestamp is None else timestamp
+#                 if orig_idx is None:
+#                     orig_idx = meta.get('orig_idx')
+#                 if pred_idx is None:
+#                     pred_idx = meta.get('pred_idx')
+#                 if price is None:
+#                     price = meta.get('pred_price')
+#
+#             # Finally try active_indices
+#             if orig_idx is None and hasattr(test_data, 'active_indices') and i < len(test_data.active_indices):
+#                 orig_idx = test_data.active_indices[i]
+#
+#             # Calculate prediction index from original index if not directly available
+#             if pred_idx is None and orig_idx is not None and hasattr(test_data, 'seq_len'):
+#                 pred_idx = orig_idx + test_data.seq_len
+#
+#                 # Try to get timestamp and price from original data
+#                 if timestamp is None and original_df is not None and pred_idx < len(original_df):
+#                     timestamp = original_df.iloc[pred_idx]['date'] if 'date' in original_df.columns else None
+#                     price = original_df.iloc[pred_idx][args.target] if args.target in original_df.columns else None
+#
+#             # Store data with fallbacks
+#             original_indices.append(orig_idx if orig_idx is not None else i)
+#             prediction_indices.append(
+#                 pred_idx if pred_idx is not None else (orig_idx + args.seq_len if orig_idx is not None else i))
+#             timestamps.append(timestamp)
+#             prices.append(price)
+#
+#             # Progress indication
+#             if (i + 1) % 100 == 0 or i == len(test_data) - 1:
+#                 print(f'Processed {i + 1}/{len(test_data)} samples')
+#
+#     # Convert to numpy arrays
+#     preds = np.array(preds)
+#     trues = np.array(trues)
+#     probs = np.array(probs)
+#
+#     return preds, trues, probs, timestamps, original_indices, prediction_indices, prices
+
+
 def run_inference(model, test_data, test_loader, args, device):
     """Generate predictions on test data with improved timestamp and prediction index tracking"""
     print(f"Running inference on {len(test_data)} test samples...")
@@ -155,6 +788,9 @@ def run_inference(model, test_data, test_loader, args, device):
     prediction_indices = []
     prices = []
 
+    # For confusion matrix tracking
+    confusion_matrices = []
+
     # Load original data to get timestamps if not available in metadata
     try:
         original_df = pd.read_csv(os.path.join(args.root_path, args.data_path))
@@ -166,6 +802,9 @@ def run_inference(model, test_data, test_loader, args, device):
     except Exception as e:
         print(f"Warning: Could not load original data for timestamp extraction: {e}")
         original_df = None
+
+    # Initialize running confusion matrix for tracking metrics
+    TP, TN, FP, FN = 0, 0, 0, 0
 
     with torch.no_grad():
         # Process one sample at a time to ensure correct label tracking
@@ -198,6 +837,27 @@ def run_inference(model, test_data, test_loader, args, device):
             output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
             output_binary = (output_prob > 0.5).astype(np.float32)
             true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+
+            # Update confusion matrix values
+            if output_binary == 1 and true_label == 1:
+                TP += 1
+            elif output_binary == 0 and true_label == 0:
+                TN += 1
+            elif output_binary == 1 and true_label == 0:
+                FP += 1
+            elif output_binary == 0 and true_label == 1:
+                FN += 1
+
+            # Store confusion matrix for this prediction
+            confusion_matrices.append({
+                'TP': TP,
+                'TN': TN,
+                'FP': FP,
+                'FN': FN,
+                'output_binary': output_binary,
+                'output_prob': output_prob,
+                'true_label': true_label
+            })
 
             # Store results
             preds.append(output_binary)
@@ -262,7 +922,85 @@ def run_inference(model, test_data, test_loader, args, device):
     trues = np.array(trues)
     probs = np.array(probs)
 
-    return preds, trues, probs, timestamps, original_indices, prediction_indices, prices
+    return preds, trues, probs, timestamps, original_indices, prediction_indices, prices, confusion_matrices
+
+
+def apply_ffn_consensus_model(confusion_matrices, args):
+    """
+    Train and apply the FFN consensus model to improve predictions
+
+    Parameters:
+    -----------
+    confusion_matrices : list
+        List of dictionaries containing confusion matrix values and predictions
+    args : argparse.Namespace
+        Command line arguments
+
+    Returns:
+    --------
+    tuple
+        (ffn_preds, ffn_probs, consensus_model, train_indices, test_indices, losses)
+    """
+    print("\nApplying FFN Consensus Model...")
+
+    # Convert confusion matrix data to features and labels
+    features = []
+    labels = []
+
+    for cm in confusion_matrices:
+        feature = [
+            cm['output_binary'],
+            cm['output_prob'],
+            cm['TP'],
+            cm['TN'],
+            cm['FP'],
+            cm['FN']
+        ]
+        features.append(feature)
+        labels.append(cm['true_label'])
+
+    # Convert to numpy arrays
+    features_array = np.array(features)
+    labels_array = np.array(labels)
+
+    # Split data into training and testing sets
+    test_size = args.ffn_test_size
+    indices = np.arange(len(features_array))
+    np.random.shuffle(indices)
+    test_split_idx = int(len(indices) * test_size)
+    test_indices = indices[:test_split_idx]
+    train_indices = indices[test_split_idx:]
+
+    X_train = features_array[train_indices]
+    y_train = labels_array[train_indices]
+
+    print(f"Training FFN model on {len(X_train)} samples...")
+
+    # Train the consensus model
+    consensus_model, losses = train_consensus_model(
+        X_train, y_train,
+        epochs=args.ffn_epochs,
+        lr=args.ffn_learning_rate,
+        batch_size=args.ffn_batch_size
+    )
+
+    # Generate FFN predictions for all samples
+    ffn_preds = []
+    ffn_probs = []
+
+    for feature in features_array:
+        # Convert to tensor
+        input_features = torch.FloatTensor(feature)
+
+        # Get prediction
+        with torch.no_grad():
+            model_pred_prob = consensus_model(input_features).item()
+            model_pred = 1 if model_pred_prob >= 0.5 else 0
+
+        ffn_preds.append(model_pred)
+        ffn_probs.append(model_pred_prob)
+
+    return np.array(ffn_preds), np.array(ffn_probs), consensus_model, train_indices, test_indices, losses
 
 
 def calculate_metrics(preds, trues, is_shorting=True):
@@ -437,7 +1175,65 @@ def calculate_returns(preds, trues, probs, is_shorting=True, actual_changes=None
         }
     }
 
-def print_detailed_analysis(preds, trues, probs, timestamps, prices, actual_changes, returns):
+
+def print_consensus_comparison(preds, ffn_preds, trues, timestamps, test_indices):
+    """
+    Print comparison between original predictions and FFN consensus model predictions ON CONSENSUS MODEL TEST SET
+
+    Parameters:
+    -----------
+    preds : numpy.ndarray
+        Original binary predictions (0 or 1)
+    ffn_preds : numpy.ndarray
+        FFN consensus model predictions (0 or 1)
+    trues : numpy.ndarray
+        Actual binary labels (0 or 1)
+    timestamps : list
+        Timestamps for each prediction
+    test_indices : list
+        Indices of test samples used to evaluate the FFN model
+    """
+    print("\n----- ORIGINAL vs FFN MODEL PREDICTIONS -----")
+    print("Sample | Timestamp | Original | FFN | True | Match?")
+    print("------------------------------------------------")
+
+    # Filter to show only test samples used for FFN evaluation
+    for i in test_indices:
+        # Format timestamp for display
+        if timestamps[i] is None:
+            ts_str = f"sample_{i}"
+        elif isinstance(timestamps[i], pd.Timestamp):
+            ts_str = timestamps[i].strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            ts_str = str(timestamps[i])
+
+        # Check if original prediction was correct
+        if preds[i] == trues[i]:
+            original_result = "✓"
+        else:
+            original_result = "✗"
+
+        # Check if FFN prediction was correct
+        if ffn_preds[i] == trues[i]:
+            ffn_result = "✓"
+        else:
+            ffn_result = "✗"
+
+        # Print summary line for this sample
+        print(f"{i:<6} | {ts_str:<18} | {preds[i]:<8} {original_result} | {ffn_preds[i]:<3} {ffn_result} | {trues[i]:<4} | {'Yes' if ffn_preds[i] == trues[i] else 'No'}")
+    # Calculate and print metrics for test set
+    test_original_accuracy = accuracy_score(trues[test_indices], preds[test_indices])
+    test_ffn_accuracy = accuracy_score(trues[test_indices], ffn_preds[test_indices])
+    improvement = test_ffn_accuracy - test_original_accuracy
+
+    print("\nTest Set Metrics:")
+    print(f"Original Model Accuracy: {test_original_accuracy:.4f}")
+    print(f"FFN Model Accuracy: {test_ffn_accuracy:.4f}")
+    print(f"Improvement: {improvement * 100:.2f}%")
+
+
+def print_detailed_analysis(preds, trues, probs, timestamps, prices, actual_changes, returns, ffn_preds=None,
+                            ffn_probs=None):
     """
     Prints a detailed analysis table showing prediction results and returns
 
@@ -457,13 +1253,23 @@ def print_detailed_analysis(preds, trues, probs, timestamps, prices, actual_chan
         Actual percentage price changes in decimal form
     returns : dict
         Dictionary containing return data
+    ffn_preds : numpy.ndarray, optional
+        FFN consensus model predictions
+    ffn_probs : numpy.ndarray, optional
+        FFN consensus model prediction probabilities
     """
     # Print detailed trading results for the combined strategy
     print("\nDetailed Analysis (Combined):")
-    print("-" * 120)
-    print(
-        f"{'Sample':<8} | {'Timestamp':<20} | {'Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Actual Chg':<10} | {'Percent Change':>8} | {'Cum Percent Change':>12}")
-    print("-" * 120)
+    print("-" * 140)
+    header = f"{'Sample':<8} | {'Timestamp':<20} | {'Price':<12} | {'Orig':<5} | "
+    if ffn_preds is not None:
+        header += f"{'FFN':<5} | "
+    header += f"{'True':<5} | {'Prob':<8} | "
+    if ffn_probs is not None:
+        header += f"{'FFN Prob':<8} | "
+    header += f"{'Actual Chg':<10} | {'Percent Change':>8} | {'Cum Percent Change':>12}"
+    print(header)
+    print("-" * 140)
 
     # Get combined returns and cumulative returns
     combined_returns = returns['strategies']['combined']['returns']
@@ -481,14 +1287,28 @@ def print_detailed_analysis(preds, trues, probs, timestamps, prices, actual_chan
         # Format price (handle None values)
         price_str = f"{prices[i]:<12.2f}" if prices[i] is not None else "N/A"
 
-        # Print row
-        print(
-            f"{i:<8} | {ts_str:<20} | {price_str} | {preds[i]:<5.0f} | "
-            f"{trues[i]:<5.0f} | {probs[i]:<8.4f} | {actual_changes[i] * 100:>10.2f}% | {combined_returns[i]:>8.4%} | {cum_returns[i]:>12.4%}")
+        # Start the row with common fields
+        row = f"{i:<8} | {ts_str:<20} | {price_str} | {preds[i]:<5.0f} | "
 
+        # Add FFN prediction if available
+        if ffn_preds is not None:
+            row += f"{ffn_preds[i]:<5.0f} | "
+
+        # Continue with common fields
+        row += f"{trues[i]:<5.0f} | {probs[i]:<8.4f} | "
+
+        # Add FFN probability if available
+        if ffn_probs is not None:
+            row += f"{ffn_probs[i]:<8.4f} | "
+
+        # Finish with remaining fields
+        row += f"{actual_changes[i] * 100:>10.2f}% | {combined_returns[i]:>8.4%} | {cum_returns[i]:>12.4%}"
+
+        # Print the completed row
+        print(row)
 
 def save_results(preds, trues, probs, timestamps, original_indices, prediction_indices, prices, metrics, returns, args,
-                 actual_changes):
+                 actual_changes, ffn_preds=None, ffn_probs=None, ffn_metrics=None):
     """Save inference results to output directory with improved column formatting"""
     print(f"Saving results to directory: {args.output_path}...")
     os.makedirs(args.output_path, exist_ok=True)
@@ -527,33 +1347,58 @@ def save_results(preds, trues, probs, timestamps, original_indices, prediction_i
     # Save metrics to JSON
     import json
     metrics_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_metrics.json")
+
+    # Prepare metrics data
+    metrics_data = {
+        'model': args.model,
+        'model_id': args.model_id,
+        'data_path': args.data_path,
+        'metrics': metrics,
+        'trading_returns': {
+            'total_return': returns['total_return']
+        },
+        'args': vars(args)
+    }
+
+    # Add FFN metrics if available
+    if ffn_metrics is not None:
+        metrics_data['ffn_metrics'] = ffn_metrics
+        metrics_data['metrics_comparison'] = {
+            'accuracy_improvement': ffn_metrics['accuracy'] - metrics['accuracy'],
+            'precision_improvement': ffn_metrics['precision'] - metrics['precision'],
+            'recall_improvement': ffn_metrics['recall'] - metrics['recall'],
+            'f1_improvement': ffn_metrics['f1'] - metrics['f1'],
+            'win_rate_improvement': ffn_metrics['trading']['win_rate'] - metrics['trading']['win_rate']
+        }
+
     with open(metrics_file, 'w') as f:
-        json.dump({
-            'model': args.model,
-            'model_id': args.model_id,
-            'data_path': args.data_path,
-            'metrics': metrics,
-            'trading_returns': {
-                'total_return': returns['total_return']
-            },
-            'args': vars(args)
-        }, f, indent=4)
+        json.dump(metrics_data, f, indent=4)
     print(f"Metrics saved to {metrics_file}")
 
     # Save the detailed analysis table to a CSV
     results_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_inference_results_table.csv")
 
+    # Create dataframe with base columns
     detailed_df = pd.DataFrame({
         'sample': range(len(preds)),
         'timestamp': human_timestamps,
         'price': prices,
-        'prediction': preds,
+        'prediction_original': preds,
         'true_label': trues,
-        'probability': probs,
+        'probability_original': probs,
         'actual_change_pct': [x * 100 for x in actual_changes],
         'trade_return_pct': [x * 100 for x in returns['strategies']['combined']['returns']],
         'cumulative_return_pct': [x * 100 for x in returns['strategies']['combined']['cumulative']]
     })
+
+    # Add FFN columns if available
+    if ffn_preds is not None and ffn_probs is not None:
+        detailed_df['prediction_ffn'] = ffn_preds
+        detailed_df['probability_ffn'] = ffn_probs
+        detailed_df['prediction_match'] = detailed_df['prediction_original'] == detailed_df['prediction_ffn']
+        detailed_df['original_correct'] = detailed_df['prediction_original'] == detailed_df['true_label']
+        detailed_df['ffn_correct'] = detailed_df['prediction_ffn'] == detailed_df['true_label']
+        detailed_df['prediction_improved'] = (~detailed_df['original_correct']) & detailed_df['ffn_correct']
 
     detailed_df.to_csv(results_file, index=False)
     print(f"Results table saved to {results_file}")
@@ -607,38 +1452,261 @@ def extract_actual_price_changes(prediction_indices, args):
         print(f"Warning: Could not extract actual price changes: {e}")
         return None
 
+
+def apply_conditional_trading_approach(preds, ffn_preds, trues, probs, ffn_probs, actual_changes, is_shorting=True):
+    """
+    Apply a conditional trading approach that only takes positions when both models agree
+
+    Parameters:
+    -----------
+    preds : numpy.ndarray
+        Original binary predictions (0 or 1)
+    ffn_preds : numpy.ndarray
+        FFN consensus model predictions (0 or 1)
+    trues : numpy.ndarray
+        Actual binary labels (0 or 1)
+    probs : numpy.ndarray
+        Original prediction probabilities
+    ffn_probs : numpy.ndarray
+        FFN prediction probabilities
+    actual_changes : numpy.ndarray
+        Actual percentage price changes
+    is_shorting : bool
+        Whether shorting is enabled in the strategy
+
+    Returns:
+    --------
+    dict
+        Dictionary containing returns and metrics for the conditional approach
+    """
+    print("Applying conditional trading approach (trade only when models agree)...")
+
+    # Initialize arrays
+    conditional_preds = np.zeros_like(preds)
+    conditional_returns = np.zeros_like(preds, dtype=float)
+
+    # Only take positions when both models agree
+    agreement_mask = (preds == ffn_preds)
+    conditional_preds[agreement_mask] = preds[agreement_mask]
+
+    # Calculate returns based on conditional predictions
+    for i in range(len(conditional_preds)):
+        if agreement_mask[i]:  # Only trade when models agree
+            if conditional_preds[i] == 1:  # Both predict up
+                conditional_returns[i] = actual_changes[i]  # Long position
+            elif conditional_preds[i] == 0 and is_shorting:  # Both predict down
+                conditional_returns[i] = -actual_changes[i]  # Short position
+
+    # Calculate cumulative returns
+    conditional_cum_returns = np.cumprod(1 + conditional_returns) - 1
+
+    # Calculate metrics
+    agreement_count = np.sum(agreement_mask)
+    trade_count = np.sum(conditional_returns != 0)
+    profitable_trades = np.sum(conditional_returns > 0)
+    unprofitable_trades = np.sum(conditional_returns < 0)
+    win_rate = profitable_trades / trade_count if trade_count > 0 else 0
+
+    # Calculate accuracy only for samples where we made predictions
+    traded_mask = agreement_mask & ((conditional_preds == 1) | (conditional_preds == 0 & is_shorting))
+    if np.sum(traded_mask) > 0:
+        accuracy = accuracy_score(trues[traded_mask], conditional_preds[traded_mask])
+    else:
+        accuracy = 0
+
+    # Calculate final return
+    total_return = conditional_cum_returns[-1] if len(conditional_cum_returns) > 0 else 0
+
+    return {
+        'preds': conditional_preds,
+        'returns': conditional_returns,
+        'cumulative': conditional_cum_returns,
+        'total_return': total_return,
+        'metrics': {
+            'agreement_rate': agreement_count / len(preds),
+            'trades_taken': trade_count,
+            'trades_skipped': len(preds) - trade_count,
+            'profitable_trades': int(profitable_trades),
+            'unprofitable_trades': int(unprofitable_trades),
+            'win_rate': win_rate,
+            'accuracy': accuracy
+        }
+    }
+
+def apply_ensemble_approach(preds, ffn_preds, trues, probs, ffn_probs, actual_changes, is_shorting=True,
+                            confidence_threshold=0.7, ensemble_method='weighted'):
+    """
+    Apply an ensemble approach that combines both models based on their confidence
+
+    Parameters:
+    -----------
+    preds : numpy.ndarray
+        Original binary predictions (0 or 1)
+    ffn_preds : numpy.ndarray
+        FFN consensus model predictions (0 or 1)
+    trues : numpy.ndarray
+        Actual binary labels (0 or 1)
+    probs : numpy.ndarray
+        Original prediction probabilities
+    ffn_probs : numpy.ndarray
+        FFN prediction probabilities
+    actual_changes : numpy.ndarray
+        Actual percentage price changes
+    is_shorting : bool
+        Whether shorting is enabled in the strategy
+    confidence_threshold : float
+        Threshold for high confidence
+    ensemble_method : str
+        Method for ensemble ('weighted', 'confidence_based', or 'boosted')
+
+    Returns:
+    --------
+    dict
+        Dictionary containing returns and metrics for the ensemble approach
+    """
+    print(f"Applying ensemble trading approach (method: {ensemble_method})...")
+
+    # Initialize arrays
+    ensemble_preds = np.zeros_like(preds)
+    ensemble_probs = np.zeros_like(probs)
+    ensemble_returns = np.zeros_like(preds, dtype=float)
+
+    # Create ensemble predictions based on method
+    if ensemble_method == 'weighted':
+        # Simple weighted average of probabilities (equal weights)
+        ensemble_probs = (probs + ffn_probs) / 2
+        ensemble_preds = (ensemble_probs > 0.5).astype(np.float32)
+
+    elif ensemble_method == 'confidence_based':
+        # Use the model with higher confidence for each prediction
+        original_confidence = np.abs(probs - 0.5) * 2  # Scale to [0, 1]
+        ffn_confidence = np.abs(ffn_probs - 0.5) * 2
+
+        for i in range(len(preds)):
+            if original_confidence[i] > ffn_confidence[i]:
+                ensemble_preds[i] = preds[i]
+                ensemble_probs[i] = probs[i]
+            else:
+                ensemble_preds[i] = ffn_preds[i]
+                ensemble_probs[i] = ffn_probs[i]
+
+    elif ensemble_method == 'boosted':
+        # Use FFN model only when original model's confidence is low
+        original_confidence = np.abs(probs - 0.5) * 2
+
+        for i in range(len(preds)):
+            if original_confidence[i] >= confidence_threshold:
+                # High confidence in original model
+                ensemble_preds[i] = preds[i]
+                ensemble_probs[i] = probs[i]
+            else:
+                # Low confidence, use FFN model
+                ensemble_preds[i] = ffn_preds[i]
+                ensemble_probs[i] = ffn_probs[i]
+
+    # Calculate returns based on ensemble predictions
+    for i in range(len(ensemble_preds)):
+        if ensemble_preds[i] == 1:  # Predict up
+            ensemble_returns[i] = actual_changes[i]  # Long position
+        elif ensemble_preds[i] == 0 and is_shorting:  # Predict down
+            ensemble_returns[i] = -actual_changes[i]  # Short position
+
+    # Calculate cumulative returns
+    ensemble_cum_returns = np.cumprod(1 + ensemble_returns) - 1
+
+    # Calculate metrics
+    trade_count = np.sum(ensemble_returns != 0)
+    profitable_trades = np.sum(ensemble_returns > 0)
+    unprofitable_trades = np.sum(ensemble_returns < 0)
+    win_rate = profitable_trades / trade_count if trade_count > 0 else 0
+    accuracy = accuracy_score(trues, ensemble_preds)
+
+    # Calculate final return
+    total_return = ensemble_cum_returns[-1] if len(ensemble_cum_returns) > 0 else 0
+
+    return {
+        'preds': ensemble_preds,
+        'probs': ensemble_probs,
+        'returns': ensemble_returns,
+        'cumulative': ensemble_cum_returns,
+        'total_return': total_return,
+        'metrics': {
+            'accuracy': accuracy,
+            'trades_taken': trade_count,
+            'profitable_trades': int(profitable_trades),
+            'unprofitable_trades': int(unprofitable_trades),
+            'win_rate': win_rate
+        }
+    }
+
+
+def print_combined_approaches_summary(original_metrics, ffn_metrics, conditional_results, ensemble_results,
+                                      original_returns, ffn_returns):
+    """
+    Print a summary comparison of all approaches
+
+    Parameters:
+    -----------
+    original_metrics : dict
+        Metrics for the original model
+    ffn_metrics : dict
+        Metrics for the FFN model
+    conditional_results : dict
+        Results for the conditional approach
+    ensemble_results : dict
+        Results for the ensemble approach
+    original_returns : dict
+        Returns for the original model
+    ffn_returns : dict
+        Returns for the FFN model
+    """
+    print("\n----- TRADING APPROACHES COMPARISON -----")
+    print(f"{'Approach':<20} | {'Accuracy':<10} | {'Win Rate':<10} | {'Total Return':<15} | {'Trades':<10}")
+    print("-" * 75)
+
+    # Original model
+    print(f"{'Original Model':<20} | {original_metrics['accuracy'] * 100:>8.2f}% | "
+          f"{original_metrics['trading']['win_rate'] * 100:>8.2f}% | "
+          f"{original_returns['total_return'] * 100:>13.2f}% | "
+          f"{original_metrics['trading']['total_trades']:>10}")
+
+    # FFN model
+    print(f"{'FFN Model':<20} | {ffn_metrics['accuracy'] * 100:>8.2f}% | "
+          f"{ffn_metrics['trading']['win_rate'] * 100:>8.2f}% | "
+          f"{ffn_returns['total_return'] * 100:>13.2f}% | "
+          f"{ffn_metrics['trading']['total_trades']:>10}")
+
+    # Conditional approach
+    print(f"{'Conditional':<20} | {conditional_results['metrics']['accuracy'] * 100:>8.2f}% | "
+          f"{conditional_results['metrics']['win_rate'] * 100:>8.2f}% | "
+          f"{conditional_results['total_return'] * 100:>13.2f}% | "
+          f"{conditional_results['metrics']['trades_taken']:>10}")
+
+    # Ensemble approach
+    print(f"{'Ensemble':<20} | {ensemble_results['metrics']['accuracy'] * 100:>8.2f}% | "
+          f"{ensemble_results['metrics']['win_rate'] * 100:>8.2f}% | "
+          f"{ensemble_results['total_return'] * 100:>13.2f}% | "
+          f"{ensemble_results['metrics']['trades_taken']:>10}")
+
+    print("\nConditional Approach Details:")
+    print(f"Agreement Rate: {conditional_results['metrics']['agreement_rate'] * 100:.2f}%")
+    print(f"Trades Skipped: {conditional_results['metrics']['trades_skipped']}")
+
+
 def main():
     try:
         print("Starting inference script...")
         # Parse arguments
         args = parse_args()
-        print("Arguments parsed successfully")
 
         # Determine device
         device = torch.device('cuda:{}'.format(args.gpu) if args.use_gpu else 'cpu')
         print(f'Using device: {device}')
 
         # Create experiment and model setting
-        setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
-            args.model_id,
-            args.model,
-            args.data,
-            args.features,
-            args.seq_len,
-            args.label_len,
-            args.pred_len,
-            args.d_model,
-            args.n_heads,
-            args.e_layers,
-            args.d_layers,
-            args.d_ff,
-            args.factor,
-            args.embed,
-            args.distil,
-            'Logits',
-            args.class_strategy,
-            args.projection_idx
-        )
+        setting = '{}_{}_{}'.format(
+            args.data_path,
+            args.class_strategy, args.projection_idx)
 
         # Override checkpoints path if specific checkpoint not provided
         if not args.checkpoints:
@@ -656,16 +1724,18 @@ def main():
         model = load_model(exp, args, setting)
         model.to(device)
 
-        # Get test data
-        print("Getting test data...")
+        # Get all datasets
+        print("Getting data...")
+        train_data, _ = exp._get_data(flag='train')
+        val_data, _ = exp._get_data(flag='val')
         test_data, test_loader = get_test_data(args)
 
         # Run inference with improved timestamp and prediction index tracking
-        print("Running inference...")
-        preds, trues, probs, timestamps, original_indices, prediction_indices, prices = run_inference(
+        print("Running inference with original model...")
+        preds, trues, probs, timestamps, original_indices, prediction_indices, prices, confusion_matrices = run_inference(
             model, test_data, test_loader, args, device)
 
-        # Calculate metrics
+        # Calculate metrics for original predictions
         print("Calculating metrics...")
         metrics = calculate_metrics(preds, trues, bool(args.is_shorting))
 
@@ -683,29 +1753,257 @@ def main():
                 else:  # Actually went down
                     actual_changes[i] = -0.015  # Assume 1.5% decrease
 
-        # Calculate trading returns with actual price changes
-        print("Calculating trading returns...")
-        returns = calculate_returns(preds, trues, probs, bool(args.is_shorting), actual_changes)
+        # Calculate trading returns for original model
+        print("Calculating trading returns for original model...")
+        original_returns = calculate_returns(preds, trues, probs, bool(args.is_shorting), actual_changes)
 
-        # Print detailed analysis table
-        print_detailed_analysis(preds, trues, probs, timestamps, prices, actual_changes, returns)
+        # Initialize variables for additional methods
+        ffn_preds = None
+        ffn_probs = None
+        ffn_metrics = None
+        ffn_returns = None
+        embedding_preds = None
+        embedding_probs = None
+        embedding_metrics = None
+        embedding_returns = None
 
-        # Get the final return value
-        final_return = returns['strategies']['combined']['metrics']['total_return']
+        # Apply FFN consensus model if enabled
+        if args.use_consensus_model:
+            print("\nApplying FFN consensus model...")
+            ffn_preds, ffn_probs, consensus_model, train_indices, test_indices, losses = apply_ffn_consensus_model(
+                confusion_matrices, args)
 
-        # Print summary
-        print("\nInference Summary:")
-        print(f"Total samples: {len(preds)}")
-        print(f"Accuracy: {metrics['accuracy'] * 100:.2f}%")
-        print(f"Precision: {metrics['precision'] * 100:.2f}%")
-        print(f"Win rate: {metrics['trading']['win_rate'] * 100:.2f}%")
-        print(f"Total cumulative return: {final_return * 100:.2f}%")
+            # Calculate metrics for FFN predictions
+            ffn_metrics = calculate_metrics(ffn_preds, trues, bool(args.is_shorting))
 
-        # Save enhanced results
-        print("Saving results...")
-        metrics_file, results_file = save_results(
-            preds, trues, probs, timestamps, original_indices, prediction_indices,
-            prices, metrics, returns, args, actual_changes)
+            # Calculate returns for FFN predictions
+            ffn_returns = calculate_returns(ffn_preds, trues, ffn_probs, bool(args.is_shorting), actual_changes)
+
+            # Print comparison between original and FFN predictions
+            print_consensus_comparison(preds, ffn_preds, trues, timestamps, test_indices)
+
+        # Apply embedding-based approach if enabled
+        if args.use_embedding_approach:
+            print("\nApplying embedding-based approach...")
+            embedding_results = apply_embedding_based_approach(
+                model,
+                train_data,
+                val_data,
+                test_data,
+                device,
+                top_n=args.similar_samples,
+                ffn_epochs=args.embedding_ffn_epochs,
+                ffn_lr=args.embedding_ffn_lr
+            )
+
+            # Extract results
+            embedding_preds = embedding_results['preds']
+            embedding_probs = embedding_results['probs']
+
+            # Calculate metrics for embedding predictions
+            embedding_metrics = calculate_metrics(embedding_preds, trues, bool(args.is_shorting))
+
+            # Calculate returns for embedding predictions
+            embedding_returns = calculate_returns(embedding_preds, trues, embedding_probs,
+                                                  bool(args.is_shorting), actual_changes)
+
+        # Create combined ensemble if all methods are available
+        ensemble_preds = None
+        ensemble_probs = None
+        ensemble_metrics = None
+        ensemble_returns = None
+
+        if ffn_preds is not None and embedding_preds is not None:
+            print("\nCreating combined ensemble of all methods...")
+            # Create ensemble predictions using majority voting
+            ensemble_preds = np.zeros_like(preds)
+            ensemble_probs = np.zeros_like(probs)
+
+            for i in range(len(preds)):
+                # For each sample, collect votes from all methods
+                votes = [preds[i], ffn_preds[i], embedding_preds[i]]
+                vote_count = np.bincount(np.array(votes).astype(int))
+
+                # Use majority vote, or original prediction in case of tie
+                if len(vote_count) > 1:
+                    if vote_count[0] > vote_count[1]:
+                        ensemble_preds[i] = 0
+                    elif vote_count[1] > vote_count[0]:
+                        ensemble_preds[i] = 1
+                    else:
+                        # Tie - use original prediction
+                        ensemble_preds[i] = preds[i]
+                else:
+                    # Only one value was voted for
+                    ensemble_preds[i] = vote_count.argmax()
+
+                # Average probabilities
+                ensemble_probs[i] = np.mean([probs[i], ffn_probs[i], embedding_probs[i]])
+
+            # Calculate metrics for ensemble
+            ensemble_metrics = calculate_metrics(ensemble_preds, trues, bool(args.is_shorting))
+
+            # Calculate returns for ensemble
+            ensemble_returns = calculate_returns(ensemble_preds, trues, ensemble_probs, bool(args.is_shorting),
+                                                 actual_changes)
+
+        # Print comprehensive comparison of all methods
+        print("\n----- COMPREHENSIVE METHOD COMPARISON -----")
+        print(
+            f"{'Method':<20} | {'Accuracy':<10} | {'Precision':<10} | {'Win Rate':<10} | {'Total Return':<15}")
+        print("-" * 75)
+
+        # Original model
+        print(f"{'Original Model':<20} | {metrics['accuracy'] * 100:>8.2f}% | "
+              f"{metrics['precision'] * 100:>8.2f}% | "
+              f"{metrics['trading']['win_rate'] * 100:>8.2f}% | "
+              f"{original_returns['total_return'] * 100:>13.2f}%")
+
+        # FFN model if available
+        if ffn_metrics is not None:
+            print(f"{'FFN Model':<20} | {ffn_metrics['accuracy'] * 100:>8.2f}% | "
+                  f"{ffn_metrics['precision'] * 100:>8.2f}% | "
+                  f"{ffn_metrics['trading']['win_rate'] * 100:>8.2f}% | "
+                  f"{ffn_returns['total_return'] * 100:>13.2f}%")
+
+        # Embedding model if available
+        if embedding_metrics is not None:
+            print(f"{'Embedding Model':<20} | {embedding_metrics['accuracy'] * 100:>8.2f}% | "
+                  f"{embedding_metrics['precision'] * 100:>8.2f}% | "
+                  f"{embedding_metrics['trading']['win_rate'] * 100:>8.2f}% | "
+                  f"{embedding_returns['total_return'] * 100:>13.2f}%")
+
+        # Ensemble if available
+        if ensemble_metrics is not None:
+            print(f"{'Ensemble':<20} | {ensemble_metrics['accuracy'] * 100:>8.2f}% | "
+                  f"{ensemble_metrics['precision'] * 100:>8.2f}% | "
+                  f"{ensemble_metrics['trading']['win_rate'] * 100:>8.2f}% | "
+                  f"{ensemble_returns['total_return'] * 100:>13.2f}%")
+
+        # Print agreement analysis if multiple methods are available
+        if ffn_preds is not None or embedding_preds is not None:
+            print("\n----- AGREEMENT ANALYSIS -----")
+
+            # Calculate agreement between methods
+            if ffn_preds is not None and embedding_preds is not None:
+                # Agreement between all three methods
+                all_agree = np.sum((preds == ffn_preds) & (preds == embedding_preds))
+                all_agree_pct = all_agree / len(preds) * 100
+
+                # Correct predictions when all agree
+                correct_when_agree = np.sum(
+                    ((preds == ffn_preds) & (preds == embedding_preds)) & (preds == trues))
+                accuracy_when_agree = correct_when_agree / all_agree if all_agree > 0 else 0
+
+                print(f"All three methods agree on {all_agree} samples ({all_agree_pct:.2f}%)")
+                print(f"Accuracy when all agree: {accuracy_when_agree * 100:.2f}%")
+
+                # Pairwise agreements
+                orig_ffn_agree = np.sum(preds == ffn_preds)
+                orig_emb_agree = np.sum(preds == embedding_preds)
+                ffn_emb_agree = np.sum(ffn_preds == embedding_preds)
+
+                print(f"Original and FFN agree: {orig_ffn_agree / len(preds) * 100:.2f}%")
+                print(f"Original and Embedding agree: {orig_emb_agree / len(preds) * 100:.2f}%")
+                print(f"FFN and Embedding agree: {ffn_emb_agree / len(preds) * 100:.2f}%")
+
+            elif ffn_preds is not None:
+                # Agreement between original and FFN
+                agree = np.sum(preds == ffn_preds)
+                agree_pct = agree / len(preds) * 100
+
+                # Correct predictions when agree
+                correct_when_agree = np.sum((preds == ffn_preds) & (preds == trues))
+                accuracy_when_agree = correct_when_agree / agree if agree > 0 else 0
+
+                print(f"Original and FFN agree on {agree} samples ({agree_pct:.2f}%)")
+                print(f"Accuracy when both agree: {accuracy_when_agree * 100:.2f}%")
+
+            elif embedding_preds is not None:
+                # Agreement between original and embedding
+                agree = np.sum(preds == embedding_preds)
+                agree_pct = agree / len(preds) * 100
+
+                # Correct predictions when agree
+                correct_when_agree = np.sum((preds == embedding_preds) & (preds == trues))
+                accuracy_when_agree = correct_when_agree / agree if agree > 0 else 0
+
+                print(f"Original and Embedding agree on {agree} samples ({agree_pct:.2f}%)")
+                print(f"Accuracy when both agree: {accuracy_when_agree * 100:.2f}%")
+
+        # Print detailed analysis of samples
+        print("\n----- SAMPLE ANALYSIS -----")
+
+        # Sample the first few cases where methods disagree
+        disagreement_indices = []
+        if ffn_preds is not None and embedding_preds is not None:
+            disagreement_indices = np.where((preds != ffn_preds) | (preds != embedding_preds))[0]
+        elif ffn_preds is not None:
+            disagreement_indices = np.where(preds != ffn_preds)[0]
+        elif embedding_preds is not None:
+            disagreement_indices = np.where(preds != embedding_preds)[0]
+
+        if len(disagreement_indices) > 0:
+            # Show the first few disagreement cases
+            print("Samples where methods disagree:")
+            print(
+                f"{'Sample':<7} | {'Timestamp':<20} | {'Original':<10} | {'FFN':<10} | {'Embedding':<10} | {'True':<6} | {'Correct'}")
+            print("-" * 85)
+
+            for i in disagreement_indices[:min(10, len(disagreement_indices))]:
+                # Format timestamp
+                ts_str = "N/A"
+                if timestamps[i] is not None:
+                    if isinstance(timestamps[i], pd.Timestamp):
+                        ts_str = timestamps[i].strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        ts_str = str(timestamps[i])
+
+                # Format predictions
+                orig_pred = f"{preds[i]:.0f} ({probs[i]:.4f})"
+                ffn_pred = f"{ffn_preds[i]:.0f} ({ffn_probs[i]:.4f})" if ffn_preds is not None else "N/A"
+                emb_pred = f"{embedding_preds[i]:.0f} ({embedding_probs[i]:.4f})" if embedding_preds is not None else "N/A"
+
+                # Determine which method was correct
+                correct = []
+                if preds[i] == trues[i]:
+                    correct.append("Original")
+                if ffn_preds is not None and ffn_preds[i] == trues[i]:
+                    correct.append("FFN")
+                if embedding_preds is not None and embedding_preds[i] == trues[i]:
+                    correct.append("Embedding")
+
+                correct_str = ", ".join(correct) if correct else "None"
+
+                print(
+                    f"{i:<7} | {ts_str:<20} | {orig_pred:<10} | {ffn_pred:<10} | {emb_pred:<10} | {trues[i]:<6.0f} | {correct_str}")
+
+        # Save all results to CSV and JSON files
+        print("\nSaving comprehensive results...")
+        results_data = {
+            'preds': preds,
+            'trues': trues,
+            'probs': probs,
+            'timestamps': timestamps,
+            'prices': prices,
+            'metrics': metrics,
+            'returns': original_returns,
+            'ffn_preds': ffn_preds,
+            'ffn_probs': ffn_probs,
+            'ffn_metrics': ffn_metrics,
+            'ffn_returns': ffn_returns,
+            'embedding_preds': embedding_preds,
+            'embedding_probs': embedding_probs,
+            'embedding_metrics': embedding_metrics,
+            'embedding_returns': embedding_returns,
+            'ensemble_preds': ensemble_preds,
+            'ensemble_probs': ensemble_probs,
+            'ensemble_metrics': ensemble_metrics,
+            'ensemble_returns': ensemble_returns
+        }
+
+        # Save results to files
+        save_comprehensive_results(results_data, args)
 
         print("\nDone!")
 
@@ -713,6 +2011,267 @@ def main():
         print(f"ERROR: {e}")
         import traceback
         traceback.print_exc()
+
+
+def save_combined_results(results_data):
+    """
+    Save results from all approaches to CSV files
+
+    Parameters:
+    -----------
+    results_data : dict
+        Dictionary containing all results data
+    """
+    args = results_data['args']
+    os.makedirs(args.output_path, exist_ok=True)
+
+    # Process timestamps
+    human_timestamps = []
+    for ts in results_data['timestamps']:
+        if isinstance(ts, pd.Timestamp):
+            human_ts = ts.strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(ts, (int, float)) and ts > 1000000000:
+            human_ts = pd.Timestamp(ts, unit='s').strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(ts, str):
+            try:
+                human_ts = pd.to_datetime(ts).strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                human_ts = ts
+        else:
+            human_ts = "Unknown" if ts is not None else None
+        human_timestamps.append(human_ts)
+
+    # Create base dataframe
+    detailed_df = pd.DataFrame({
+        'sample': range(len(results_data['preds'])),
+        'timestamp': human_timestamps,
+        'price': results_data['prices'],
+        'original_prediction': results_data['preds'],
+        'true_label': results_data['trues'],
+        'original_probability': results_data['probs'],
+        'actual_change_pct': [x * 100 for x in results_data['actual_changes']],
+        'original_return_pct': [x * 100 for x in results_data['returns']['strategies']['combined']['returns']],
+        'original_cum_return_pct': [x * 100 for x in results_data['returns']['strategies']['combined']['cumulative']]
+    })
+
+    # Add FFN model results if available
+    if results_data['ffn_preds'] is not None:
+        detailed_df['ffn_prediction'] = results_data['ffn_preds']
+        detailed_df['ffn_probability'] = results_data['ffn_probs']
+        detailed_df['original_correct'] = detailed_df['original_prediction'] == detailed_df['true_label']
+        detailed_df['ffn_correct'] = detailed_df['ffn_prediction'] == detailed_df['true_label']
+        detailed_df['models_agree'] = detailed_df['original_prediction'] == detailed_df['ffn_prediction']
+
+    # Add conditional approach results if available
+    if 'conditional_results' in results_data:
+        detailed_df['conditional_prediction'] = results_data['conditional_results']['preds']
+        detailed_df['conditional_return_pct'] = [x * 100 for x in results_data['conditional_results']['returns']]
+        detailed_df['conditional_cum_return_pct'] = [x * 100 for x in results_data['conditional_results']['cumulative']]
+        detailed_df['conditional_correct'] = detailed_df['conditional_prediction'] == detailed_df['true_label']
+
+    # Add ensemble approach results if available
+    if 'ensemble_results' in results_data:
+        detailed_df['ensemble_prediction'] = results_data['ensemble_results']['preds']
+        detailed_df['ensemble_probability'] = results_data['ensemble_results']['probs']
+        detailed_df['ensemble_return_pct'] = [x * 100 for x in results_data['ensemble_results']['returns']]
+        detailed_df['ensemble_cum_return_pct'] = [x * 100 for x in results_data['ensemble_results']['cumulative']]
+        detailed_df['ensemble_correct'] = detailed_df['ensemble_prediction'] == detailed_df['true_label']
+
+    # Save detailed results
+    results_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_combined_results.csv")
+    detailed_df.to_csv(results_file, index=False)
+    print(f"Combined results saved to {results_file}")
+
+    # Save metrics summary to JSON
+    import json
+    metrics_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_combined_metrics.json")
+
+    # Helper function to convert NumPy types to native Python types
+    def convert_numpy_types(obj):
+        if isinstance(obj, (np.integer, np.int64)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float64, np.float32)):
+            return float(obj)
+        elif isinstance(obj, (np.ndarray,)):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {k: convert_numpy_types(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_numpy_types(i) for i in obj]
+        else:
+            return obj
+
+    # Create metrics data with conversion to JSON-serializable types
+    metrics_data = {
+        'model': args.model,
+        'model_id': args.model_id,
+        'data_path': args.data_path,
+        'original_metrics': convert_numpy_types(results_data['metrics']),
+        'original_returns': {
+            'total_return': float(results_data['returns']['total_return'])
+        }
+    }
+
+    # Add FFN metrics if available
+    if results_data['ffn_metrics'] is not None:
+        metrics_data['ffn_metrics'] = convert_numpy_types(results_data['ffn_metrics'])
+        if 'ffn_returns' in results_data:
+            metrics_data['ffn_returns'] = {
+                'total_return': float(results_data['ffn_returns']['total_return'])
+            }
+
+    # Add conditional approach metrics if available
+    if 'conditional_results' in results_data:
+        metrics_data['conditional_metrics'] = convert_numpy_types(results_data['conditional_results']['metrics'])
+        metrics_data['conditional_returns'] = {
+            'total_return': float(results_data['conditional_results']['total_return'])
+        }
+
+    # Add ensemble approach metrics if available
+    if 'ensemble_results' in results_data:
+        metrics_data['ensemble_metrics'] = convert_numpy_types(results_data['ensemble_results']['metrics'])
+        metrics_data['ensemble_returns'] = {
+            'total_return': float(results_data['ensemble_results']['total_return'])
+        }
+
+    with open(metrics_file, 'w') as f:
+        json.dump(metrics_data, f, indent=4)
+    print(f"Combined metrics saved to {metrics_file}")
+
+    return results_file, metrics_file
+
+
+def save_comprehensive_results(results_data, args):
+    """
+    Save comprehensive results from all methods to files
+
+    Parameters:
+    -----------
+    results_data : dict
+        Dictionary containing all results data
+    args : argparse.Namespace
+        Command line arguments
+    """
+    os.makedirs(args.output_path, exist_ok=True)
+
+    # Create timestamp strings
+    human_timestamps = []
+    for ts in results_data['timestamps']:
+        if isinstance(ts, pd.Timestamp):
+            human_ts = ts.strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(ts, (int, float)) and ts > 1000000000:
+            human_ts = pd.Timestamp(ts, unit='s').strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(ts, str):
+            try:
+                human_ts = pd.to_datetime(ts).strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                human_ts = ts
+        else:
+            human_ts = "Unknown" if ts is not None else None
+        human_timestamps.append(human_ts)
+
+    # Create pandas DataFrame for detailed results
+    df_dict = {
+        'sample': range(len(results_data['preds'])),
+        'timestamp': human_timestamps,
+        'price': results_data['prices'],
+        'original_prediction': results_data['preds'],
+        'original_probability': results_data['probs'],
+        'true_label': results_data['trues']
+    }
+
+    # Add FFN results if available
+    if results_data['ffn_preds'] is not None:
+        df_dict['ffn_prediction'] = results_data['ffn_preds']
+        df_dict['ffn_probability'] = results_data['ffn_probs']
+
+    # Add embedding results if available
+    if results_data['embedding_preds'] is not None:
+        df_dict['embedding_prediction'] = results_data['embedding_preds']
+        df_dict['embedding_probability'] = results_data['embedding_probs']
+
+    # Add ensemble results if available
+    if results_data['ensemble_preds'] is not None:
+        df_dict['ensemble_prediction'] = results_data['ensemble_preds']
+        df_dict['ensemble_probability'] = results_data['ensemble_probs']
+
+    # Add accuracy columns
+    df_dict['original_correct'] = results_data['preds'] == results_data['trues']
+
+    if results_data['ffn_preds'] is not None:
+        df_dict['ffn_correct'] = results_data['ffn_preds'] == results_data['trues']
+
+    if results_data['embedding_preds'] is not None:
+        df_dict['embedding_correct'] = results_data['embedding_preds'] == results_data['trues']
+
+    if results_data['ensemble_preds'] is not None:
+        df_dict['ensemble_correct'] = results_data['ensemble_preds'] == results_data['trues']
+
+    # Create DataFrame
+    detailed_df = pd.DataFrame(df_dict)
+
+    # Save to CSV
+    csv_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_comprehensive_results.csv")
+    detailed_df.to_csv(csv_file, index=False)
+    print(f"Comprehensive results saved to {csv_file}")
+
+    # Convert metrics to JSON-serializable format
+    def convert_numpy_types(obj):
+        if isinstance(obj, (np.integer, np.int64)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float64, np.float32)):
+            return float(obj)
+        elif isinstance(obj, (np.ndarray,)):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {k: convert_numpy_types(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_numpy_types(i) for i in obj]
+        else:
+            return obj
+
+    # Create metrics summary
+    metrics_summary = {
+        'model_id': args.model_id,
+        'date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'total_samples': len(results_data['preds']),
+        'metrics': {
+            'original': convert_numpy_types(results_data['metrics']),
+            'original_returns': {
+                'total_return': float(results_data['returns']['total_return'])
+            }
+        }
+    }
+
+    # Add FFN metrics if available
+    if results_data['ffn_metrics'] is not None:
+        metrics_summary['metrics']['ffn'] = convert_numpy_types(results_data['ffn_metrics'])
+        metrics_summary['metrics']['ffn_returns'] = {
+            'total_return': float(results_data['ffn_returns']['total_return'])
+        }
+
+    # Add embedding metrics if available
+    if results_data['embedding_metrics'] is not None:
+        metrics_summary['metrics']['embedding'] = convert_numpy_types(results_data['embedding_metrics'])
+        metrics_summary['metrics']['embedding_returns'] = {
+            'total_return': float(results_data['embedding_returns']['total_return'])
+        }
+
+    # Add ensemble metrics if available
+    if results_data['ensemble_metrics'] is not None:
+        metrics_summary['metrics']['ensemble'] = convert_numpy_types(results_data['ensemble_metrics'])
+        metrics_summary['metrics']['ensemble_returns'] = {
+            'total_return': float(results_data['ensemble_returns']['total_return'])
+        }
+
+    # Save metrics to JSON
+    import json
+    json_file = os.path.join(args.output_path, f"{args.model}_{args.model_id}_comprehensive_metrics.json")
+    with open(json_file, 'w') as f:
+        json.dump(metrics_summary, f, indent=4)
+    print(f"Comprehensive metrics saved to {json_file}")
+
+    return csv_file, json_file
 
 
 # Make sure this is at the end of your script

@@ -1752,9 +1752,15 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         print("Model training complete!")
 
         # Phase 4: Evaluate on test set
+        # Phase 4: Evaluate on test set
         print("\nPhase 4: Evaluating model on test set...")
-        correct_predictions = 0
+        correct_predictions_original = 0
+        correct_predictions_ffn = 0
         total_test_samples = len(X_test)
+
+        print("\n----- TEST SET EVALUATION -----")
+        print("Original | FFN | True | Match?")
+        print("-------------------------------")
 
         for i in range(total_test_samples):
             # Extract features for this test sample
@@ -1764,18 +1770,39 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             true_label = int(y_test[i])
 
             print(f"\nTest Sample {i + 1}:")
-            pred, prob = process_confusion_matrix(TP, TN, FP, FN, output_binary, output_prob, true_label,
-                                                  model=consensus_model, is_test_sample=True)
 
-            # Evaluate prediction
-            if pred == true_label:
-                correct_predictions += 1
-                print(f"✓ Correct prediction! (Confidence: {prob:.4f})")
+            # Process and get FFN prediction
+            pred, prob = process_confusion_matrix(
+                TP, TN, FP, FN, output_binary, output_prob, true_label,
+                model=consensus_model, is_test_sample=True
+            )
+
+            # Check if original prediction was correct
+            if output_binary == true_label:
+                correct_predictions_original += 1
+                original_result = "✓"
             else:
-                print(f"✗ Incorrect prediction. (Confidence: {prob:.4f})")
+                original_result = "✗"
 
-        test_accuracy = correct_predictions / total_test_samples
-        print(f"\nTest Set Accuracy: {test_accuracy:.4f} ({correct_predictions}/{total_test_samples})")
+            # Check if FFN prediction was correct
+            if pred == true_label:
+                correct_predictions_ffn += 1
+                ffn_result = "✓"
+            else:
+                ffn_result = "✗"
+
+            # Print summary line for this sample
+            print(
+                f"  {output_binary} {original_result} |  {pred} {ffn_result}  |  {true_label}  | {'Yes' if pred == true_label else 'No'}")
+
+        # Calculate and report accuracy metrics
+        original_accuracy = correct_predictions_original / total_test_samples
+        ffn_accuracy = correct_predictions_ffn / total_test_samples
+
+        print("\n----- ACCURACY SUMMARY -----")
+        print(f"Original Model Accuracy: {original_accuracy:.4f} ({correct_predictions_original}/{total_test_samples})")
+        print(f"FFN Model Accuracy: {ffn_accuracy:.4f} ({correct_predictions_ffn}/{total_test_samples})")
+        print(f"Improvement: {(ffn_accuracy - original_accuracy) * 100:.2f}%")
 
         # Convert results to numpy arrays
         # standard_preds = np.array(standard_preds)
