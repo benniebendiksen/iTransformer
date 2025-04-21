@@ -7,7 +7,6 @@
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/inference.py" beforeDir="false" afterPath="$PROJECT_DIR$/inference.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/run.py" beforeDir="false" afterPath="$PROJECT_DIR$/run.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -218,7 +217,8 @@
       <workItem from="1745041016656" duration="12005000" />
       <workItem from="1745121497783" duration="4071000" />
       <workItem from="1745163062236" duration="21749000" />
-      <workItem from="1745261222040" duration="2031000" />
+      <workItem from="1745261222040" duration="3059000" />
+      <workItem from="1745266027650" duration="1091000" />
     </task>
     <servers />
   </component>

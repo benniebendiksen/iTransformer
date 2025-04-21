@@ -1758,7 +1758,7 @@ def apply_conditional_trading_approach(preds, ffn_preds, trues, probs, ffn_probs
     }
 
 def apply_ensemble_approach(preds, ffn_preds, trues, probs, ffn_probs, actual_changes, is_shorting=True,
-                            confidence_threshold=0.7, ensemble_method='weighted'):
+                            confidence_threshold=0.7, ensemble_method='confidence_based'):
     """
     Apply an ensemble approach that combines both models based on their confidence
 
