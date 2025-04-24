@@ -987,6 +987,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 if batch_x.size(0) == 0:
                     continue
 
+                iter_count += 1
+
                 # Move tensors to device
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
