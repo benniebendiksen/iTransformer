@@ -982,7 +982,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
                 # Skip empty batches
                 if batch_x.size(0) == 0:
                     continue
