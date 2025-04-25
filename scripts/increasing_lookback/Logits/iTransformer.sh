@@ -24,21 +24,21 @@ model_name=iTransformer
 #data_path="pca_components_btcusdt_70_april_15_reduced_extended_14_double_fixed_sizes.csv"
 # data_path="pca_components_btcusdt_70_april_15_to_date_fixed_train_val_size.csv"
 
-#data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_reordered.csv"
+data_path="btcusd_pca_components_lightboost_12h_4h_reduced_70_7_5_1_2_1_old_reordered.csv"
 #data_path="pca_components_btcusdt_40_reattempt_12h_80_top.csv"
 #data_path="pca_components_btcusdt_42_12h_full_binance_reduced.csv"
 # data_path="btcusdt_12h_historical_reduced_python_processed_1_2_1_old_reattempt_corr_removed.csv"
 #data_path="pca_components_btcusdt_12h_56_reduced.csv"
 #data_path="pca_components_btcusdt_12h_55_reduced_attempt_2.csv"
-data_path="pca_components_btcusdt_12h_45_reduced_lance_seed.csv"
 #data_path="pca_components_btcusdt_12h_45_reduced_lance_seed_april_15.csv"
 #data_path="pca_components_btcusdt_12h_44_reduced_lance_seed_april_15_baseline_set_sizes.csv"
 #data_path="pca_components_btcusdt_12h_48_07_05_reduced_lance_seed_april_15.csv"
 #data_path="pca_components_btcusdt_12h_46_07_05_lance_seed_april_15.csv"
+#data_path="pca_components_btcusdt_12h_45_reduced_lance_seed.csv"
 seq_len=96
 pred_len=1
 # enc_in=73
-enc_in=50
+enc_in=75
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
