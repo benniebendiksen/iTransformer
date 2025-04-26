@@ -586,7 +586,7 @@ def parse_args():
     # Add these arguments to your parse_args function
     parser.add_argument('--use_embedding_approach', type=int, default=1,
                         help='whether to use embedding-based approach')
-    parser.add_argument('--similar_samples', type=int, default=20,
+    parser.add_argument('--similar_samples', type=int, default=15,
                         help='number of similar samples for embedding-based approach')
     parser.add_argument('--embedding_ffn_epochs', type=int, default=50,
                         help='number of epochs for embedding-based FFN training')
@@ -2390,6 +2390,7 @@ def apply_ensemble_approach(preds, ffn_preds, trues, probs, ffn_probs, actual_ch
     # Initialize arrays
     ensemble_preds = np.zeros_like(preds)
     ensemble_probs = np.zeros_like(probs)
+    ensemble_trues = np.zeros_like(trues)
     ensemble_returns = np.zeros_like(preds, dtype=float)
 
     # Create ensemble predictions based on method
@@ -2412,7 +2413,7 @@ def apply_ensemble_approach(preds, ffn_preds, trues, probs, ffn_probs, actual_ch
                 ensemble_probs[i] = ffn_probs[i]
 
     elif ensemble_method == 'boosted':
-        # Use FFN model only when original model's confidence is low
+        # Trade only if original model is confident enough
         original_confidence = np.abs(probs - 0.5) * 2
 
         for i in range(len(preds)):
@@ -2420,10 +2421,9 @@ def apply_ensemble_approach(preds, ffn_preds, trues, probs, ffn_probs, actual_ch
                 # High confidence in original model
                 ensemble_preds[i] = preds[i]
                 ensemble_probs[i] = probs[i]
+                ensemble_trues[i] = trues[i]
             else:
-                # Low confidence, use FFN model
-                ensemble_preds[i] = ffn_preds[i]
-                ensemble_probs[i] = ffn_probs[i]
+                continue
 
     # Calculate returns based on ensemble predictions
     for i in range(len(ensemble_preds)):
@@ -2436,11 +2436,11 @@ def apply_ensemble_approach(preds, ffn_preds, trues, probs, ffn_probs, actual_ch
     ensemble_cum_returns = np.cumprod(1 + ensemble_returns) - 1
 
     # Calculate metrics
-    trade_count = np.sum(ensemble_returns != 0)
+    trade_count = len(ensemble_preds)
     profitable_trades = np.sum(ensemble_returns > 0)
     unprofitable_trades = np.sum(ensemble_returns < 0)
     win_rate = profitable_trades / trade_count if trade_count > 0 else 0
-    accuracy = accuracy_score(trues, ensemble_preds)
+    accuracy = accuracy_score(ensemble_trues, ensemble_preds)
 
     # Calculate final return
     total_return = ensemble_cum_returns[-1] if len(ensemble_cum_returns) > 0 else 0
