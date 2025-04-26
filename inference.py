@@ -618,7 +618,7 @@ def parse_args():
         args.device_ids = [int(id_) for id_ in args.devices.split(',')]
         args.gpu = args.device_ids[0]
         print(f"using multiple GPUs, device ids: {args.device_ids}")
-    print(f"using GPU: {args.gpu == 1}")
+    print(f"using GPU: {args.use_gpu == 1}")
     print('Args:')
     print(args)
     return args
@@ -778,7 +778,7 @@ def extract_single_embedding(model, batch_x, batch_x_mark, device):
 
 
 def find_similar_samples(test_embedding, train_embeddings, val_embeddings=None, test_embeddings=None, top_n=50,
-                         similarity='euclidean'):
+                         similarity='cosine'):
     """
     Find the most similar samples to the test sample using per-timestep similarity.
 
