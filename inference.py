@@ -555,7 +555,7 @@ def parse_args():
     parser.add_argument('--use_amp', action='store_true', default=False, help='mixed precision training')
 
     # GPU
-    parser.add_argument('--use_gpu', type=bool, help='use GPU')
+    parser.add_argument('--use_gpu', type=bool, default=False, help='use GPU')
     parser.add_argument('--gpu', type=int, default=0, help='GPU device id')
     parser.add_argument('--use_multi_gpu', action='store_true', default=False, help='use multiple GPUs')
     parser.add_argument('--devices', type=str, default='0', help='GPU devices')
@@ -612,13 +612,13 @@ def parse_args():
     args = parser.parse_args()
 
     # GPU setup
-    args.use_gpu = True if torch.cuda.is_available() else False
-    if args.use_gpu and args.use_multi_gpu:
-        args.devices = args.devices.replace(' ', '')
-        args.device_ids = [int(id_) for id_ in args.devices.split(',')]
-        args.gpu = args.device_ids[0]
-        print(f"using multiple GPUs, device ids: {args.device_ids}")
-    # force False
+    if args.use_gpu:
+        args.use_gpu = True if torch.cuda.is_available() else False
+        if args.use_gpu and args.use_multi_gpu:
+            args.devices = args.devices.replace(' ', '')
+            args.device_ids = [int(id_) for id_ in args.devices.split(',')]
+            args.gpu = args.device_ids[0]
+            print(f"using multiple GPUs, device ids: {args.device_ids}")
     print(f"using GPU: {args.use_gpu == 1}")
     print('Args:')
     print(args)
