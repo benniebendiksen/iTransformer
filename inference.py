@@ -618,6 +618,8 @@ def parse_args():
         args.device_ids = [int(id_) for id_ in args.devices.split(',')]
         args.gpu = args.device_ids[0]
         print(f"using multiple GPUs, device ids: {args.device_ids}")
+    # force False
+    args.use_gpu = False
     print(f"using GPU: {args.use_gpu == 1}")
     print('Args:')
     print(args)
