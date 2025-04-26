@@ -1019,18 +1019,250 @@ def apply_embedding_based_approach(model, train_data, val_data, test_data, devic
     }
 
 
+# def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, device, args,
+#                                       top_n=50, model_type='cnn_lstm',
+#                                       ffn_epochs=50, ffn_lr=0.001):
+#     """
+#     Apply enhanced embedding-based approach with better architecture choices
+#
+#     Parameters:
+#     -----------
+#     model_type : str
+#         Type of embedding model to use: 'tcn', 'transformer', 'cnn_lstm', or 'attention_pooling'
+#     """
+#     print(f"Applying enhanced embedding-based approach with {model_type} model...")
+#
+#     # Extract embeddings for all datasets
+#     train_embeddings, train_labels_array = extract_embeddings_for_train_samples(model, train_data, device)
+#
+#     # Extract validation embeddings if available
+#     val_embeddings = None
+#     val_labels = None
+#     if val_data is not None:
+#         val_embeddings, val_labels = extract_embeddings_for_train_samples(model, val_data, device)
+#
+#     # Initialize results arrays
+#     embedding_preds = []
+#     embedding_probs = []
+#     trues = []
+#
+#     # Track accuracy metrics
+#     similar_sample_accuracies = []
+#     trained_model_accuracies = []
+#
+#     # Process each test sample
+#     for idx in range(len(test_data)):
+#         print(f"\nProcessing test sample {idx + 1}/{len(test_data)}...")
+#
+#         # Get test sample
+#         batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[idx]
+#         true_label = batch_y[-1, -1]
+#         trues.append(true_label)
+#
+#         # Add batch dimension
+#         batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
+#         batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
+#
+#         # Extract embedding for this test sample
+#         test_embedding = extract_single_embedding(model, batch_x, batch_x_mark, device)
+#
+#         # Find similar samples
+#         similar_samples = find_similar_samples(
+#             test_embedding,
+#             train_embeddings,
+#             val_embeddings,
+#             None,
+#             top_n=top_n
+#         )
+#
+#         # Get embeddings and labels for similar samples
+#         similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
+#
+#         # Collect similar samples (preserve the temporal structure!)
+#         ffn_train_embeddings = []
+#         ffn_train_labels = []
+#
+#         for train_idx in similar_train_indices:
+#             # Keep the temporal structure [seq_len, embed_dim]
+#             embedding = train_embeddings[train_idx]
+#             ffn_train_embeddings.append(embedding)
+#             ffn_train_labels.append(train_labels_array[train_idx])
+#
+#         # Check if we have enough samples
+#         if len(ffn_train_embeddings) < 10:
+#             print(f"Warning: Not enough similar samples found ({len(ffn_train_embeddings)}), using original prediction")
+#             # Get the original prediction
+#             dec_inp = torch.zeros_like(batch_y[:, -1:, :]).float().to(device)
+#             outputs = model(batch_x, batch_x_mark, dec_inp, None)
+#             pred_prob = torch.sigmoid(outputs[:, -1, -1]).item()
+#             pred = 1 if pred_prob >= 0.5 else 0
+#
+#             embedding_preds.append(pred)
+#             embedding_probs.append(pred_prob)
+#             continue
+#
+#         # Create appropriate embedding model
+#         seq_len, embed_dim = ffn_train_embeddings[0].shape
+#
+#         if model_type == 'tcn':
+#             embedding_model = TemporalConvNet(seq_len, embed_dim)
+#         elif model_type == 'transformer':
+#             embedding_model = TransformerEmbeddingModel(seq_len, embed_dim)
+#         elif model_type == 'cnn_lstm':
+#             embedding_model = CNNLSTMEmbeddingModel(seq_len, embed_dim)
+#         elif model_type == 'attention_pooling':
+#             embedding_model = AttentionPoolingEmbeddingModel(seq_len, embed_dim)
+#         else:
+#             raise ValueError(f"Unknown model type: {model_type}")
+#
+#         # Train on similar samples
+#         print(f"Training {model_type} model on {len(ffn_train_embeddings)} similar samples...")
+#
+#         # Convert to PyTorch tensors
+#         X = torch.FloatTensor(ffn_train_embeddings)
+#         y = torch.FloatTensor(ffn_train_labels).view(-1, 1)
+#
+#         # Create dataset and dataloader
+#         dataset = TensorDataset(X, y)
+#         dataloader = DataLoader(dataset, batch_size=min(16, len(X)), shuffle=True)
+#
+#         # Define loss function and optimizer
+#         criterion = nn.BCELoss()
+#         optimizer = optim.Adam(embedding_model.parameters(), lr=ffn_lr)
+#
+#         # Track similar sample accuracy by getting original predictions
+#         similar_labels = []
+#         similar_predictions = []
+#         for train_idx in similar_train_indices:
+#             # Get the original data for this similar sample
+#             batch_x, batch_y, batch_x_mark, batch_y_mark = train_data[train_idx]
+#
+#             # Add batch dimension and convert to tensor
+#             batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
+#             batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(device)
+#             batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
+#             batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(device)
+#
+#             # Use original model for prediction
+#             with torch.no_grad():
+#                 # Decoder input
+#                 dec_inp = torch.zeros_like(batch_y[:, -args.pred_len:, :]).float()
+#                 dec_inp = torch.cat([batch_y[:, :args.label_len, :], dec_inp], dim=1).float().to(device)
+#
+#                 # Generate prediction
+#                 if args.output_attention:
+#                     outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+#                 else:
+#                     outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+#
+#                 # Process outputs for binary classification
+#                 f_dim = -1 if args.features == 'MS' else 0
+#                 outputs_last = outputs[:, -1, f_dim:]
+#                 batch_y_last = batch_y[:, -1, f_dim:].to(device)
+#
+#                 # Get prediction probability and binary prediction
+#                 output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+#                 output_binary = (output_prob > 0.5).astype(np.float32)
+#                 true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+#
+#                 similar_labels.append(true_label)
+#                 similar_predictions.append(output_binary)
+#
+#         similar_accuracy = np.mean(np.array(similar_predictions) == np.array(similar_labels))
+#         similar_sample_accuracies.append(similar_accuracy)
+#
+#         # Training loop
+#         embedding_model.train()
+#         epoch_train_accuracies = []
+#
+#         for epoch in range(ffn_epochs):
+#             epoch_loss = 0
+#             correct = 0
+#             total = 0
+#
+#             for batch_X, batch_y in dataloader:
+#                 # Forward pass
+#                 outputs = embedding_model(batch_X)
+#                 loss = criterion(outputs, batch_y)
+#
+#                 # Backward and optimize
+#                 optimizer.zero_grad()
+#                 loss.backward()
+#                 optimizer.step()
+#
+#                 epoch_loss += loss.item()
+#
+#                 # Calculate accuracy
+#                 predicted = (outputs > 0.5).float()
+#                 total += batch_y.size(0)
+#                 correct += (predicted == batch_y).sum().item()
+#
+#             train_accuracy = correct / total
+#             epoch_train_accuracies.append(train_accuracy)
+#
+#             avg_loss = epoch_loss / len(dataloader)
+#             if (epoch + 1) % 10 == 0:
+#                 print(f'Epoch [{epoch + 1}/{ffn_epochs}], Loss: {avg_loss:.4f}, Accuracy: {train_accuracy:.4f}')
+#
+#         # Store the training accuracy
+#         trained_model_accuracies.append(np.mean(epoch_train_accuracies))
+#
+#         # Get prediction for current test sample
+#         embedding_model.eval()
+#         with torch.no_grad():
+#             test_embedding_tensor = torch.FloatTensor(test_embedding).unsqueeze(0)
+#             pred_prob = embedding_model(test_embedding_tensor).item()
+#             pred = 1 if pred_prob >= 0.5 else 0
+#
+#         embedding_preds.append(pred)
+#         embedding_probs.append(pred_prob)
+#
+#         print(f"Embedding-based prediction: {pred}, True label: {true_label}, Probability: {pred_prob:.4f}")
+#         print(f"Similar samples accuracy: {similar_accuracy:.4f}, Training accuracy: {train_accuracy:.4f}")
+#
+#     # Calculate metrics
+#     accuracy = accuracy_score(trues, embedding_preds)
+#
+#     # Create final results
+#     embedding_preds = np.array(embedding_preds)
+#     embedding_probs = np.array(embedding_probs)
+#     trues = np.array(trues)
+#
+#     print(f"\nEmbedding-based approach accuracy: {accuracy:.4f}")
+#     print(f"Average similar samples accuracy: {np.mean(similar_sample_accuracies):.4f}")
+#     print(f"Average training accuracy: {np.mean(trained_model_accuracies):.4f}")
+#
+#     return {
+#         'preds': embedding_preds,
+#         'probs': embedding_probs,
+#         'trues': trues,
+#         'accuracy': accuracy,
+#         'similar_samples_accuracy': np.mean(similar_sample_accuracies),
+#         'training_accuracy': np.mean(trained_model_accuracies)
+#     }
+
 def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, device, args,
                                       top_n=50, model_type='cnn_lstm',
                                       ffn_epochs=50, ffn_lr=0.001):
     """
     Apply enhanced embedding-based approach with better architecture choices
+    and ensure proper GPU utilization when available
 
     Parameters:
     -----------
     model_type : str
         Type of embedding model to use: 'tcn', 'transformer', 'cnn_lstm', or 'attention_pooling'
+    device : torch.device
+        Device to use for computation (CPU or GPU)
     """
     print(f"Applying enhanced embedding-based approach with {model_type} model...")
+
+    # Print device information
+    print(f"Using device: {device}")
+    if str(device).startswith('cuda'):
+        print(f"GPU: {torch.cuda.get_device_name(device)}")
+        print(f"Memory allocated: {torch.cuda.memory_allocated(device) / 1e9:.2f} GB")
+        print(f"Memory reserved: {torch.cuda.memory_reserved(device) / 1e9:.2f} GB")
 
     # Extract embeddings for all datasets
     train_embeddings, train_labels_array = extract_embeddings_for_train_samples(model, train_data, device)
@@ -1059,7 +1291,7 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         true_label = batch_y[-1, -1]
         trues.append(true_label)
 
-        # Add batch dimension
+        # Add batch dimension and ensure tensors are on the correct device
         batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
         batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
 
@@ -1115,12 +1347,15 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
-        # Train on similar samples
-        print(f"Training {model_type} model on {len(ffn_train_embeddings)} similar samples...")
+        # Move model to the correct device
+        embedding_model = embedding_model.to(device)
 
-        # Convert to PyTorch tensors
-        X = torch.FloatTensor(ffn_train_embeddings)
-        y = torch.FloatTensor(ffn_train_labels).view(-1, 1)
+        # Train on similar samples
+        print(f"Training {model_type} model on {len(ffn_train_embeddings)} similar samples on {device}...")
+
+        # Convert to PyTorch tensors and move to device
+        X = torch.FloatTensor(ffn_train_embeddings).to(device)
+        y = torch.FloatTensor(ffn_train_labels).view(-1, 1).to(device)
 
         # Create dataset and dataloader
         dataset = TensorDataset(X, y)
@@ -1137,7 +1372,7 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
             # Get the original data for this similar sample
             batch_x, batch_y, batch_x_mark, batch_y_mark = train_data[train_idx]
 
-            # Add batch dimension and convert to tensor
+            # Add batch dimension and convert to tensor - ensure on correct device
             batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
             batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(device)
             batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
@@ -1181,7 +1416,7 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
             total = 0
 
             for batch_X, batch_y in dataloader:
-                # Forward pass
+                # Forward pass - tensors already on device from dataloader
                 outputs = embedding_model(batch_X)
                 loss = criterion(outputs, batch_y)
 
@@ -1204,13 +1439,17 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
             if (epoch + 1) % 10 == 0:
                 print(f'Epoch [{epoch + 1}/{ffn_epochs}], Loss: {avg_loss:.4f}, Accuracy: {train_accuracy:.4f}')
 
+                # Check GPU memory usage during training
+                if str(device).startswith('cuda'):
+                    print(f"GPU memory: {torch.cuda.memory_allocated(device) / 1e9:.2f} GB allocated")
+
         # Store the training accuracy
         trained_model_accuracies.append(np.mean(epoch_train_accuracies))
 
-        # Get prediction for current test sample
+        # Get prediction for current test sample - ensure tensor is on correct device
         embedding_model.eval()
         with torch.no_grad():
-            test_embedding_tensor = torch.FloatTensor(test_embedding).unsqueeze(0)
+            test_embedding_tensor = torch.FloatTensor(test_embedding).unsqueeze(0).to(device)
             pred_prob = embedding_model(test_embedding_tensor).item()
             pred = 1 if pred_prob >= 0.5 else 0
 
@@ -1219,6 +1458,10 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
 
         print(f"Embedding-based prediction: {pred}, True label: {true_label}, Probability: {pred_prob:.4f}")
         print(f"Similar samples accuracy: {similar_accuracy:.4f}, Training accuracy: {train_accuracy:.4f}")
+
+        # Clear GPU cache if using CUDA
+        if str(device).startswith('cuda'):
+            torch.cuda.empty_cache()
 
     # Calculate metrics
     accuracy = accuracy_score(trues, embedding_preds)
