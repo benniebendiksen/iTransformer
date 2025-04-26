@@ -1308,17 +1308,32 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         )
 
         # Get embeddings and labels for similar samples
-        similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
+        # similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
+        similar_train_indices = [idx for split, idx, _ in similar_samples]
+        print(f"First 20 similar samples: {similar_samples}")
 
         # Collect similar samples (preserve the temporal structure!)
         ffn_train_embeddings = []
         ffn_train_labels = []
 
-        for train_idx in similar_train_indices:
+        # for train_idx in similar_train_indices:
+        #     # Keep the temporal structure [seq_len, embed_dim]
+        #     embedding = train_embeddings[train_idx]
+        #     ffn_train_embeddings.append(embedding)
+        #     ffn_train_labels.append(train_labels_array[train_idx])
+
+        for split, sim_idx, _ in similar_samples:
             # Keep the temporal structure [seq_len, embed_dim]
-            embedding = train_embeddings[train_idx]
-            ffn_train_embeddings.append(embedding)
-            ffn_train_labels.append(train_labels_array[train_idx])
+            if split == 'train':
+                embedding = train_embeddings[sim_idx]
+                ffn_train_embeddings.append(embedding)
+                ffn_train_labels.append(train_labels_array[sim_idx])
+            elif split == 'val':
+                embedding = val_embeddings[sim_idx]
+                ffn_train_embeddings.append(embedding)
+                ffn_train_labels.append(val_labels[sim_idx])
+            else:
+                raise ValueError(f"Unknown split: {split}")
 
         # Check if we have enough samples
         if len(ffn_train_embeddings) < 10:
@@ -1368,9 +1383,15 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         # Track similar sample accuracy by getting original predictions
         similar_labels = []
         similar_predictions = []
-        for train_idx in similar_train_indices:
+        # for similarity_idx in similar_train_indices:
+        for split, similarity_idx, _ in similar_samples:
             # Get the original data for this similar sample
-            batch_x, batch_y, batch_x_mark, batch_y_mark = train_data[train_idx]
+            if split == 'train':
+                batch_x, batch_y, batch_x_mark, batch_y_mark = train_data[similarity_idx]
+            elif split == 'val':
+                batch_x, batch_y, batch_x_mark, batch_y_mark = val_data[similarity_idx]
+            else:
+                raise ValueError(f"Unknown split: {split}")
 
             # Add batch dimension and convert to tensor - ensure on correct device
             batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
