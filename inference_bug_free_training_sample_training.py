@@ -12,400 +12,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-import math
-
-
-class TemporalConvNet(nn.Module):
-    """
-    Temporal Convolutional Network that preserves the temporal structure
-    of the input embeddings while learning temporal patterns
-    """
-
-    def __init__(self, seq_len, embed_dim, num_channels=[64, 32, 16], kernel_size=3, dropout=0.2):
-        super(TemporalConvNet, self).__init__()
-        layers = []
-        num_levels = len(num_channels)
-
-        for i in range(num_levels):
-            dilation_size = 2 ** i
-            in_channels = embed_dim if i == 0 else num_channels[i - 1]
-            out_channels = num_channels[i]
-            padding = (kernel_size - 1) * dilation_size // 2
-
-            # Temporal convolution block
-            conv_block = nn.Sequential(
-                nn.Conv1d(in_channels, out_channels, kernel_size,
-                          padding=padding, dilation=dilation_size),
-                nn.BatchNorm1d(out_channels),
-                nn.ReLU(),
-                nn.Dropout(dropout),
-
-                nn.Conv1d(out_channels, out_channels, kernel_size,
-                          padding=padding, dilation=dilation_size),
-                nn.BatchNorm1d(out_channels),
-                nn.ReLU(),
-                nn.Dropout(dropout)
-            )
-
-            # Residual connection
-            if in_channels != out_channels:
-                residual = nn.Conv1d(in_channels, out_channels, 1)
-            else:
-                residual = nn.Identity()
-
-            layers.append((conv_block, residual))
-
-        self.network = nn.ModuleList([nn.ModuleList([conv, res]) for conv, res in layers])
-        self.global_pool = nn.AdaptiveAvgPool1d(1)
-        self.classifier = nn.Linear(num_channels[-1], 1)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        # x shape: [batch_size, seq_len, embed_dim]
-        # Convert to [batch_size, embed_dim, seq_len] for Conv1d
-        x = x.permute(0, 2, 1)
-
-        for conv_block, residual in self.network:
-            res = residual(x)
-            out = conv_block(x)
-            x = F.relu(out + res)
-
-        # Global average pooling
-        x = self.global_pool(x).squeeze(-1)
-        x = self.classifier(x)
-        return self.sigmoid(x)
-
-
-class TransformerEmbeddingModel(nn.Module):
-    """
-    Transformer-based model that directly processes the sequential embeddings
-    using self-attention to capture temporal dependencies
-    """
-
-    def __init__(self, seq_len, embed_dim, num_heads=4, num_layers=2, dropout=0.1):
-        super(TransformerEmbeddingModel, self).__init__()
-
-        self.positional_encoding = PositionalEncoding(embed_dim, dropout)
-
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=embed_dim,
-            nhead=num_heads,
-            dim_feedforward=embed_dim * 4,
-            dropout=dropout,
-            batch_first=True
-        )
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
-        self.classifier = nn.Sequential(
-            nn.Linear(embed_dim, embed_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(embed_dim // 2, 1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        # x shape: [batch_size, seq_len, embed_dim]
-        x = self.positional_encoding(x)
-        x = self.transformer_encoder(x)
-
-        # Use the last token's embedding for classification
-        x = x[:, -1, :]
-        return self.classifier(x)
-
-
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.1, max_len=5000):
-        super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        x = x + self.pe[:, :x.size(1), :]
-        return self.dropout(x)
-
-
-class CNNLSTMEmbeddingModel(nn.Module):
-    """
-    Combined CNN-LSTM model that uses convolution to extract local patterns
-    and LSTM to capture long-term dependencies
-    """
-
-    def __init__(self, seq_len, embed_dim, cnn_channels=64, lstm_hidden=64, num_layers=2, dropout=0.2):
-        super(CNNLSTMEmbeddingModel, self).__init__()
-
-        self.cnn = nn.Sequential(
-            nn.Conv1d(embed_dim, cnn_channels, kernel_size=3, padding=1),
-            nn.BatchNorm1d(cnn_channels),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-
-            nn.Conv1d(cnn_channels, cnn_channels, kernel_size=3, padding=1),
-            nn.BatchNorm1d(cnn_channels),
-            nn.ReLU(),
-            nn.Dropout(dropout)
-        )
-
-        self.lstm = nn.LSTM(
-            input_size=cnn_channels,
-            hidden_size=lstm_hidden,
-            num_layers=num_layers,
-            batch_first=True,
-            dropout=dropout if num_layers > 1 else 0
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Linear(lstm_hidden, lstm_hidden // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(lstm_hidden // 2, 1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        # x shape: [batch_size, seq_len, embed_dim]
-        # Convert to [batch_size, embed_dim, seq_len] for Conv1d
-        x = x.permute(0, 2, 1)
-        x = self.cnn(x)
-        # Convert back to [batch_size, seq_len, channels]
-        x = x.permute(0, 2, 1)
-
-        # Pass through LSTM
-        lstm_out, _ = self.lstm(x)
-
-        # Use the last output
-        last_output = lstm_out[:, -1, :]
-        return self.classifier(last_output)
-
-
-class AttentionPoolingEmbeddingModel(nn.Module):
-    """
-    Model that uses attention-based pooling instead of flattening embeddings
-    to preserve important temporal information
-    """
-
-    def __init__(self, seq_len, embed_dim, hidden_size=128, num_heads=4, dropout=0.2):
-        super(AttentionPoolingEmbeddingModel, self).__init__()
-
-        self.attention_pool = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout)
-
-        # Learnable query token for pooling
-        self.query_token = nn.Parameter(torch.randn(1, 1, embed_dim))
-
-        self.classifier = nn.Sequential(
-            nn.Linear(embed_dim, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_size, hidden_size // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_size // 2, 1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        # x shape: [batch_size, seq_len, embed_dim]
-        batch_size = x.size(0)
-
-        # Expand query token for batch
-        query = self.query_token.expand(batch_size, -1, -1)
-
-        # Apply attention pooling
-        # Need to transpose for MultiheadAttention: [seq_len, batch_size, embed_dim]
-        x_transposed = x.transpose(0, 1)
-        query_transposed = query.transpose(0, 1)
-
-        attended_output, _ = self.attention_pool(query_transposed, x_transposed, x_transposed)
-
-        # Back to [batch_size, 1, embed_dim] and squeeze
-        pooled_output = attended_output.transpose(0, 1).squeeze(1)
-
-        return self.classifier(pooled_output)
-
-
-def create_embedding_model(model_type, seq_len, embed_dim, **kwargs):
-    """
-    Factory function to create embedding models
-    """
-    if model_type == "tcn":
-        return TemporalConvNet(seq_len, embed_dim, **kwargs)
-    elif model_type == "transformer":
-        return TransformerEmbeddingModel(seq_len, embed_dim, **kwargs)
-    elif model_type == "cnn_lstm":
-        return CNNLSTMEmbeddingModel(seq_len, embed_dim, **kwargs)
-    elif model_type == "attention_pooling":
-        return AttentionPoolingEmbeddingModel(seq_len, embed_dim, **kwargs)
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
-
-
-# Enhanced training function with accuracy tracking
-def train_embedding_model(model, train_embeddings, train_labels, val_embeddings=None, val_labels=None,
-                          epochs=50, lr=0.001, batch_size=32, device='cuda'):
-    """
-    Enhanced training function with validation and accuracy tracking
-    """
-    # Convert to tensors if they're not already
-    if not isinstance(train_embeddings, torch.Tensor):
-        train_embeddings = torch.FloatTensor(train_embeddings)
-    if not isinstance(train_labels, torch.Tensor):
-        train_labels = torch.FloatTensor(train_labels).view(-1, 1)
-
-    # Create data loaders
-    dataset = torch.utils.data.TensorDataset(train_embeddings, train_labels)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
-    # Setup training
-    model = model.to(device)
-    criterion = nn.BCELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-    train_accuracies = []
-    val_accuracies = []
-
-    # Training loop
-    for epoch in range(epochs):
-        model.train()
-        epoch_loss = 0
-        correct = 0
-        total = 0
-
-        for batch_X, batch_y in dataloader:
-            batch_X, batch_y = batch_X.to(device), batch_y.to(device)
-
-            # Forward pass
-            outputs = model(batch_X)
-            loss = criterion(outputs, batch_y)
-
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            epoch_loss += loss.item()
-
-            # Calculate accuracy
-            predicted = (outputs > 0.5).float()
-            total += batch_y.size(0)
-            correct += (predicted == batch_y).sum().item()
-
-        train_accuracy = 100 * correct / total
-        train_accuracies.append(train_accuracy)
-
-        # Validation
-        if val_embeddings is not None and val_labels is not None:
-            model.eval()
-            with torch.no_grad():
-                val_embeddings_tensor = torch.FloatTensor(val_embeddings).to(device)
-                val_labels_tensor = torch.FloatTensor(val_labels).view(-1, 1).to(device)
-
-                val_outputs = model(val_embeddings_tensor)
-                val_predicted = (val_outputs > 0.5).float()
-                val_accuracy = 100 * (val_predicted == val_labels_tensor).sum().item() / len(val_labels)
-                val_accuracies.append(val_accuracy)
-
-        if (epoch + 1) % 10 == 0:
-            print(f'Epoch [{epoch + 1}/{epochs}], Loss: {epoch_loss / len(dataloader):.4f}, '
-                  f'Train Acc: {train_accuracy:.2f}%', end='')
-            if val_embeddings is not None:
-                print(f', Val Acc: {val_accuracy:.2f}%')
-            else:
-                print()
-
-    return model, train_accuracies, val_accuracies
-
-
-# Function to evaluate and compare models
-def evaluate_models(models, test_embeddings, test_labels, device='cuda'):
-    """
-    Evaluate and compare different embedding models
-    """
-    results = {}
-
-    for model_name, model in models.items():
-        model.eval()
-        with torch.no_grad():
-            test_embeddings_tensor = torch.FloatTensor(test_embeddings).to(device)
-            test_labels_tensor = torch.FloatTensor(test_labels).view(-1, 1).to(device)
-
-            outputs = model(test_embeddings_tensor)
-            predicted = (outputs > 0.5).float()
-            accuracy = 100 * (predicted == test_labels_tensor).sum().item() / len(test_labels)
-
-            results[model_name] = {
-                'accuracy': accuracy,
-                'outputs': outputs.cpu().numpy(),
-                'predicted': predicted.cpu().numpy()
-            }
-
-    return results
-
-
-# Function to analyze similar samples accuracy
-def analyze_similar_samples_accuracy(test_embeddings, test_labels, train_embeddings, train_labels,
-                                     model, device='cuda', top_n=50):
-    """
-    Analyze the accuracy of predictions on similar samples
-    """
-    similar_samples_accuracies = []
-    original_model_accuracies = []
-
-    for i in range(len(test_embeddings)):
-        test_embedding = test_embeddings[i]
-        test_label = test_labels[i]
-
-        # Find similar samples (using simple cosine similarity for brevity)
-        similarities = []
-        for j, train_embedding in enumerate(train_embeddings):
-            sim = F.cosine_similarity(
-                torch.tensor(test_embedding).flatten(),
-                torch.tensor(train_embedding).flatten(),
-                dim=0
-            ).item()
-            similarities.append((j, sim))
-
-        # Get top_n similar samples
-        similar_indices = [idx for idx, _ in sorted(similarities, key=lambda x: x[1], reverse=True)[:top_n]]
-        similar_embeddings = [train_embeddings[idx] for idx in similar_indices]
-        similar_labels = [train_labels[idx] for idx in similar_indices]
-
-        # Train model on similar samples
-        similar_model = create_embedding_model("tcn", seq_len=test_embedding.shape[0],
-                                               embed_dim=test_embedding.shape[1])
-        similar_model, _, _ = train_embedding_model(
-            similar_model, similar_embeddings, similar_labels,
-            epochs=50, device=device
-        )
-
-        # Evaluate on current test sample
-        similar_model.eval()
-        with torch.no_grad():
-            test_input = torch.FloatTensor(test_embedding).unsqueeze(0).to(device)
-            similar_pred = (similar_model(test_input) > 0.5).float().item()
-            similar_correct = (similar_pred == test_label)
-            similar_samples_accuracies.append(similar_correct)
-
-            # Also evaluate original model on this sample
-            original_pred = (model(test_input) > 0.5).float().item()
-            original_correct = (original_pred == test_label)
-            original_model_accuracies.append(original_correct)
-
-    return {
-        'similar_samples_accuracy': np.mean(similar_samples_accuracies) * 100,
-        'original_model_accuracy': np.mean(original_model_accuracies) * 100
-    }
-
 
 class EmbeddingFFN(nn.Module):
     """
@@ -499,21 +105,17 @@ def parse_args():
 
     # Basic config (required from bash)
     parser.add_argument('--is_training', type=int, required=False, default=0, help='status')
-    # parser.add_argument('--model_id', type=str,
-    #                     default='pca_components_btcusdt_12h_45_reduced_lance_seed_2_96_1_50',
+    # parser.add_argument('--model_id', type=str, default='1_btcusd_pca_components_lightboost_12h_4h_reduced_60_7_5_1_2_1_old_96_1_65',
     #                     help='model id')
     parser.add_argument('--model_id', type=str,
                         default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15_96_1_50',
                         help='model id')
-
     parser.add_argument('--projection_idx', type=str, default='2', help='projection identifier (0, 1, 2, 3, 4)')
     parser.add_argument('--model', type=str, default='iTransformer', help='model name')
     # Data loader
     parser.add_argument('--data', type=str, default='logits', help='dataset type')
     parser.add_argument('--root_path', type=str, default='./dataset/logits/', help='root path of the data file')
-    #parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_12h_45_reduced_lance_seed_2.csv', help='data file')
-    parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15.csv',
-                        help='data file')
+    parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15.csv', help='data file')
     parser.add_argument('--features', type=str, default='MS', help='forecasting task, options:[M, S, MS]')
     parser.add_argument('--target', type=str, default='close', help='target feature in S or MS task')
     parser.add_argument('--freq', type=str, default='12h', help='freq for time features encoding')
@@ -778,7 +380,7 @@ def extract_single_embedding(model, batch_x, batch_x_mark, device):
 
 
 def find_similar_samples(test_embedding, train_embeddings, val_embeddings=None, test_embeddings=None, top_n=50,
-                         similarity='euclidean'):
+                         similarity='cosine'):
     """
     Find the most similar samples to the test sample using per-timestep similarity.
 
@@ -814,14 +416,13 @@ def find_similar_samples(test_embedding, train_embeddings, val_embeddings=None, 
     similarities = []
 
     # Process training embeddings
-    if train_embeddings is not None:
-        for idx, embed in train_embeddings.items():
-            if similarity == 'cosine':
-                sim = avg_cosine_similarity(test_embedding, embed)
-                similarities.append(('train', idx, sim))
-            else:
-                dist = np.linalg.norm(test_embedding - embed)
-                similarities.append(('train', idx, -dist))
+    for idx, embed in train_embeddings.items():
+        if similarity == 'cosine':
+            sim = avg_cosine_similarity(test_embedding, embed)
+            similarities.append(('train', idx, sim))
+        else:
+            dist = np.linalg.norm(test_embedding - embed)
+            similarities.append(('train', idx, -dist))
 
     # Process validation embeddings if provided
     if val_embeddings is not None:
@@ -1017,228 +618,6 @@ def apply_embedding_based_approach(model, train_data, val_data, test_data, devic
         'accuracy': accuracy
     }
 
-
-def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, device, args,
-                                      top_n=50, model_type='tcn',
-                                      ffn_epochs=50, ffn_lr=0.001):
-    """
-    Apply enhanced embedding-based approach with better architecture choices
-
-    Parameters:
-    -----------
-    model_type : str
-        Type of embedding model to use: 'tcn', 'transformer', 'cnn_lstm', or 'attention_pooling'
-    """
-    print(f"Applying enhanced embedding-based approach with {model_type} model...")
-
-    # Extract embeddings for all datasets
-    train_embeddings, train_labels_array = extract_embeddings_for_train_samples(model, train_data, device)
-
-    # Extract validation embeddings if available
-    val_embeddings = None
-    val_labels = None
-    if val_data is not None:
-        val_embeddings, val_labels = extract_embeddings_for_train_samples(model, val_data, device)
-
-    # Initialize results arrays
-    embedding_preds = []
-    embedding_probs = []
-    trues = []
-
-    # Track accuracy metrics
-    similar_sample_accuracies = []
-    trained_model_accuracies = []
-
-    # Process each test sample
-    for idx in range(len(test_data)):
-        print(f"\nProcessing test sample {idx + 1}/{len(test_data)}...")
-
-        # Get test sample
-        batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[idx]
-        true_label = batch_y[-1, -1]
-        trues.append(true_label)
-
-        # Add batch dimension
-        batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
-        batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
-
-        # Extract embedding for this test sample
-        test_embedding = extract_single_embedding(model, batch_x, batch_x_mark, device)
-
-        # Find similar samples
-        similar_samples = find_similar_samples(
-            test_embedding,
-            train_embeddings,
-            val_embeddings,
-            None,
-            top_n=top_n
-        )
-
-        # Get embeddings and labels for similar samples
-        similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
-
-        # Collect similar samples (preserve the temporal structure!)
-        ffn_train_embeddings = []
-        ffn_train_labels = []
-
-        for train_idx in similar_train_indices:
-            # Keep the temporal structure [seq_len, embed_dim]
-            embedding = train_embeddings[train_idx]
-            ffn_train_embeddings.append(embedding)
-            ffn_train_labels.append(train_labels_array[train_idx])
-
-        # Check if we have enough samples
-        if len(ffn_train_embeddings) < 10:
-            print(f"Warning: Not enough similar samples found ({len(ffn_train_embeddings)}), using original prediction")
-            # Get the original prediction
-            dec_inp = torch.zeros_like(batch_y[:, -1:, :]).float().to(device)
-            outputs = model(batch_x, batch_x_mark, dec_inp, None)
-            pred_prob = torch.sigmoid(outputs[:, -1, -1]).item()
-            pred = 1 if pred_prob >= 0.5 else 0
-
-            embedding_preds.append(pred)
-            embedding_probs.append(pred_prob)
-            continue
-
-        # Create appropriate embedding model
-        seq_len, embed_dim = ffn_train_embeddings[0].shape
-
-        if model_type == 'tcn':
-            embedding_model = TemporalConvNet(seq_len, embed_dim)
-        elif model_type == 'transformer':
-            embedding_model = TransformerEmbeddingModel(seq_len, embed_dim)
-        elif model_type == 'cnn_lstm':
-            embedding_model = CNNLSTMEmbeddingModel(seq_len, embed_dim)
-        elif model_type == 'attention_pooling':
-            embedding_model = AttentionPoolingEmbeddingModel(seq_len, embed_dim)
-        else:
-            raise ValueError(f"Unknown model type: {model_type}")
-
-        # Train on similar samples
-        print(f"Training {model_type} model on {len(ffn_train_embeddings)} similar samples...")
-
-        # Convert to PyTorch tensors
-        X = torch.FloatTensor(ffn_train_embeddings)
-        y = torch.FloatTensor(ffn_train_labels).view(-1, 1)
-
-        # Create dataset and dataloader
-        dataset = TensorDataset(X, y)
-        dataloader = DataLoader(dataset, batch_size=min(16, len(X)), shuffle=True)
-
-        # Define loss function and optimizer
-        criterion = nn.BCELoss()
-        optimizer = optim.Adam(embedding_model.parameters(), lr=ffn_lr)
-
-        # Track similar sample accuracy by getting original predictions
-        similar_labels = []
-        similar_predictions = []
-        for train_idx in similar_train_indices:
-            # Get the original data for this similar sample
-            batch_x, batch_y, batch_x_mark, batch_y_mark = train_data[train_idx]
-
-            # Add batch dimension and convert to tensor
-            batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
-            batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(device)
-            batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
-            batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(device)
-
-            # Use original model for prediction
-            with torch.no_grad():
-                # Decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :args.label_len, :], dec_inp], dim=1).float().to(device)
-
-                # Generate prediction
-                if args.output_attention:
-                    outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                else:
-                    outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
-                # Process outputs for binary classification
-                f_dim = -1 if args.features == 'MS' else 0
-                outputs_last = outputs[:, -1, f_dim:]
-                batch_y_last = batch_y[:, -1, f_dim:].to(device)
-
-                # Get prediction probability and binary prediction
-                output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
-                output_binary = (output_prob > 0.5).astype(np.float32)
-                true_label = batch_y_last.detach().cpu().numpy()[0, 0]
-
-                similar_labels.append(true_label)
-                similar_predictions.append(output_binary)
-
-        similar_accuracy = np.mean(np.array(similar_predictions) == np.array(similar_labels))
-        similar_sample_accuracies.append(similar_accuracy)
-
-        # Training loop
-        embedding_model.train()
-        epoch_train_accuracies = []
-
-        for epoch in range(ffn_epochs):
-            epoch_loss = 0
-            correct = 0
-            total = 0
-
-            for batch_X, batch_y in dataloader:
-                # Forward pass
-                outputs = embedding_model(batch_X)
-                loss = criterion(outputs, batch_y)
-
-                # Backward and optimize
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-                epoch_loss += loss.item()
-
-                # Calculate accuracy
-                predicted = (outputs > 0.5).float()
-                total += batch_y.size(0)
-                correct += (predicted == batch_y).sum().item()
-
-            train_accuracy = correct / total
-            epoch_train_accuracies.append(train_accuracy)
-
-            avg_loss = epoch_loss / len(dataloader)
-            if (epoch + 1) % 10 == 0:
-                print(f'Epoch [{epoch + 1}/{ffn_epochs}], Loss: {avg_loss:.4f}, Accuracy: {train_accuracy:.4f}')
-
-        # Store the training accuracy
-        trained_model_accuracies.append(np.mean(epoch_train_accuracies))
-
-        # Get prediction for current test sample
-        embedding_model.eval()
-        with torch.no_grad():
-            test_embedding_tensor = torch.FloatTensor(test_embedding).unsqueeze(0)
-            pred_prob = embedding_model(test_embedding_tensor).item()
-            pred = 1 if pred_prob >= 0.5 else 0
-
-        embedding_preds.append(pred)
-        embedding_probs.append(pred_prob)
-
-        print(f"Embedding-based prediction: {pred}, True label: {true_label}, Probability: {pred_prob:.4f}")
-        print(f"Similar samples accuracy: {similar_accuracy:.4f}, Training accuracy: {train_accuracy:.4f}")
-
-    # Calculate metrics
-    accuracy = accuracy_score(trues, embedding_preds)
-
-    # Create final results
-    embedding_preds = np.array(embedding_preds)
-    embedding_probs = np.array(embedding_probs)
-    trues = np.array(trues)
-
-    print(f"\nEmbedding-based approach accuracy: {accuracy:.4f}")
-    print(f"Average similar samples accuracy: {np.mean(similar_sample_accuracies):.4f}")
-    print(f"Average training accuracy: {np.mean(trained_model_accuracies):.4f}")
-
-    return {
-        'preds': embedding_preds,
-        'probs': embedding_probs,
-        'trues': trues,
-        'accuracy': accuracy,
-        'similar_samples_accuracy': np.mean(similar_sample_accuracies),
-        'training_accuracy': np.mean(trained_model_accuracies)
-    }
 
 def setup_experiment(args):
     """Instantiate experiment class. The controller for the iTransformer model use"""
@@ -2638,24 +2017,12 @@ def main():
         # Apply embedding-based approach if enabled
         if args.use_embedding_approach:
             print("\nApplying embedding-based approach...")
-            # embedding_results = apply_embedding_based_approach(
-            #     model,
-            #     train_data,
-            #     val_data,
-            #     test_data,
-            #     device,
-            #     top_n=args.similar_samples,
-            #     ffn_epochs=args.embedding_ffn_epochs,
-            #     ffn_lr=args.embedding_ffn_lr
-            # )
-
-            embedding_results = apply_enhanced_embedding_approach(
+            embedding_results = apply_embedding_based_approach(
                 model,
                 train_data,
                 val_data,
                 test_data,
                 device,
-                args,
                 top_n=args.similar_samples,
                 ffn_epochs=args.embedding_ffn_epochs,
                 ffn_lr=args.embedding_ffn_lr
@@ -2763,76 +2130,14 @@ def main():
                 print(f"All three methods agree on {all_agree} samples ({all_agree_pct:.2f}%)")
                 print(f"Accuracy when all agree: {accuracy_when_agree * 100:.2f}%")
 
-                # Pairwise agreements with accuracy
-                orig_ffn_agree_mask = (preds == ffn_preds)
-                orig_ffn_agree = np.sum(orig_ffn_agree_mask)
-                orig_ffn_agree_correct = np.sum(orig_ffn_agree_mask & (preds == trues))
-                orig_ffn_agree_accuracy = orig_ffn_agree_correct / orig_ffn_agree if orig_ffn_agree > 0 else 0
+                # Pairwise agreements
+                orig_ffn_agree = np.sum(preds == ffn_preds)
+                orig_emb_agree = np.sum(preds == embedding_preds)
+                ffn_emb_agree = np.sum(ffn_preds == embedding_preds)
 
-                orig_emb_agree_mask = (preds == embedding_preds)
-                orig_emb_agree = np.sum(orig_emb_agree_mask)
-                orig_emb_agree_correct = np.sum(orig_emb_agree_mask & (preds == trues))
-                orig_emb_agree_accuracy = orig_emb_agree_correct / orig_emb_agree if orig_emb_agree > 0 else 0
-
-                ffn_emb_agree_mask = (ffn_preds == embedding_preds)
-                ffn_emb_agree = np.sum(ffn_emb_agree_mask)
-                ffn_emb_agree_correct = np.sum(ffn_emb_agree_mask & (ffn_preds == trues))
-                ffn_emb_agree_accuracy = ffn_emb_agree_correct / ffn_emb_agree if ffn_emb_agree > 0 else 0
-
-                print(
-                    f"Original and FFN agree: {orig_ffn_agree / len(preds) * 100:.2f}% (Accuracy: {orig_ffn_agree_accuracy * 100:.2f}%)")
-                print(
-                    f"Original and Embedding agree: {orig_emb_agree / len(preds) * 100:.2f}% (Accuracy: {orig_emb_agree_accuracy * 100:.2f}%)")
-                print(
-                    f"FFN and Embedding agree: {ffn_emb_agree / len(preds) * 100:.2f}% (Accuracy: {ffn_emb_agree_accuracy * 100:.2f}%)")
-
-                # When exactly two methods agree (but not all three)
-                print("\nWhen exactly two methods agree (not all three):")
-
-                # Original and FFN agree but not Embedding
-                orig_ffn_only_mask = orig_ffn_agree_mask & ~(preds == embedding_preds)
-                orig_ffn_only_count = np.sum(orig_ffn_only_mask)
-                orig_ffn_only_correct = np.sum(orig_ffn_only_mask & (preds == trues))
-                orig_ffn_only_accuracy = orig_ffn_only_correct / orig_ffn_only_count if orig_ffn_only_count > 0 else 0
-
-                # Original and Embedding agree but not FFN
-                orig_emb_only_mask = orig_emb_agree_mask & ~(preds == ffn_preds)
-                orig_emb_only_count = np.sum(orig_emb_only_mask)
-                orig_emb_only_correct = np.sum(orig_emb_only_mask & (preds == trues))
-                orig_emb_only_accuracy = orig_emb_only_correct / orig_emb_only_count if orig_emb_only_count > 0 else 0
-
-                # FFN and Embedding agree but not Original
-                ffn_emb_only_mask = ffn_emb_agree_mask & ~(ffn_preds == preds)
-                ffn_emb_only_count = np.sum(ffn_emb_only_mask)
-                ffn_emb_only_correct = np.sum(ffn_emb_only_mask & (ffn_preds == trues))
-                ffn_emb_only_accuracy = ffn_emb_only_correct / ffn_emb_only_count if ffn_emb_only_count > 0 else 0
-
-                print(
-                    f"Original and FFN only: {orig_ffn_only_count} samples ({orig_ffn_only_count / len(preds) * 100:.2f}%) | Accuracy: {orig_ffn_only_accuracy * 100:.2f}%")
-                print(
-                    f"Original and Embedding only: {orig_emb_only_count} samples ({orig_emb_only_count / len(preds) * 100:.2f}%) | Accuracy: {orig_emb_only_accuracy * 100:.2f}%")
-                print(
-                    f"FFN and Embedding only: {ffn_emb_only_count} samples ({ffn_emb_only_count / len(preds) * 100:.2f}%) | Accuracy: {ffn_emb_only_accuracy * 100:.2f}%")
-
-                # When all three methods disagree
-                all_disagree_mask = ~(
-                            (preds == ffn_preds) | (preds == embedding_preds) | (ffn_preds == embedding_preds))
-                all_disagree_count = np.sum(all_disagree_mask)
-
-                if all_disagree_count > 0:
-                    orig_disagree_correct = np.sum(all_disagree_mask & (preds == trues))
-                    ffn_disagree_correct = np.sum(all_disagree_mask & (ffn_preds == trues))
-                    emb_disagree_correct = np.sum(all_disagree_mask & (embedding_preds == trues))
-
-                    orig_disagree_accuracy = orig_disagree_correct / all_disagree_count
-                    ffn_disagree_accuracy = ffn_disagree_correct / all_disagree_count
-                    emb_disagree_accuracy = emb_disagree_correct / all_disagree_count
-
-                    print(
-                        f"\nWhen all three methods disagree: {all_disagree_count} samples ({all_disagree_count / len(preds) * 100:.2f}%)")
-                    print(f"Original accuracy: {orig_disagree_accuracy * 100:.2f}%")
-                    print(f"FFN accuracy: {ffn_disagree_accuracy * 100:.2f}%")
-                    print(f"Embedding accuracy: {emb_disagree_accuracy * 100:.2f}%")
+                print(f"Original and FFN agree: {orig_ffn_agree / len(preds) * 100:.2f}%")
+                print(f"Original and Embedding agree: {orig_emb_agree / len(preds) * 100:.2f}%")
+                print(f"FFN and Embedding agree: {ffn_emb_agree / len(preds) * 100:.2f}%")
 
             elif ffn_preds is not None:
                 # Agreement between original and FFN
@@ -2857,57 +2162,6 @@ def main():
 
                 print(f"Original and Embedding agree on {agree} samples ({agree_pct:.2f}%)")
                 print(f"Accuracy when both agree: {accuracy_when_agree * 100:.2f}%")
-
-        # Print agreement analysis if multiple methods are available
-        # if ffn_preds is not None or embedding_preds is not None:
-        #     print("\n----- AGREEMENT ANALYSIS -----")
-        #
-        #     # Calculate agreement between methods
-        #     if ffn_preds is not None and embedding_preds is not None:
-        #         # Agreement between all three methods
-        #         all_agree = np.sum((preds == ffn_preds) & (preds == embedding_preds))
-        #         all_agree_pct = all_agree / len(preds) * 100
-        #
-        #         # Correct predictions when all agree
-        #         correct_when_agree = np.sum(
-        #             ((preds == ffn_preds) & (preds == embedding_preds)) & (preds == trues))
-        #         accuracy_when_agree = correct_when_agree / all_agree if all_agree > 0 else 0
-        #
-        #         print(f"All three methods agree on {all_agree} samples ({all_agree_pct:.2f}%)")
-        #         print(f"Accuracy when all agree: {accuracy_when_agree * 100:.2f}%")
-        #
-        #         # Pairwise agreements
-        #         orig_ffn_agree = np.sum(preds == ffn_preds)
-        #         orig_emb_agree = np.sum(preds == embedding_preds)
-        #         ffn_emb_agree = np.sum(ffn_preds == embedding_preds)
-        #
-        #         print(f"Original and FFN agree: {orig_ffn_agree / len(preds) * 100:.2f}%")
-        #         print(f"Original and Embedding agree: {orig_emb_agree / len(preds) * 100:.2f}%")
-        #         print(f"FFN and Embedding agree: {ffn_emb_agree / len(preds) * 100:.2f}%")
-        #
-        #     elif ffn_preds is not None:
-        #         # Agreement between original and FFN
-        #         agree = np.sum(preds == ffn_preds)
-        #         agree_pct = agree / len(preds) * 100
-        #
-        #         # Correct predictions when agree
-        #         correct_when_agree = np.sum((preds == ffn_preds) & (preds == trues))
-        #         accuracy_when_agree = correct_when_agree / agree if agree > 0 else 0
-        #
-        #         print(f"Original and FFN agree on {agree} samples ({agree_pct:.2f}%)")
-        #         print(f"Accuracy when both agree: {accuracy_when_agree * 100:.2f}%")
-        #
-        #     elif embedding_preds is not None:
-        #         # Agreement between original and embedding
-        #         agree = np.sum(preds == embedding_preds)
-        #         agree_pct = agree / len(preds) * 100
-        #
-        #         # Correct predictions when agree
-        #         correct_when_agree = np.sum((preds == embedding_preds) & (preds == trues))
-        #         accuracy_when_agree = correct_when_agree / agree if agree > 0 else 0
-        #
-        #         print(f"Original and Embedding agree on {agree} samples ({agree_pct:.2f}%)")
-        #         print(f"Accuracy when both agree: {accuracy_when_agree * 100:.2f}%")
 
         # Print detailed analysis of samples
         print("\n----- SAMPLE ANALYSIS -----")
