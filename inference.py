@@ -779,7 +779,7 @@ def extract_single_embedding(model, batch_x, batch_x_mark, device):
 
 
 def find_similar_samples(test_embedding, train_embeddings, val_embeddings=None, test_embeddings=None, top_n=50,
-                         similarity='cosine'):
+                         similarity='euclidean'):
     """
     Find the most similar samples to the test sample using per-timestep similarity.
 
@@ -1242,7 +1242,7 @@ def apply_embedding_based_approach(model, train_data, val_data, test_data, devic
 #     }
 
 def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, device, args,
-                                      top_n=50, model_type='cnn_lstm',
+                                      top_n=50, model_type='tcn',
                                       ffn_epochs=50, ffn_lr=0.001):
     """
     Apply enhanced embedding-based approach with better architecture choices
