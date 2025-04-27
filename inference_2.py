@@ -24,9 +24,13 @@ def parse_args():
     # parser.add_argument('--model_id', type=str,
     #                     default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15_96_1_50',
     #                     help='model id')
+    # parser.add_argument('--model_id', type=str,
+    #                     default='pca_components_btcusdt_4h_43_07_05_lance_seed_march_9_2020',
+    #                     help='model id')
     parser.add_argument('--model_id', type=str,
-                        default='pca_components_btcusdt_4h_43_07_05_lance_seed_march_9_2020',
+                        default='pca_components_btcusdt_12h_47_reduced_lance_seed_april_15_plus_30_96_1_52',
                         help='model id')
+
     parser.add_argument('--projection_idx', type=str, default='2', help='projection identifier (0, 1, 2, 3, 4)')
     parser.add_argument('--model', type=str, default='iTransformer', help='model name')
     # Data loader
@@ -36,7 +40,10 @@ def parse_args():
     # parser.add_argument('--data_path', type=str,
     #                     default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15.csv',
     #                     help='data file')
-    parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_4h_43_07_05_lance_seed_march_9_2020.csv',
+    # parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_4h_43_07_05_lance_seed_march_9_2020.csv',
+    #                     help='data file')
+    parser.add_argument('--data_path', type=str,
+                        default='pca_components_btcusdt_12h_47_reduced_lance_seed_april_15_plus_30.csv',
                         help='data file')
     parser.add_argument('--features', type=str, default='MS', help='forecasting task, options:[M, S, MS]')
     parser.add_argument('--target', type=str, default='close', help='target feature in S or MS task')
@@ -49,8 +56,8 @@ def parse_args():
     parser.add_argument('--pred_len', type=int, default=1, help='prediction sequence length')
 
     # Model definition
-    parser.add_argument('--enc_in', type=int, default=50, help='encoder input size')
-    parser.add_argument('--dec_in', type=int, default=50, help='decoder input size')
+    parser.add_argument('--enc_in', type=int, default=52, help='encoder input size')
+    parser.add_argument('--dec_in', type=int, default=52, help='decoder input size')
     parser.add_argument('--c_out', type=int, default=1, help='output size')
     parser.add_argument('--d_model', type=int, default=512, help='dimension of model')
     parser.add_argument('--n_heads', type=int, default=8, help='num of heads')
