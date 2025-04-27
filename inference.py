@@ -499,12 +499,12 @@ def parse_args():
 
     # Basic config (required from bash)
     parser.add_argument('--is_training', type=int, required=False, default=0, help='status')
-    # parser.add_argument('--model_id', type=str,
-    #                     default='pca_components_btcusdt_12h_45_reduced_lance_seed_2_96_1_50',
-    #                     help='model id')
     parser.add_argument('--model_id', type=str,
-                        default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15_96_1_50',
+                        default='pca_components_btcusdt_12h_45_reduced_lance_seed_2_96_1_50',
                         help='model id')
+    # parser.add_argument('--model_id', type=str,
+    #                     default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15_96_1_50',
+    #                     help='model id')
     # parser.add_argument('--model_id', type=str,
     #                     default='pca_components_btcusdt_4h_45_lance_seed_march_9_2020',
     #                     help='model id')
@@ -514,9 +514,9 @@ def parse_args():
     # Data loader
     parser.add_argument('--data', type=str, default='logits', help='dataset type')
     parser.add_argument('--root_path', type=str, default='./dataset/logits/', help='root path of the data file')
-    #parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_12h_45_reduced_lance_seed_2.csv', help='data file')
-    parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15.csv',
-                        help='data file')
+    parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_12h_45_reduced_lance_seed_2.csv', help='data file')
+    # parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15.csv',
+    #                     help='data file')
     # parser.add_argument('--data_path', type=str,
     #                     default='pca_components_btcusdt_4h_45_lance_seed_march_9_2020.csv',
     #                     help='data file')
