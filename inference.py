@@ -587,7 +587,7 @@ def parse_args():
     # Add the FFN consensus model parameters
     parser.add_argument('--use_consensus_model', type=int, default=1, help='whether to use FFN consensus model')
     parser.add_argument('--ffn_test_size', type=float, default=0.2, help='proportion of data to use for FFN testing')
-    parser.add_argument('--ffn_epochs', type=int, default=150, help='epochs for FFN consensus model training')
+    parser.add_argument('--ffn_epochs', type=int, default=50, help='epochs for FFN consensus model training')
     parser.add_argument('--ffn_learning_rate', type=float, default=0.01, help='learning rate for FFN consensus model')
     parser.add_argument('--ffn_batch_size', type=int, default=32, help='batch size for FFN consensus model training')
 
@@ -596,7 +596,7 @@ def parse_args():
                         help='whether to use embedding-based approach')
     parser.add_argument('--similar_samples', type=int, default=25,
                         help='number of similar samples for embedding-based approach')
-    parser.add_argument('--embedding_ffn_epochs', type=int, default=100,
+    parser.add_argument('--embedding_ffn_epochs', type=int, default=50,
                         help='number of epochs for embedding-based FFN training')
     parser.add_argument('--embedding_ffn_lr', type=float, default=0.01,
                         help='learning rate for embedding-based FFN training')
