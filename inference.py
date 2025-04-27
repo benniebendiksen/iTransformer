@@ -555,7 +555,7 @@ def parse_args():
     parser.add_argument('--use_amp', action='store_true', default=False, help='mixed precision training')
 
     # GPU
-    parser.add_argument('--use_gpu', type=bool, default=False, help='use GPU')
+    parser.add_argument('--use_gpu', type=bool, default=True, help='use GPU')
     parser.add_argument('--gpu', type=int, default=0, help='GPU device id')
     parser.add_argument('--use_multi_gpu', action='store_true', default=False, help='use multiple GPUs')
     parser.add_argument('--devices', type=str, default='0', help='GPU devices')
