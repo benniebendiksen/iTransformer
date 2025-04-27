@@ -1422,9 +1422,17 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         test_embedding = extract_single_embedding(model, batch_x, batch_x_mark, device)
 
         # Find similar samples
+        # similar_samples = find_similar_samples(
+        #     test_embedding,
+        #     train_embeddings,
+        #     val_embeddings,
+        #     None,
+        #     top_n=top_n
+        # )
+
         similar_samples = find_similar_samples(
             test_embedding,
-            train_embeddings,
+            None,
             val_embeddings,
             None,
             top_n=top_n
@@ -1435,6 +1443,8 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
 
         # Get similar training samples for embedding model
         similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
+
+        similar_val_indices = [idx for split, idx, _ in similar_samples if split == 'val']
 
         # Calculate original model confusion matrix on similar samples
         # This is just for display and comparison purposes
@@ -1525,11 +1535,17 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         #     else:
         #         raise ValueError(f"Unknown split: {split}")
 
-        for train_idx in similar_train_indices:
+        # for train_idx in similar_train_indices:
+        #     # Keep the temporal structure [seq_len, embed_dim]
+        #     embedding = train_embeddings[train_idx]
+        #     ffn_train_embeddings.append(embedding)
+        #     ffn_train_labels.append(train_labels_array[train_idx])
+
+        for val_idx in similar_val_indices:
             # Keep the temporal structure [seq_len, embed_dim]
-            embedding = train_embeddings[train_idx]
+            embedding = val_embeddings[val_idx]
             ffn_train_embeddings.append(embedding)
-            ffn_train_labels.append(train_labels_array[train_idx])
+            ffn_train_labels.append(val_labels[val_idx])
 
         # Check if we have enough samples for the embedding-based approach
         if len(ffn_train_embeddings) < 10:
