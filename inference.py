@@ -1512,24 +1512,24 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         ffn_train_embeddings = []
         ffn_train_labels = []
 
-        for split, sim_idx, _ in similar_samples:
-            # Keep the temporal structure [seq_len, embed_dim]
-            if split == "train":
-                embedding = train_embeddings[sim_idx]
-                ffn_train_embeddings.append(embedding)
-                ffn_train_labels.append(train_labels_array[sim_idx])
-            elif split == "val":
-                embedding = val_embeddings[sim_idx]
-                ffn_train_embeddings.append(embedding)
-                ffn_train_labels.append(val_labels[sim_idx])
-            else:
-                raise ValueError(f"Unknown split: {split}")
-
-        # for train_idx in similar_train_indices:
+        # for split, sim_idx, _ in similar_samples:
         #     # Keep the temporal structure [seq_len, embed_dim]
-        #     embedding = train_embeddings[train_idx]
-        #     ffn_train_embeddings.append(embedding)
-        #     ffn_train_labels.append(train_labels_array[train_idx])
+        #     if split == "train":
+        #         embedding = train_embeddings[sim_idx]
+        #         ffn_train_embeddings.append(embedding)
+        #         ffn_train_labels.append(train_labels_array[sim_idx])
+        #     elif split == "val":
+        #         embedding = val_embeddings[sim_idx]
+        #         ffn_train_embeddings.append(embedding)
+        #         ffn_train_labels.append(val_labels[sim_idx])
+        #     else:
+        #         raise ValueError(f"Unknown split: {split}")
+
+        for train_idx in similar_train_indices:
+            # Keep the temporal structure [seq_len, embed_dim]
+            embedding = train_embeddings[train_idx]
+            ffn_train_embeddings.append(embedding)
+            ffn_train_labels.append(train_labels_array[train_idx])
 
         # Check if we have enough samples for the embedding-based approach
         if len(ffn_train_embeddings) < 10:
