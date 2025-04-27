@@ -506,7 +506,7 @@ def parse_args():
     #                     default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15_96_1_50',
     #                     help='model id')
     parser.add_argument('--model_id', type=str,
-                        default='pca_components_btcusdt_4h_43_07_05_lance_seed_march_9_2020',
+                        default='pca_components_btcusdt_4h_48_lance_seed_march_9_2020',
                         help='model id')
 
     parser.add_argument('--projection_idx', type=str, default='2', help='projection identifier (0, 1, 2, 3, 4)')
@@ -518,7 +518,7 @@ def parse_args():
     # parser.add_argument('--data_path', type=str, default='pca_components_btcusdt_12h_45_reduced_lance_seed_april_15.csv',
     #                     help='data file')
     parser.add_argument('--data_path', type=str,
-                        default='pca_components_btcusdt_4h_43_07_05_lance_seed_march_9_2020.csv',
+                        default='pca_components_btcusdt_4h_48_lance_seed_march_9_2020.csv',
                         help='data file')
     parser.add_argument('--features', type=str, default='MS', help='forecasting task, options:[M, S, MS]')
     parser.add_argument('--target', type=str, default='close', help='target feature in S or MS task')
