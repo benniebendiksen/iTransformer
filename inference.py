@@ -586,7 +586,7 @@ def parse_args():
     # Add these arguments to your parse_args function
     parser.add_argument('--use_embedding_approach', type=int, default=1,
                         help='whether to use embedding-based approach')
-    parser.add_argument('--similar_samples', type=int, default=25,
+    parser.add_argument('--similar_samples', type=int, default=15,
                         help='number of similar samples for embedding-based approach')
     parser.add_argument('--embedding_ffn_epochs', type=int, default=50,
                         help='number of epochs for embedding-based FFN training')
@@ -1419,7 +1419,7 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         similar_samples = find_similar_samples(
             test_embedding,
             train_embeddings,
-            val_embeddings,
+            None,
             None,
             top_n=top_n
         )
@@ -1775,7 +1775,7 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         if str(device).startswith('cuda'):
             torch.cuda.empty_cache()
 
-    # Calculate metrics for the raw embedding model approach
+    # Calculate metrics for the embedding model approach
     accuracy = accuracy_score(trues, embedding_preds)
 
     # Convert result arrays to numpy arrays
