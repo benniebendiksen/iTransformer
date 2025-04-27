@@ -509,7 +509,7 @@ def parse_args():
                         default='pca_components_btcusdt_4h_45_lance_seed_march_9_2020',
                         help='model id')
 
-    parser.add_argument('--projection_idx', type=str, default='0', help='projection identifier (0, 1, 2, 3, 4)')
+    parser.add_argument('--projection_idx', type=str, default='2', help='projection identifier (0, 1, 2, 3, 4)')
     parser.add_argument('--model', type=str, default='iTransformer', help='model name')
     # Data loader
     parser.add_argument('--data', type=str, default='logits', help='dataset type')
