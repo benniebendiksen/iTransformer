@@ -1537,17 +1537,17 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         #     else:
         #         raise ValueError(f"Unknown split: {split}")
 
-        # for train_idx in similar_train_indices:
-        #     # Keep the temporal structure [seq_len, embed_dim]
-        #     embedding = train_embeddings[train_idx]
-        #     ffn_train_embeddings.append(embedding)
-        #     ffn_train_labels.append(train_labels_array[train_idx])
-
-        for val_idx in similar_val_indices:
+        for train_idx in similar_train_indices:
             # Keep the temporal structure [seq_len, embed_dim]
-            embedding = val_embeddings[val_idx]
+            embedding = train_embeddings[train_idx]
             ffn_train_embeddings.append(embedding)
-            ffn_train_labels.append(val_labels[val_idx])
+            ffn_train_labels.append(train_labels_array[train_idx])
+
+        # for val_idx in similar_val_indices:
+        #     # Keep the temporal structure [seq_len, embed_dim]
+        #     embedding = val_embeddings[val_idx]
+        #     ffn_train_embeddings.append(embedding)
+        #     ffn_train_labels.append(val_labels[val_idx])
 
         # Check if we have enough samples for the embedding-based approach
         if len(ffn_train_embeddings) < 10:
