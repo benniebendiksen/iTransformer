@@ -6,7 +6,11 @@
   <component name="ChangeListManager">
     <list default="true" id="69d785c3-86ad-449e-8111-f9d0a1d14451" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/inference.py" beforeDir="false" afterPath="$PROJECT_DIR$/inference.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/experiments/exp_logits_forecasting.py" beforeDir="false" afterPath="$PROJECT_DIR$/experiments/exp_logits_forecasting.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/inference_bug_free_training_sample_training.py" beforeDir="false" afterPath="$PROJECT_DIR$/inference_bug_free_training_sample_training.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer2.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/increasing_lookback/Logits/iTransformer3.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -247,7 +251,7 @@
       <workItem from="1745270704686" duration="9804000" />
       <workItem from="1745289432559" duration="16000" />
       <workItem from="1745533039448" duration="6835000" />
-      <workItem from="1745680985659" duration="47584000" />
+      <workItem from="1745680985659" duration="51426000" />
     </task>
     <servers />
   </component>

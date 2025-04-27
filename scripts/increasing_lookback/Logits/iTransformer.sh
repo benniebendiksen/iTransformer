@@ -36,7 +36,10 @@ model_name=iTransformer
 #data_path="pca_components_btcusdt_12h_46_07_05_lance_seed_april_15.csv"
 #data_path="pca_components_btcusdt_12h_45_reduced_lance_seed_2.csv"
 #data_path="pca_components_btcusdt_4h_43_07_05_lance_seed_march_9_2020.csv"
-data_path="pca_components_btcusdt_4h_45_lance_seed_march_9_2020.csv"
+#data_path="pca_components_btcusdt_4h_45_lance_seed_march_9_2020.csv"
+
+data_path="pca_components_btcusdt_12h_45_reduced_lance_seed_april_15_repeat.csv"
+
 
 seq_len=96
 pred_len=1

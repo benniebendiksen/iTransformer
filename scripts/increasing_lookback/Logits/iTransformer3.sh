@@ -12,15 +12,18 @@ python -c "import torch; print('Torch version:', torch.__version__)"
 python -c "import torch; print('Torch CUDA Available:', torch.cuda.is_available())"
 
 model_name=iTransformer
-exit 0
+
 # extended by 14 testing
 #data_path="btcusd_pca_components_lightboost_12h_4h_reduced_60_7_5_1_2_1_old.csv"
-data_path="pca_components_btcusdt_57_12h_full_binance_reduced_07_05.csv"
+#data_path="pca_components_btcusdt_57_12h_full_binance_reduced_07_05.csv"
 #data_path="pca_components_btcusdt_45_reattempt_12h.csv"
+
+data_path="pca_components_btcusdt_12h_47_reduced_lance_seed_april_15_plus_30.csv"
+
 seq_len=96
 pred_len=1
 #enc_in=65
-enc_in=62
+enc_in=52
 d_model=512
 data_file=$(basename "$data_path" .csv)
 python -u run.py \
