@@ -596,7 +596,7 @@ def parse_args():
                         help='whether to use embedding-based approach')
     parser.add_argument('--similar_samples', type=int, default=25,
                         help='number of similar samples for embedding-based approach')
-    parser.add_argument('--embedding_ffn_epochs', type=int, default=100,
+    parser.add_argument('--embedding_ffn_epochs', type=int, default=50,
                         help='number of epochs for embedding-based FFN training')
     parser.add_argument('--embedding_ffn_lr', type=float, default=0.001,
                         help='learning rate for embedding-based FFN training')
