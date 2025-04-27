@@ -1331,7 +1331,7 @@ def find_similar_samples(test_embedding, train_embeddings, val_embeddings=None, 
 
 
 def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, device, args,
-                                      top_n=20, model_type='tcn',
+                                      top_n=20, model_type='cnn_lstm',
                                       ffn_epochs=50, ffn_lr=0.001):
     """
     Apply enhanced embedding-based approach with better architecture choices,
