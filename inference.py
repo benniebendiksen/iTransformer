@@ -1434,7 +1434,7 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
 
         similar_samples = find_similar_samples(
             test_embedding,
-            None,
+            train_embeddings,
             val_embeddings,
             None,
             top_n=top_n
