@@ -586,7 +586,7 @@ def parse_args():
     # Add these arguments to your parse_args function
     parser.add_argument('--use_embedding_approach', type=int, default=1,
                         help='whether to use embedding-based approach')
-    parser.add_argument('--similar_samples', type=int, default=15,
+    parser.add_argument('--similar_samples', type=int, default=25,
                         help='number of similar samples for embedding-based approach')
     parser.add_argument('--embedding_ffn_epochs', type=int, default=50,
                         help='number of epochs for embedding-based FFN training')
@@ -851,180 +851,485 @@ def find_similar_samples(test_embedding, train_embeddings, val_embeddings=None, 
     return similarities[:top_n]
 
 
-def apply_embedding_based_approach(model, train_data, val_data, test_data, device, top_n=50, ffn_epochs=50,
-                                   ffn_lr=0.001):
-    """
-    Apply the embedding-based FFN approach
-
-    Parameters:
-    -----------
-    model : torch.nn.Module
-        iTransformer model
-    train_data : Dataset
-        Training dataset
-    val_data : Dataset
-        Validation dataset (can be None)
-    test_data : Dataset
-        Test dataset
-    device : torch.device
-        Device to run model on
-    top_n : int
-        Number of similar samples to use for training
-    ffn_epochs : int
-        Number of epochs for FFN training
-    ffn_lr : float
-        Learning rate for FFN training
-
-    Returns:
-    --------
-    dict
-        Results of embedding-based approach
-    """
-    print("Applying embedding-based FFN approach...")
-
-    # Extract embeddings for all datasets
-    train_embeddings, train_labels_array = extract_embeddings_for_train_samples(model, train_data, device)
-
-    # Extract validation embeddings if available
-    val_embeddings = None
-    if val_data is not None:
-        val_embeddings, _ = extract_embeddings_for_train_samples(model, val_data, device)
-
-    # Initialize results arrays
-    embedding_preds = []
-    embedding_probs = []
-    trues = []
-
-    # Process each test sample
-    for idx in range(len(test_data)):
-        print(f"\nProcessing test sample {idx + 1}/{len(test_data)}...")
-
-        # Get test sample
-        batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[idx]
-        true_label = batch_y[-1, -1]
-        trues.append(true_label)
-
-        # Add batch dimension
-        batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
-        batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
-
-        # Extract embedding for this test sample
-        test_embedding = extract_single_embedding(model, batch_x, batch_x_mark, device)
-
-        # Find similar samples
-        similar_samples = find_similar_samples(
-            test_embedding,
-            train_embeddings,
-            val_embeddings,
-            None,  # No need to compare with other test samples
-            top_n=top_n
-        )
-
-        # Get embeddings and labels for similar samples
-        similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
-
-        # Collect similar samples for FFN training
-        ffn_train_embeddings = []
-        ffn_train_labels = []
-
-        for train_idx in similar_train_indices:
-            # Use the flattened version for FFN input
-            flat_embedding = train_embeddings[train_idx].flatten()
-            ffn_train_embeddings.append(flat_embedding)
-            ffn_train_labels.append(train_labels_array[train_idx])
-
-        # Check if we have enough samples
-        if len(ffn_train_embeddings) < 10:
-            print(f"Warning: Not enough similar samples found ({len(ffn_train_embeddings)}), using original prediction")
-            # Get the original prediction
-            if hasattr(model, 'predict'):
-                pred, prob = model.predict(batch_x, batch_x_mark)
-            else:
-                # Fall back to manual prediction
-                dec_inp = torch.zeros_like(batch_y[:, -1:, :]).float().to(device)
-                outputs = model(batch_x, batch_x_mark, dec_inp, None)
-                pred_prob = torch.sigmoid(outputs[:, -1, -1]).item()
-                pred = 1 if pred_prob >= 0.5 else 0
-                prob = pred_prob
-
-            embedding_preds.append(pred)
-            embedding_probs.append(prob)
-            continue
-
-        print(f"Training FFN on {len(ffn_train_embeddings)} similar samples...")
-
-        # Train FFN on similar samples
-        embedding_size = ffn_train_embeddings[0].shape[0]
-        embedding_ffn = EmbeddingFFN(embedding_size=embedding_size)
-
-        # Convert to PyTorch tensors
-        X = torch.FloatTensor(ffn_train_embeddings)
-        y = torch.FloatTensor(ffn_train_labels).view(-1, 1)
-
-        # Create dataset and dataloader
-        dataset = TensorDataset(X, y)
-        dataloader = DataLoader(dataset, batch_size=min(16, len(X)), shuffle=True)
-
-        # Define loss function and optimizer
-        criterion = nn.BCELoss()
-        optimizer = optim.Adam(embedding_ffn.parameters(), lr=ffn_lr)
-
-        # Training loop
-        embedding_ffn.train()
-        for epoch in range(ffn_epochs):
-            epoch_loss = 0
-            for batch_X, batch_y in dataloader:
-                # Forward pass
-                outputs = embedding_ffn(batch_X)
-                loss = criterion(outputs, batch_y)
-
-                # Backward and optimize
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-                epoch_loss += loss.item()
-
-            avg_loss = epoch_loss / len(dataloader)
-            if (epoch + 1) % 10 == 0:
-                print(f'Epoch [{epoch + 1}/{ffn_epochs}], Loss: {avg_loss:.4f}')
-
-        # Get prediction for current test sample
-        embedding_ffn.eval()
-        with torch.no_grad():
-            test_embedding_flat = torch.FloatTensor(test_embedding.flatten()).unsqueeze(0)
-            pred_prob = embedding_ffn(test_embedding_flat).item()
-            pred = 1 if pred_prob >= 0.5 else 0
-
-        embedding_preds.append(pred)
-        embedding_probs.append(pred_prob)
-
-        print(f"Embedding-based prediction: {pred}, True label: {true_label}, Probability: {pred_prob:.4f}")
-
-    # Calculate metrics
-    accuracy = accuracy_score(trues, embedding_preds)
-
-    # Create final results
-    embedding_preds = np.array(embedding_preds)
-    embedding_probs = np.array(embedding_probs)
-    trues = np.array(trues)
-
-    print(f"\nEmbedding-based approach accuracy: {accuracy:.4f}")
-
-    return {
-        'preds': embedding_preds,
-        'probs': embedding_probs,
-        'trues': trues,
-        'accuracy': accuracy
-    }
+# def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, device, args,
+#                                       top_n=20, model_type='tcn',
+#                                       ffn_epochs=50, ffn_lr=0.001):
+#     """
+#     Apply enhanced embedding-based approach with better architecture choices,
+#     GPU optimization, and multi-policy trading decisions
+#
+#     Parameters:
+#     -----------
+#     model_type : str
+#         Type of embedding model to use: 'tcn', 'transformer', 'cnn_lstm', or 'attention_pooling'
+#     device : torch.device
+#         Device to use for computation (CPU or GPU)
+#     """
+#     print(f"Applying enhanced embedding-based approach with {model_type} model...")
+#
+#     # Print device information
+#     print(f"Using device: {device}")
+#     if str(device).startswith('cuda'):
+#         print(f"GPU: {torch.cuda.get_device_name(device)}")
+#         print(f"Memory allocated: {torch.cuda.memory_allocated(device) / 1e9:.2f} GB")
+#         print(f"Memory reserved: {torch.cuda.memory_reserved(device) / 1e9:.2f} GB")
+#
+#     # Extract embeddings for all datasets
+#     train_embeddings, train_labels_array = extract_embeddings_for_train_samples(model, train_data, device)
+#
+#     # Extract validation embeddings if available
+#     val_embeddings = None
+#     val_labels = None
+#     if val_data is not None:
+#         val_embeddings, val_labels = extract_embeddings_for_train_samples(model, val_data, device)
+#
+#     # Initialize results arrays
+#     embedding_preds = []
+#     embedding_probs = []
+#     trues = []
+#     original_preds = []
+#     original_probs = []
+#
+#     # Different trading policies
+#     trade_decisions_original = []
+#     trade_decisions_threshold = []
+#     trade_decisions_weighted = []
+#     trade_decisions_confidence_gap = []
+#     trade_decisions_combined = []
+#
+#     # Track accuracy metrics
+#     similar_sample_orig_accuracies = []
+#     trained_model_accuracies = []
+#     confusion_matrices = []
+#
+#     # Process each test sample
+#     for idx in range(len(test_data)):
+#         print(f"\nProcessing test sample {idx + 1}/{len(test_data)}...")
+#
+#         # Get test sample
+#         batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[idx]
+#         true_label = batch_y[-1, -1]
+#         trues.append(true_label)
+#
+#         # Add batch dimension and ensure tensors are on the correct device
+#         batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
+#         batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
+#         batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(device)
+#         batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(device)
+#
+#         # Generate original model prediction
+#         dec_inp = torch.zeros_like(batch_y[:, -args.pred_len:, :]).float()
+#         dec_inp = torch.cat([batch_y[:, :args.label_len, :], dec_inp], dim=1).float().to(device)
+#
+#         # Generate prediction
+#         if args.output_attention:
+#             outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+#         else:
+#             outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+#
+#         # Process outputs for binary classification
+#         f_dim = -1 if args.features == 'MS' else 0
+#         outputs_last = outputs[:, -1, f_dim:]
+#         batch_y_last = batch_y[:, -1, f_dim:].to(device)
+#
+#         # Get prediction probability and binary prediction
+#         orig_output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+#         orig_output_binary = (orig_output_prob > 0.5).astype(np.float32)
+#
+#         # Save original predictions
+#         original_preds.append(orig_output_binary)
+#         original_probs.append(orig_output_prob)
+#
+#         # Extract embedding for this test sample
+#         test_embedding = extract_single_embedding(model, batch_x, batch_x_mark, device)
+#
+#         # Find similar samples
+#         similar_samples = find_similar_samples(
+#             test_embedding,
+#             train_embeddings,
+#             None,
+#             None,
+#             top_n=top_n
+#         )
+#
+#         # Sort similar samples by similarity (descending)
+#         similar_samples.sort(key=lambda x: x[2], reverse=True)
+#
+#         # Get embeddings and labels for similar samples
+#         similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
+#         similar_val_indices = [idx for split, idx, _ in similar_samples if split == 'val']
+#
+#         # Initialize confusion matrix for this test sample
+#         TP, TN, FP, FN = 0, 0, 0, 0
+#
+#         # Track predictions of similar cases for confusion matrix
+#         similar_labels = []
+#         similar_predictions = []
+#
+#         # Process all similar samples to build confusion matrix
+#         for split, similarity_idx, _ in similar_samples:
+#             # Get the original data for this similar sample
+#             if split == 'train':
+#                 similar_batch_x, similar_batch_y, similar_batch_x_mark, similar_batch_y_mark = train_data[
+#                     similarity_idx]
+#                 true_label_similar = train_labels_array[similarity_idx]
+#             elif split == 'val' and val_data is not None:
+#                 similar_batch_x, similar_batch_y, similar_batch_x_mark, similar_batch_y_mark = val_data[similarity_idx]
+#                 true_label_similar = val_labels[similarity_idx]
+#             else:
+#                 continue
+#
+#             # Add batch dimension and convert to tensor
+#             similar_batch_x = torch.tensor(similar_batch_x).unsqueeze(0).float().to(device)
+#             similar_batch_y = torch.tensor(similar_batch_y).unsqueeze(0).float().to(device)
+#             similar_batch_x_mark = torch.tensor(similar_batch_x_mark).unsqueeze(0).float().to(device)
+#             similar_batch_y_mark = torch.tensor(similar_batch_y_mark).unsqueeze(0).float().to(device)
+#
+#             # Use original model for prediction
+#             with torch.no_grad():
+#                 # Decoder input
+#                 dec_inp = torch.zeros_like(similar_batch_y[:, -args.pred_len:, :]).float()
+#                 dec_inp = torch.cat([similar_batch_y[:, :args.label_len, :], dec_inp], dim=1).float().to(device)
+#
+#                 # Generate prediction
+#                 if args.output_attention:
+#                     outputs = model(similar_batch_x, similar_batch_x_mark, dec_inp, similar_batch_y_mark)[0]
+#                 else:
+#                     outputs = model(similar_batch_x, similar_batch_x_mark, dec_inp, similar_batch_y_mark)
+#
+#                 # Process outputs for binary classification
+#                 f_dim = -1 if args.features == 'MS' else 0
+#                 outputs_last = outputs[:, -1, f_dim:]
+#
+#                 # Get prediction probability and binary prediction
+#                 similar_pred_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+#                 similar_pred = 1 if similar_pred_prob >= 0.5 else 0
+#
+#                 # Update confusion matrix
+#                 if similar_pred == 1 and true_label_similar == 1:
+#                     TP += 1
+#                 elif similar_pred == 0 and true_label_similar == 0:
+#                     TN += 1
+#                 elif similar_pred == 1 and true_label_similar == 0:
+#                     FP += 1
+#                 elif similar_pred == 0 and true_label_similar == 1:
+#                     FN += 1
+#
+#                 # Store predictions and true labels
+#                 similar_labels.append(true_label_similar)
+#                 similar_predictions.append(similar_pred)
+#
+#         # Calculate accuracy metrics
+#         positive_accuracy = TP / (TP + FN) if (TP + FN) > 0 else 0
+#         negative_accuracy = TN / (TN + FP) if (TN + FP) > 0 else 0
+#
+#         # Calculate weighted accuracy (accounts for sample size)
+#         positive_samples = TP + FN
+#         negative_samples = TN + FP
+#         total_samples = positive_samples + negative_samples
+#
+#         if total_samples > 0:
+#             weighted_positive_accuracy = positive_accuracy * (positive_samples / total_samples)
+#             weighted_negative_accuracy = negative_accuracy * (negative_samples / total_samples)
+#         else:
+#             weighted_positive_accuracy = weighted_negative_accuracy = 0
+#
+#         # Store confusion matrix information
+#         confusion_matrix_info = {
+#             'TP': TP, 'TN': TN, 'FP': FP, 'FN': FN,
+#             'positive_accuracy': positive_accuracy,
+#             'negative_accuracy': negative_accuracy,
+#             'weighted_positive_accuracy': weighted_positive_accuracy,
+#             'weighted_negative_accuracy': weighted_negative_accuracy,
+#             'positive_samples': positive_samples,
+#             'negative_samples': negative_samples,
+#             'total_similar_samples': len(similar_samples)
+#         }
+#         confusion_matrices.append(confusion_matrix_info)
+#
+#         print(f"Confusion matrix for similar samples:")
+#         print(f"TP: {TP}, TN: {TN}, FP: {FP}, FN: {FN}")
+#         print(f"Positive accuracy: {positive_accuracy:.4f} ({positive_samples} samples)")
+#         print(f"Negative accuracy: {negative_accuracy:.4f} ({negative_samples} samples)")
+#         print(f"Weighted positive accuracy: {weighted_positive_accuracy:.4f}")
+#         print(f"Weighted negative accuracy: {weighted_negative_accuracy:.4f}")
+#
+#         # Collect similar samples for model training (preserve temporal structure)
+#         ffn_train_embeddings = []
+#         ffn_train_labels = []
+#
+#         for train_idx in similar_train_indices:
+#             # Keep the temporal structure [seq_len, embed_dim]
+#             embedding = train_embeddings[train_idx]
+#             ffn_train_embeddings.append(embedding)
+#             ffn_train_labels.append(train_labels_array[train_idx])
+#
+#         # Create appropriate embedding model
+#         seq_len, embed_dim = ffn_train_embeddings[0].shape if ffn_train_embeddings else (0, 0)
+#
+#         # Check if we have enough samples for the embedding-based approach
+#         if len(ffn_train_embeddings) < 10:
+#             print(
+#                 f"Warning: Not enough similar samples found for embedding model ({len(ffn_train_embeddings)}), using original prediction")
+#             embedding_preds.append(orig_output_binary)
+#             embedding_probs.append(orig_output_prob)
+#         else:
+#             # Create and train embedding model
+#             if model_type == 'tcn':
+#                 embedding_model = TemporalConvNet(seq_len, embed_dim)
+#             elif model_type == 'transformer':
+#                 embedding_model = TransformerEmbeddingModel(seq_len, embed_dim)
+#             elif model_type == 'cnn_lstm':
+#                 embedding_model = CNNLSTMEmbeddingModel(seq_len, embed_dim)
+#             elif model_type == 'attention_pooling':
+#                 embedding_model = AttentionPoolingEmbeddingModel(seq_len, embed_dim)
+#             else:
+#                 raise ValueError(f"Unknown model type: {model_type}")
+#
+#             # Move model to the correct device
+#             embedding_model = embedding_model.to(device)
+#
+#             # Train on similar samples
+#             print(f"Training {model_type} model on {len(ffn_train_embeddings)} similar samples on {device}...")
+#
+#             # Convert to PyTorch tensors and move to device
+#             X = torch.FloatTensor(ffn_train_embeddings).to(device)
+#             y = torch.FloatTensor(ffn_train_labels).view(-1, 1).to(device)
+#
+#             # Create dataset and dataloader
+#             dataset = TensorDataset(X, y)
+#             dataloader = DataLoader(dataset, batch_size=min(16, len(X)), shuffle=True)
+#
+#             # Define loss function and optimizer
+#             criterion = nn.BCELoss()
+#             optimizer = optim.Adam(embedding_model.parameters(), lr=ffn_lr)
+#
+#             # Training loop
+#             embedding_model.train()
+#             epoch_train_accuracies = []
+#
+#             for epoch in range(ffn_epochs):
+#                 epoch_loss = 0
+#                 correct = 0
+#                 total = 0
+#
+#                 for batch_X, batch_y in dataloader:
+#                     # Forward pass
+#                     outputs = embedding_model(batch_X)
+#                     loss = criterion(outputs, batch_y)
+#
+#                     # Backward and optimize
+#                     optimizer.zero_grad()
+#                     loss.backward()
+#                     optimizer.step()
+#
+#                     epoch_loss += loss.item()
+#
+#                     # Calculate accuracy
+#                     predicted = (outputs > 0.5).float()
+#                     total += batch_y.size(0)
+#                     correct += (predicted == batch_y).sum().item()
+#
+#                 train_accuracy = correct / total
+#                 epoch_train_accuracies.append(train_accuracy)
+#
+#                 avg_loss = epoch_loss / len(dataloader)
+#                 if (epoch + 1) % 10 == 0:
+#                     print(f'Epoch [{epoch + 1}/{ffn_epochs}], Loss: {avg_loss:.4f}, Accuracy: {train_accuracy:.4f}')
+#                     if str(device).startswith('cuda'):
+#                         print(f"GPU memory: {torch.cuda.memory_allocated(device) / 1e9:.2f} GB allocated")
+#
+#             # Store the training accuracy
+#             trained_model_accuracies.append(np.mean(epoch_train_accuracies))
+#
+#             # Get prediction for current test sample
+#             embedding_model.eval()
+#             with torch.no_grad():
+#                 test_embedding_tensor = torch.FloatTensor(test_embedding).unsqueeze(0).to(device)
+#                 pred_prob = embedding_model(test_embedding_tensor).item()
+#                 pred = 1 if pred_prob >= 0.5 else 0
+#
+#             embedding_preds.append(pred)
+#             embedding_probs.append(pred_prob)
+#
+#         # For multi-policy trading, use the original model's prediction
+#         pred = orig_output_binary
+#         pred_prob = orig_output_prob
+#
+#         # Calculate accuracies for confusion matrix-based decisions
+#         similar_accuracy = np.mean(np.array(similar_predictions) == np.array(similar_labels))
+#         similar_sample_orig_accuracies.append(similar_accuracy)
+#
+#         # Policy 1: Original policy (higher accuracy)
+#         should_trade_original = False
+#         if pred == 1:
+#             should_trade_original = positive_accuracy > negative_accuracy
+#         else:
+#             should_trade_original = negative_accuracy > positive_accuracy
+#         trade_decisions_original.append(should_trade_original)
+#
+#         # Policy 2: Minimum accuracy threshold (0.5)
+#         should_trade_threshold = False
+#         if pred == 1:
+#             should_trade_threshold = positive_accuracy > negative_accuracy and positive_accuracy > 0.5
+#         else:
+#             should_trade_threshold = negative_accuracy > positive_accuracy and negative_accuracy > 0.5
+#         trade_decisions_threshold.append(should_trade_threshold)
+#
+#         # Policy 3: Weighted accuracy comparison
+#         should_trade_weighted = False
+#         if pred == 1:
+#             should_trade_weighted = weighted_positive_accuracy > weighted_negative_accuracy
+#         else:
+#             should_trade_weighted = weighted_negative_accuracy > weighted_positive_accuracy
+#         trade_decisions_weighted.append(should_trade_weighted)
+#
+#         # Policy 4: Confidence gap (at least 0.35 difference)
+#         confidence_gap = 0.35
+#         should_trade_confidence_gap = False
+#         if pred == 1:
+#             should_trade_confidence_gap = positive_accuracy > negative_accuracy + confidence_gap
+#         else:
+#             should_trade_confidence_gap = negative_accuracy > positive_accuracy + confidence_gap
+#         trade_decisions_confidence_gap.append(should_trade_confidence_gap)
+#
+#         # Policy 5: Combined policy (must satisfy multiple criteria)
+#         should_trade_combined = False
+#         if pred == 1:
+#             should_trade_combined = (
+#                     positive_accuracy > negative_accuracy and
+#                     positive_accuracy > 0.5 and
+#                     positive_accuracy > negative_accuracy + 0.1 and
+#                     positive_samples >= 5  # Minimum sample requirement
+#             )
+#         else:
+#             should_trade_combined = (
+#                     negative_accuracy > positive_accuracy and
+#                     negative_accuracy > 0.5 and
+#                     negative_accuracy > positive_accuracy + 0.1 and
+#                     negative_samples >= 5  # Minimum sample requirement
+#             )
+#         trade_decisions_combined.append(should_trade_combined)
+#
+#         print(
+#             f"Orig prediction: {orig_output_binary}, Embedding-based prediction: {embedding_preds[-1]}, True label: {true_label}")
+#         print(f"Trade decisions:")
+#         print(f"  Original policy: {'Trade' if should_trade_original else 'No Trade'}")
+#         print(f"  Threshold policy: {'Trade' if should_trade_threshold else 'No Trade'}")
+#         print(f"  Weighted policy: {'Trade' if should_trade_weighted else 'No Trade'}")
+#         print(f"  Confidence gap policy: {'Trade' if should_trade_confidence_gap else 'No Trade'}")
+#         print(f"  Combined policy: {'Trade' if should_trade_combined else 'No Trade'}")
+#
+#         # Clear GPU cache if using CUDA
+#         if str(device).startswith('cuda'):
+#             torch.cuda.empty_cache()
+#
+#     # Calculate metrics for the raw embedding model approach
+#     accuracy = accuracy_score(trues, embedding_preds)
+#
+#     # Convert result arrays to numpy arrays
+#     embedding_preds = np.array(embedding_preds)
+#     embedding_probs = np.array(embedding_probs)
+#     trues = np.array(trues)
+#     original_preds = np.array(original_preds)
+#     original_probs = np.array(original_probs)
+#
+#     # Convert trade decision arrays
+#     trade_decisions_original = np.array(trade_decisions_original)
+#     trade_decisions_threshold = np.array(trade_decisions_threshold)
+#     trade_decisions_weighted = np.array(trade_decisions_weighted)
+#     trade_decisions_confidence_gap = np.array(trade_decisions_confidence_gap)
+#     trade_decisions_combined = np.array(trade_decisions_combined)
+#
+#     # Calculate metrics for each policy
+#     def calculate_policy_metrics(trade_mask):
+#         if np.sum(trade_mask) > 0:
+#             # Only evaluate on samples where we would trade
+#             traded_indices = np.where(trade_mask)[0]
+#             accuracy = accuracy_score(trues[traded_indices], original_preds[traded_indices])
+#             precision = precision_score(trues[traded_indices], original_preds[traded_indices], zero_division=0)
+#             recall = recall_score(trues[traded_indices], original_preds[traded_indices], zero_division=0)
+#             f1 = f1_score(trues[traded_indices], original_preds[traded_indices], zero_division=0)
+#             return {
+#                 'accuracy': accuracy,
+#                 'precision': precision,
+#                 'recall': recall,
+#                 'f1': f1,
+#                 'traded_count': int(np.sum(trade_mask)),
+#                 'total_count': len(trues)
+#             }
+#         else:
+#             return {
+#                 'accuracy': 0.0,
+#                 'precision': 0.0,
+#                 'recall': 0.0,
+#                 'f1': 0.0,
+#                 'traded_count': 0,
+#                 'total_count': len(trues)
+#             }
+#
+#     # Calculate metrics for each policy
+#     policy_metrics = {
+#         'overall': {'accuracy': accuracy},
+#         'original': calculate_policy_metrics(trade_decisions_original),
+#         'threshold': calculate_policy_metrics(trade_decisions_threshold),
+#         'weighted': calculate_policy_metrics(trade_decisions_weighted),
+#         'confidence_gap': calculate_policy_metrics(trade_decisions_confidence_gap),
+#         'combined': calculate_policy_metrics(trade_decisions_combined)
+#     }
+#
+#     # Print summary of all policies
+#     print(f"\nEnhanced embedding-based approach results:")
+#     print(f"Total samples: {len(trues)}")
+#     print(f"Embedding model accuracy: {accuracy:.4f}")
+#     print(f"Average similar samples orig accuracy: {np.mean(similar_sample_orig_accuracies):.4f}")
+#     print(f"Average training accuracy: {np.mean(trained_model_accuracies):.4f}")
+#
+#     print("\nTrading policy comparison:")
+#     print(f"{'Policy':<15} {'Trades':<8} {'Skipped':<8} {'Accuracy':<10} {'Precision':<10} {'Recall':<10} {'F1':<10}")
+#     print("-" * 75)
+#
+#     for policy_name, metrics in policy_metrics.items():
+#         if policy_name == 'overall':
+#             continue
+#         traded = metrics['traded_count']
+#         skipped = metrics['total_count'] - traded
+#         acc = metrics['accuracy']
+#         prec = metrics['precision']
+#         rec = metrics['recall']
+#         f1_score_val = metrics['f1']
+#         print(
+#             f"{policy_name:<15} {traded:<8} {skipped:<8} {acc:<10.4f} {prec:<10.4f} {rec:<10.4f} {f1_score_val:<10.4f}")
+#
+#     # Return both the original embedding model results and the new multi-policy trading results
+#     return {
+#         # Original return values for backward compatibility
+#         'preds': embedding_preds,
+#         'probs': embedding_probs,
+#         'trues': trues,
+#         'accuracy': accuracy,
+#         'similar_samples_accuracy': np.mean(similar_sample_orig_accuracies),
+#         'training_accuracy': np.mean(trained_model_accuracies),
+#
+#         # New trading policy values
+#         'original_preds': original_preds,
+#         'original_probs': original_probs,
+#         'trade_decisions_original': trade_decisions_original,
+#         'trade_decisions_threshold': trade_decisions_threshold,
+#         'trade_decisions_weighted': trade_decisions_weighted,
+#         'trade_decisions_confidence_gap': trade_decisions_confidence_gap,
+#         'trade_decisions_combined': trade_decisions_combined,
+#         'confusion_matrices': confusion_matrices,
+#         'policy_metrics': policy_metrics
+#     }
 
 
 def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, device, args,
-                                      top_n=50, model_type='tcn',
+                                      top_n=20, model_type='tcn',
                                       ffn_epochs=50, ffn_lr=0.001):
     """
-    Apply enhanced embedding-based approach with better architecture choices
-    and ensure proper GPU utilization when available
+    Apply enhanced embedding-based approach with better architecture choices,
+    GPU optimization, and multi-policy trading decisions
 
     Parameters:
     -----------
@@ -1055,10 +1360,20 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
     embedding_preds = []
     embedding_probs = []
     trues = []
+    original_preds = []
+    original_probs = []
+
+    # Different trading policies
+    trade_decisions_higher_acc = []
+    trade_decisions_threshold = []
+    trade_decisions_weighted = []
+    trade_decisions_confidence_gap = []
+    trade_decisions_combined = []
 
     # Track accuracy metrics
-    similar_sample_accuracies = []
+    similar_sample_orig_accuracies = []
     trained_model_accuracies = []
+    confusion_matrices = []
 
     # Process each test sample
     for idx in range(len(test_data)):
@@ -1072,6 +1387,30 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         # Add batch dimension and ensure tensors are on the correct device
         batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
         batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
+        batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(device)
+        batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(device)
+
+        # Get original model prediction
+        dec_inp = torch.zeros_like(batch_y[:, -args.pred_len:, :]).float()
+        dec_inp = torch.cat([batch_y[:, :args.label_len, :], dec_inp], dim=1).float().to(device)
+
+        # Generate prediction
+        if args.output_attention:
+            outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+        else:
+            outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+        # Process outputs for binary classification
+        f_dim = -1 if args.features == 'MS' else 0
+        outputs_last = outputs[:, -1, f_dim:]
+
+        # Get prediction probability and binary prediction
+        orig_output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+        orig_output_binary = (orig_output_prob > 0.5).astype(np.float32)
+
+        # Save original predictions
+        original_preds.append(orig_output_binary)
+        original_probs.append(orig_output_prob)
 
         # Extract embedding for this test sample
         test_embedding = extract_single_embedding(model, batch_x, batch_x_mark, device)
@@ -1085,45 +1424,124 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
             top_n=top_n
         )
 
-        # Get embeddings and labels for similar samples
-        # similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
-        similar_train_indices = [idx for split, idx, _ in similar_samples]
-        print(f"First 20 similar samples: {similar_samples}")
+        # Sort similar samples by similarity (descending)
+        similar_samples.sort(key=lambda x: x[2], reverse=True)
 
-        # Collect similar samples (preserve the temporal structure!)
+        # Get similar training samples for embedding model
+        similar_train_indices = [idx for split, idx, _ in similar_samples if split == 'train']
+
+        # Calculate original model confusion matrix on similar samples
+        # This is just for display and comparison purposes
+        orig_TP, orig_TN, orig_FP, orig_FN = 0, 0, 0, 0
+        for split, similarity_idx, _ in similar_samples:
+            # Get the original data for this similar sample
+            if split == 'train':
+                similar_batch_x, similar_batch_y, similar_batch_x_mark, similar_batch_y_mark = train_data[
+                    similarity_idx]
+                true_label_similar = train_labels_array[similarity_idx]
+            elif split == 'val' and val_data is not None:
+                similar_batch_x, similar_batch_y, similar_batch_x_mark, similar_batch_y_mark = val_data[similarity_idx]
+                true_label_similar = val_labels[similarity_idx]
+            else:
+                continue
+
+            # Add batch dimension and convert to tensor
+            similar_batch_x = torch.tensor(similar_batch_x).unsqueeze(0).float().to(device)
+            similar_batch_y = torch.tensor(similar_batch_y).unsqueeze(0).float().to(device)
+            similar_batch_x_mark = torch.tensor(similar_batch_x_mark).unsqueeze(0).float().to(device)
+            similar_batch_y_mark = torch.tensor(similar_batch_y_mark).unsqueeze(0).float().to(device)
+
+            # Use original model for prediction
+            with torch.no_grad():
+                # Decoder input
+                dec_inp = torch.zeros_like(similar_batch_y[:, -args.pred_len:, :]).float()
+                dec_inp = torch.cat([similar_batch_y[:, :args.label_len, :], dec_inp], dim=1).float().to(device)
+
+                # Generate prediction
+                if args.output_attention:
+                    outputs = model(similar_batch_x, similar_batch_x_mark, dec_inp, similar_batch_y_mark)[0]
+                else:
+                    outputs = model(similar_batch_x, similar_batch_x_mark, dec_inp, similar_batch_y_mark)
+
+                # Process outputs for binary classification
+                f_dim = -1 if args.features == 'MS' else 0
+                outputs_last = outputs[:, -1, f_dim:]
+
+                # Get prediction probability and binary prediction
+                similar_pred_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+                similar_pred = 1 if similar_pred_prob >= 0.5 else 0
+
+                # Update confusion matrix for original model
+                if similar_pred == 1 and true_label_similar == 1:
+                    orig_TP += 1
+                elif similar_pred == 0 and true_label_similar == 0:
+                    orig_TN += 1
+                elif similar_pred == 1 and true_label_similar == 0:
+                    orig_FP += 1
+                elif similar_pred == 0 and true_label_similar == 1:
+                    orig_FN += 1
+
+        # Calculate accuracy metrics for original model confusion matrix (just for display)
+        orig_positive_accuracy = orig_TP / (orig_TP + orig_FN) if (orig_TP + orig_FN) > 0 else 0
+        orig_negative_accuracy = orig_TN / (orig_TN + orig_FP) if (orig_TN + orig_FP) > 0 else 0
+        orig_positive_samples = orig_TP + orig_FN
+        orig_negative_samples = orig_TN + orig_FP
+        orig_total_samples = orig_positive_samples + orig_negative_samples
+
+        if orig_total_samples > 0:
+            orig_weighted_positive_accuracy = orig_positive_accuracy * (orig_positive_samples / orig_total_samples)
+            orig_weighted_negative_accuracy = orig_negative_accuracy * (orig_negative_samples / orig_total_samples)
+        else:
+            orig_weighted_positive_accuracy = orig_weighted_negative_accuracy = 0
+
+        # Print original model confusion matrix (for reference only)
+        print(f"Confusion matrix for original model on similar samples:")
+        print(f"TP: {orig_TP}, TN: {orig_TN}, FP: {orig_FP}, FN: {orig_FN}")
+        print(f"Positive accuracy: {orig_positive_accuracy:.4f} ({orig_positive_samples} samples)")
+        print(f"Negative accuracy: {orig_negative_accuracy:.4f} ({orig_negative_samples} samples)")
+        print(f"Weighted positive accuracy: {orig_weighted_positive_accuracy:.4f}")
+        print(f"Weighted negative accuracy: {orig_weighted_negative_accuracy:.4f}")
+
+        # Collect similar samples for model training (preserve temporal structure)
         ffn_train_embeddings = []
         ffn_train_labels = []
 
-        # for train_idx in similar_train_indices:
-        #     # Keep the temporal structure [seq_len, embed_dim]
-        #     embedding = train_embeddings[train_idx]
-        #     ffn_train_embeddings.append(embedding)
-        #     ffn_train_labels.append(train_labels_array[train_idx])
-
-        for split, sim_idx, _ in similar_samples:
+        for train_idx in similar_train_indices:
             # Keep the temporal structure [seq_len, embed_dim]
-            if split == 'train':
-                embedding = train_embeddings[sim_idx]
-                ffn_train_embeddings.append(embedding)
-                ffn_train_labels.append(train_labels_array[sim_idx])
-            elif split == 'val':
-                embedding = val_embeddings[sim_idx]
-                ffn_train_embeddings.append(embedding)
-                ffn_train_labels.append(val_labels[sim_idx])
-            else:
-                raise ValueError(f"Unknown split: {split}")
+            embedding = train_embeddings[train_idx]
+            ffn_train_embeddings.append(embedding)
+            ffn_train_labels.append(train_labels_array[train_idx])
 
-        # Check if we have enough samples
+        # Check if we have enough samples for the embedding-based approach
         if len(ffn_train_embeddings) < 10:
-            print(f"Warning: Not enough similar samples found ({len(ffn_train_embeddings)}), using original prediction")
-            # Get the original prediction
-            dec_inp = torch.zeros_like(batch_y[:, -1:, :]).float().to(device)
-            outputs = model(batch_x, batch_x_mark, dec_inp, None)
-            pred_prob = torch.sigmoid(outputs[:, -1, -1]).item()
-            pred = 1 if pred_prob >= 0.5 else 0
+            print(
+                f"Warning: Not enough similar samples found for embedding model ({len(ffn_train_embeddings)}), using original prediction")
+            embedding_preds.append(orig_output_binary)
+            embedding_probs.append(orig_output_prob)
 
-            embedding_preds.append(pred)
-            embedding_probs.append(pred_prob)
+            # For consistency, still build empty confusion matrix
+            confusion_matrix_info = {
+                'TP': 0, 'TN': 0, 'FP': 0, 'FN': 0,
+                'positive_accuracy': 0,
+                'negative_accuracy': 0,
+                'weighted_positive_accuracy': 0,
+                'weighted_negative_accuracy': 0,
+                'positive_samples': 0,
+                'negative_samples': 0,
+                'total_similar_samples': 0
+            }
+            confusion_matrices.append(confusion_matrix_info)
+
+            # Skip trading policies when insufficient data
+            trade_decisions_higher_acc.append(False)
+            trade_decisions_threshold.append(False)
+            trade_decisions_weighted.append(False)
+            trade_decisions_confidence_gap.append(False)
+            trade_decisions_combined.append(False)
+
+            # Record empty accuracy values
+            similar_sample_orig_accuracies.append(0)
+            trained_model_accuracies.append(0)
             continue
 
         # Create appropriate embedding model
@@ -1158,53 +1576,6 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         criterion = nn.BCELoss()
         optimizer = optim.Adam(embedding_model.parameters(), lr=ffn_lr)
 
-        # Track similar sample accuracy by getting original predictions
-        similar_labels = []
-        similar_predictions = []
-        # for similarity_idx in similar_train_indices:
-        for split, similarity_idx, _ in similar_samples:
-            # Get the original data for this similar sample
-            if split == 'train':
-                batch_x, batch_y, batch_x_mark, batch_y_mark = train_data[similarity_idx]
-            elif split == 'val':
-                batch_x, batch_y, batch_x_mark, batch_y_mark = val_data[similarity_idx]
-            else:
-                raise ValueError(f"Unknown split: {split}")
-
-            # Add batch dimension and convert to tensor - ensure on correct device
-            batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(device)
-            batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(device)
-            batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(device)
-            batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(device)
-
-            # Use original model for prediction
-            with torch.no_grad():
-                # Decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :args.label_len, :], dec_inp], dim=1).float().to(device)
-
-                # Generate prediction
-                if args.output_attention:
-                    outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                else:
-                    outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
-                # Process outputs for binary classification
-                f_dim = -1 if args.features == 'MS' else 0
-                outputs_last = outputs[:, -1, f_dim:]
-                batch_y_last = batch_y[:, -1, f_dim:].to(device)
-
-                # Get prediction probability and binary prediction
-                output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
-                output_binary = (output_prob > 0.5).astype(np.float32)
-                true_label = batch_y_last.detach().cpu().numpy()[0, 0]
-
-                similar_labels.append(true_label)
-                similar_predictions.append(output_binary)
-
-        similar_accuracy = np.mean(np.array(similar_predictions) == np.array(similar_labels))
-        similar_sample_accuracies.append(similar_accuracy)
-
         # Training loop
         embedding_model.train()
         epoch_train_accuracies = []
@@ -1215,7 +1586,7 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
             total = 0
 
             for batch_X, batch_y in dataloader:
-                # Forward pass - tensors already on device from dataloader
+                # Forward pass
                 outputs = embedding_model(batch_X)
                 loss = criterion(outputs, batch_y)
 
@@ -1237,15 +1608,13 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
             avg_loss = epoch_loss / len(dataloader)
             if (epoch + 1) % 10 == 0:
                 print(f'Epoch [{epoch + 1}/{ffn_epochs}], Loss: {avg_loss:.4f}, Accuracy: {train_accuracy:.4f}')
-
-                # Check GPU memory usage during training
                 if str(device).startswith('cuda'):
                     print(f"GPU memory: {torch.cuda.memory_allocated(device) / 1e9:.2f} GB allocated")
 
         # Store the training accuracy
         trained_model_accuracies.append(np.mean(epoch_train_accuracies))
 
-        # Get prediction for current test sample - ensure tensor is on correct device
+        # Get prediction for current test sample
         embedding_model.eval()
         with torch.no_grad():
             test_embedding_tensor = torch.FloatTensor(test_embedding).unsqueeze(0).to(device)
@@ -1255,32 +1624,254 @@ def apply_enhanced_embedding_approach(model, train_data, val_data, test_data, de
         embedding_preds.append(pred)
         embedding_probs.append(pred_prob)
 
-        print(f"Embedding-based prediction: {pred}, True label: {true_label}, Probability: {pred_prob:.4f}")
-        print(f"Similar samples accuracy: {similar_accuracy:.4f}, Training accuracy: {train_accuracy:.4f}")
+        # Now build confusion matrix based on the embedding model's performance on similar samples
+        # Instead of using the original model
+        TP, TN, FP, FN = 0, 0, 0, 0
+        similar_labels = []
+        similar_predictions = []
+
+        # Process all similar samples to evaluate the embedding model
+        for split, similarity_idx, _ in similar_samples:
+            # Get the data for this similar sample
+            if split == 'train':
+                similar_batch_x, similar_batch_y, similar_batch_x_mark, similar_batch_y_mark = train_data[
+                    similarity_idx]
+                true_label_similar = train_labels_array[similarity_idx]
+            elif split == 'val' and val_data is not None:
+                similar_batch_x, similar_batch_y, similar_batch_x_mark, similar_batch_y_mark = val_data[similarity_idx]
+                true_label_similar = val_labels[similarity_idx]
+            else:
+                continue
+
+            # Extract embedding for this similar sample
+            similar_batch_x = torch.tensor(similar_batch_x).unsqueeze(0).float().to(device)
+            similar_batch_x_mark = torch.tensor(similar_batch_x_mark).unsqueeze(0).float().to(device)
+            similar_embedding = extract_single_embedding(model, similar_batch_x, similar_batch_x_mark, device)
+
+            # Use embedding model to predict
+            with torch.no_grad():
+                similar_embedding_tensor = torch.FloatTensor(similar_embedding).unsqueeze(0).to(device)
+                similar_pred_prob = embedding_model(similar_embedding_tensor).item()
+                similar_pred = 1 if similar_pred_prob >= 0.5 else 0
+
+                # Update confusion matrix
+                if similar_pred == 1 and true_label_similar == 1:
+                    TP += 1
+                elif similar_pred == 0 and true_label_similar == 0:
+                    TN += 1
+                elif similar_pred == 1 and true_label_similar == 0:
+                    FP += 1
+                elif similar_pred == 0 and true_label_similar == 1:
+                    FN += 1
+
+                similar_labels.append(true_label_similar)
+                similar_predictions.append(similar_pred)
+
+        # Calculate accuracy metrics for embedding model confusion matrix
+        positive_accuracy = TP / (TP + FN) if (TP + FN) > 0 else 0
+        negative_accuracy = TN / (TN + FP) if (TN + FP) > 0 else 0
+
+        # Calculate weighted accuracy (accounts for sample size)
+        positive_samples = TP + FN
+        negative_samples = TN + FP
+        total_samples = positive_samples + negative_samples
+
+        if total_samples > 0:
+            weighted_positive_accuracy = positive_accuracy * (positive_samples / total_samples)
+            weighted_negative_accuracy = negative_accuracy * (negative_samples / total_samples)
+        else:
+            weighted_positive_accuracy = weighted_negative_accuracy = 0
+
+        # Store confusion matrix information
+        confusion_matrix_info = {
+            'TP': TP, 'TN': TN, 'FP': FP, 'FN': FN,
+            'positive_accuracy': positive_accuracy,
+            'negative_accuracy': negative_accuracy,
+            'weighted_positive_accuracy': weighted_positive_accuracy,
+            'weighted_negative_accuracy': weighted_negative_accuracy,
+            'positive_samples': positive_samples,
+            'negative_samples': negative_samples,
+            'total_similar_samples': len(similar_samples)
+        }
+        confusion_matrices.append(confusion_matrix_info)
+
+        # Calculate similar sample accuracy
+        similar_accuracy = np.mean(np.array(similar_predictions) == np.array(similar_labels))
+        similar_sample_orig_accuracies.append(similar_accuracy)
+
+        print(f"Embedding model confusion matrix on similar samples:")
+        print(f"TP: {TP}, TN: {TN}, FP: {FP}, FN: {FN}")
+        print(f"Positive accuracy: {positive_accuracy:.4f} ({positive_samples} samples)")
+        print(f"Negative accuracy: {negative_accuracy:.4f} ({negative_samples} samples)")
+        print(f"Weighted positive accuracy: {weighted_positive_accuracy:.4f}")
+        print(f"Weighted negative accuracy: {weighted_negative_accuracy:.4f}")
+
+        # Apply multi-policy trading logic based on EMBEDDING model's confusion matrix
+        # Note: using the embedding model's prediction for decision making
+        # instead of the original model's prediction
+        embedding_pred = pred
+
+        # Policy 1: Original policy (higher accuracy)
+        should_trade_higher_acc = False
+        if embedding_pred == 1:
+            should_trade_higher_acc = positive_accuracy > negative_accuracy
+        else:
+            should_trade_higher_acc = negative_accuracy > positive_accuracy
+        trade_decisions_higher_acc.append(should_trade_higher_acc)
+
+        # Policy 2: Minimum accuracy threshold (0.5)
+        should_trade_threshold = False
+        if embedding_pred == 1:
+            should_trade_threshold = positive_accuracy > negative_accuracy and positive_accuracy > 0.5
+        else:
+            should_trade_threshold = negative_accuracy > positive_accuracy and negative_accuracy > 0.5
+        trade_decisions_threshold.append(should_trade_threshold)
+
+        # Policy 3: Weighted accuracy comparison
+        should_trade_weighted = False
+        if embedding_pred == 1:
+            should_trade_weighted = weighted_positive_accuracy > weighted_negative_accuracy
+        else:
+            should_trade_weighted = weighted_negative_accuracy > weighted_positive_accuracy
+        trade_decisions_weighted.append(should_trade_weighted)
+
+        # Policy 4: Confidence gap
+        confidence_gap = 0.2
+        should_trade_confidence_gap = False
+        if embedding_pred == 1:
+            should_trade_confidence_gap = positive_accuracy > negative_accuracy + confidence_gap
+        else:
+            should_trade_confidence_gap = negative_accuracy > positive_accuracy + confidence_gap
+        trade_decisions_confidence_gap.append(should_trade_confidence_gap)
+
+        # Policy 5: Combined policy (must satisfy multiple criteria)
+        should_trade_combined = False
+        if embedding_pred == 1:
+            should_trade_combined = (
+                    positive_accuracy > negative_accuracy and
+                    positive_accuracy > 0.5 and
+                    positive_accuracy > negative_accuracy + 0.1 and
+                    positive_samples >= 5  # Minimum sample requirement
+            )
+        else:
+            should_trade_combined = (
+                    negative_accuracy > positive_accuracy and
+                    negative_accuracy > 0.5 and
+                    negative_accuracy > positive_accuracy + 0.1 and
+                    negative_samples >= 5  # Minimum sample requirement
+            )
+        trade_decisions_combined.append(should_trade_combined)
+
+        # Print results
+        print(f"Orig prediction: {orig_output_binary}, Embedding-based prediction: {pred}, True label: {true_label}")
+        print(f"Trade decisions (based on embedding model performance):")
+        print(f"  Higher acc policy: {'Trade' if should_trade_higher_acc else 'No Trade'}")
+        print(f"  Threshold policy: {'Trade' if should_trade_threshold else 'No Trade'}")
+        print(f"  Weighted policy: {'Trade' if should_trade_weighted else 'No Trade'}")
+        print(f"  Confidence gap policy: {'Trade' if should_trade_confidence_gap else 'No Trade'}")
+        print(f"  Combined policy: {'Trade' if should_trade_combined else 'No Trade'}")
 
         # Clear GPU cache if using CUDA
         if str(device).startswith('cuda'):
             torch.cuda.empty_cache()
 
-    # Calculate metrics
+    # Calculate metrics for the raw embedding model approach
     accuracy = accuracy_score(trues, embedding_preds)
 
-    # Create final results
+    # Convert result arrays to numpy arrays
     embedding_preds = np.array(embedding_preds)
     embedding_probs = np.array(embedding_probs)
     trues = np.array(trues)
+    original_preds = np.array(original_preds)
+    original_probs = np.array(original_probs)
 
-    print(f"\nEmbedding-based approach accuracy: {accuracy:.4f}")
-    print(f"Average similar samples accuracy: {np.mean(similar_sample_accuracies):.4f}")
+    # Convert trade decision arrays
+    trade_decisions_higher_acc = np.array(trade_decisions_higher_acc)
+    trade_decisions_threshold = np.array(trade_decisions_threshold)
+    trade_decisions_weighted = np.array(trade_decisions_weighted)
+    trade_decisions_confidence_gap = np.array(trade_decisions_confidence_gap)
+    trade_decisions_combined = np.array(trade_decisions_combined)
+
+    # Calculate metrics for each policy using embedding predictions for evaluation
+    def calculate_policy_metrics(trade_mask):
+        if np.sum(trade_mask) > 0:
+            # Only evaluate on samples where we would trade
+            traded_indices = np.where(trade_mask)[0]
+            accuracy = accuracy_score(trues[traded_indices], embedding_preds[traded_indices])
+            precision = precision_score(trues[traded_indices], embedding_preds[traded_indices], zero_division=0)
+            recall = recall_score(trues[traded_indices], embedding_preds[traded_indices], zero_division=0)
+            f1 = f1_score(trues[traded_indices], embedding_preds[traded_indices], zero_division=0)
+            return {
+                'accuracy': accuracy,
+                'precision': precision,
+                'recall': recall,
+                'f1': f1,
+                'traded_count': int(np.sum(trade_mask)),
+                'total_count': len(trues)
+            }
+        else:
+            return {
+                'accuracy': 0.0,
+                'precision': 0.0,
+                'recall': 0.0,
+                'f1': 0.0,
+                'traded_count': 0,
+                'total_count': len(trues)
+            }
+
+    # Calculate metrics for each policy
+    policy_metrics = {
+        'overall': {'accuracy': accuracy},
+        'original': calculate_policy_metrics(trade_decisions_higher_acc),
+        'threshold': calculate_policy_metrics(trade_decisions_threshold),
+        'weighted': calculate_policy_metrics(trade_decisions_weighted),
+        'confidence_gap': calculate_policy_metrics(trade_decisions_confidence_gap),
+        'combined': calculate_policy_metrics(trade_decisions_combined)
+    }
+
+    # Print summary of all policies
+    print(f"\nEnhanced embedding-based approach results:")
+    print(f"Total samples: {len(trues)}")
+    print(f"Embedding model accuracy: {accuracy:.4f}")
+    print(f"Average similar samples orig accuracy: {np.mean(similar_sample_orig_accuracies):.4f}")
     print(f"Average training accuracy: {np.mean(trained_model_accuracies):.4f}")
 
+    print("\nTrading policy comparison:")
+    print(f"{'Policy':<15} {'Trades':<8} {'Skipped':<8} {'Accuracy':<10} {'Precision':<10} {'Recall':<10} {'F1':<10}")
+    print("-" * 75)
+
+    for policy_name, metrics in policy_metrics.items():
+        if policy_name == 'overall':
+            continue
+        traded = metrics['traded_count']
+        skipped = metrics['total_count'] - traded
+        acc = metrics['accuracy']
+        prec = metrics['precision']
+        rec = metrics['recall']
+        f1_score_val = metrics['f1']
+        print(
+            f"{policy_name:<15} {traded:<8} {skipped:<8} {acc:<10.4f} {prec:<10.4f} {rec:<10.4f} {f1_score_val:<10.4f}")
+
+    # Return both the original embedding model results and the new multi-policy trading results
     return {
+        # Original return values for backward compatibility
         'preds': embedding_preds,
         'probs': embedding_probs,
         'trues': trues,
         'accuracy': accuracy,
-        'similar_samples_accuracy': np.mean(similar_sample_accuracies),
-        'training_accuracy': np.mean(trained_model_accuracies)
+        'similar_samples_accuracy': np.mean(similar_sample_orig_accuracies),
+        'training_accuracy': np.mean(trained_model_accuracies),
+
+        # New trading policy values
+        'original_preds': original_preds,
+        'original_probs': original_probs,
+        'trade_decisions_original': trade_decisions_higher_acc,
+        'trade_decisions_threshold': trade_decisions_threshold,
+        'trade_decisions_weighted': trade_decisions_weighted,
+        'trade_decisions_confidence_gap': trade_decisions_confidence_gap,
+        'trade_decisions_combined': trade_decisions_combined,
+        'confusion_matrices': confusion_matrices,
+        'policy_metrics': policy_metrics
     }
 
 def setup_experiment(args):
@@ -2618,6 +3209,7 @@ def main():
         if args.use_embedding_approach:
             print("\nApplying embedding-based approach...")
             # embedding_results = apply_embedding_based_approach(
+            #     args,
             #     model,
             #     train_data,
             #     val_data,
