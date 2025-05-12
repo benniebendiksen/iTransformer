@@ -46,7 +46,7 @@ python -u run.py \
   --d_model $d_model \
   --d_ff $d_model \
   --batch_size 32 \
-  --learning_rate 0.001 \
+  --learning_rate 0.0001 \
   --itr 5 \
   --train_epochs 50 \
   --patience 7 \
@@ -83,7 +83,7 @@ python -u run.py \
   --d_model $d_model \
   --d_ff $d_model \
   --batch_size 32 \
-  --learning_rate 0.001 \
+  --learning_rate 0.0001 \
   --itr 5 \
   --train_epochs 50 \
   --patience 7 \
