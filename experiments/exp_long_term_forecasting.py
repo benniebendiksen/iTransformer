@@ -178,10 +178,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             #     print("Early stopping")
             #     break
 
-            # adjust_learning_rate(model_optim, epoch + 1, self.args)
+            adjust_learning_rate(model_optim, epoch + 1, self.args, vali_loss, scheduler)
 
             early_stopping(vali_loss, self.model, path)
-            scheduler.step(vali_loss)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
