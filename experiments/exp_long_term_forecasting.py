@@ -96,6 +96,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
 
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            model_optim, mode='min', factor=0.5, patience=2, verbose=True
+        )
+
         if self.args.use_amp:
             scaler = torch.cuda.amp.GradScaler()
 
@@ -169,12 +173,18 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+            # early_stopping(vali_loss, self.model, path)
+            # if early_stopping.early_stop:
+            #     print("Early stopping")
+            #     break
+
+            # adjust_learning_rate(model_optim, epoch + 1, self.args)
+
             early_stopping(vali_loss, self.model, path)
+            scheduler.step(vali_loss)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
-
-            adjust_learning_rate(model_optim, epoch + 1, self.args)
 
             # get_cka(self.args, setting, self.model, train_loader, self.device, epoch)
 
