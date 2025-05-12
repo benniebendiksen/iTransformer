@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_Pred, Dataset_PEMS, Dataset_Solar, Dataset_Crypto
+from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_Pred, Dataset_PEMS, Dataset_Solar, Dataset_Crypto_2
 from torch.utils.data import DataLoader
 
 def custom_collate_fn(batch):
@@ -79,7 +79,7 @@ data_dict = {
     'custom': Dataset_Custom,
     'PEMS': Dataset_PEMS,
     'Solar': Dataset_Solar,
-    'logits': Dataset_Crypto,
+    'logits': Dataset_Crypto_2,
 }
 
 

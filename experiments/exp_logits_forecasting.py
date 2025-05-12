@@ -450,17 +450,341 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         return
 
+    # def calculate_returns(self, setting, test=0):
+    #     """
+    #     Calculates theoretical returns from trading signals and prints detailed results
+    #     for manual verification, including timestamps, price data, predictions, and returns.
+    #
+    #     This enhanced version calculates returns for multiple trading strategies:
+    #     - Long-only: Only take long positions when predicting price increase
+    #     - Short-only: Only take short positions when predicting price decrease
+    #     - Both: Take long positions for predicted increases and short positions for predicted decreases
+    #
+    #     Returns are calculated based on actual price changes, not placeholders.
+    #     """
+    #     test_data, test_loader = self._get_data(flag='test')
+    #     if test:
+    #         print('loading model')
+    #         self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+    #
+    #     # Load original dataset to get timestamps and prices
+    #     try:
+    #         print(f"Loading original data from {os.path.join(test_data.root_path, test_data.data_path)}")
+    #         original_df = pd.read_csv(os.path.join(test_data.root_path, test_data.data_path))
+    #
+    #         # Filter to test data
+    #         if 'split' in original_df.columns:
+    #             test_df = original_df[original_df['split'] == 'test'].reset_index(drop=True)
+    #             print(f"Found {len(test_df)} test samples in the dataset")
+    #         else:
+    #             # Fallback to default splitting
+    #             test_df = None
+    #
+    #         # Convert timestamp
+    #         if test_df is not None and 'date' in test_df.columns:
+    #             if pd.api.types.is_integer_dtype(test_df['date']):
+    #                 test_df['date'] = pd.to_datetime(test_df['date'], unit='s')
+    #     except Exception as e:
+    #         print(f"Error loading original CSV: {e}")
+    #         test_df = None
+    #
+    #     # Debug info about test_data
+    #     print("\n===== TEST DATA INSPECTION =====")
+    #     print(f"test_data type: {type(test_data)}")
+    #     print(f"Has 'active_indices': {hasattr(test_data, 'active_indices')}")
+    #     print(f"Has 'sequence_indices': {hasattr(test_data, 'sequence_indices')}")
+    #     if hasattr(test_data, 'sequence_indices'):
+    #         print(f"sequence_indices length: {len(test_data.sequence_indices)}")
+    #     if hasattr(test_data, 'active_indices'):
+    #         print(f"active_indices length: {len(test_data.active_indices)}")
+    #         print(f"First 5 active indices: {test_data.active_indices[:5]}")
+    #
+    #     # Add integrity check
+    #     if hasattr(test_data, 'verify_indices_integrity'):
+    #         print("\n===== VERIFYING TEST DATA INDICES INTEGRITY =====")
+    #         indices_valid = test_data.verify_indices_integrity()
+    #         print(f"Test data indices integrity: {'Valid' if indices_valid else 'COMPROMISED'}")
+    #
+    #     # Prepare for collecting predictions
+    #     all_preds = []
+    #     all_trues = []
+    #     all_probs = []
+    #     all_metadata = []
+    #
+    #     print("\n===== COLLECTING PREDICTIONS WITH SEQUENCE TRACKING =====")
+    #     self.model.eval()
+    #     with torch.no_grad():
+    #         # Process each sample separately to ensure correct indexing
+    #         for i in range(len(test_data)):
+    #             # Get a single sample
+    #             batch_x, batch_y, batch_x_mark, batch_y_mark = test_data[i]
+    #
+    #             # Add batch dimension
+    #             batch_x = torch.tensor(batch_x).unsqueeze(0).float().to(self.device)
+    #             batch_y = torch.tensor(batch_y).unsqueeze(0).float().to(self.device)
+    #             batch_x_mark = torch.tensor(batch_x_mark).unsqueeze(0).float().to(self.device)
+    #             batch_y_mark = torch.tensor(batch_y_mark).unsqueeze(0).float().to(self.device)
+    #
+    #             # Decoder input
+    #             dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+    #             dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+    #
+    #             # Make prediction
+    #             if self.args.output_attention:
+    #                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+    #             else:
+    #                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+    #
+    #             # Process outputs
+    #             outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+    #
+    #             # Get prediction
+    #             output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
+    #             output_binary = (output_prob > 0.5).astype(np.float32)
+    #             true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+    #
+    #             # Store results
+    #             all_preds.append(output_binary)
+    #             all_trues.append(true_label)
+    #             all_probs.append(output_prob)
+    #
+    #             # Store metadata if available
+    #             meta = None
+    #             if hasattr(test_data, 'sequence_indices') and i in test_data.sequence_indices:
+    #                 meta = test_data.sequence_indices[i]
+    #             all_metadata.append(meta)
+    #
+    #             # Debug output for first few samples
+    #             if i < 10:
+    #                 print(f"Sample {i}: Pred={output_binary:.1f}, True={true_label:.1f}, Prob={output_prob:.4f}")
+    #                 if meta:
+    #                     print(
+    #                         f"  Metadata: orig_idx={meta['orig_start_idx']}, pred_price={meta['pred_price']:.2f}, future_price={meta['future_price']:.2f}, label={meta['label']}")
+    #
+    #     # Convert to numpy arrays
+    #     all_preds = np.array(all_preds)
+    #     all_trues = np.array(all_trues)
+    #     all_probs = np.array(all_probs)
+    #
+    #     print(f"Collected {len(all_preds)} predictions from test set")
+    #
+    #     # # Show detailed label verification
+    #     # print("\nLabel Verification with Detailed Metadata:")
+    #     # print("-" * 140)
+    #     # print(
+    #     #     f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
+    #     # print("-" * 140)
+    #
+    #     # for i, meta in enumerate(all_metadata):
+    #     #     if i >= len(all_trues) or meta is None:
+    #     #         continue
+    #     #
+    #     #     orig_idx = meta['orig_start_idx']
+    #     #     pred_idx = meta['pred_idx']
+    #     #     pred_price = meta['pred_price']
+    #     #     future_price = meta['future_price']
+    #     #     price_change = meta['price_change']
+    #     #     stored_label = meta['label']
+    #     #     model_true = all_trues[i]
+    #     #     match = "✓" if abs(stored_label - model_true) < 0.01 else "✗"
+    #     #     timestamp = meta['timestamp']
+    #     #
+    #     #     print(
+    #     #         f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5} | {timestamp:<5}")
+    #
+    #     # Show summary statistics
+    #     matches = sum(
+    #         1 for i, meta in enumerate(all_metadata)
+    #         if meta is not None and i < len(all_trues) and
+    #         abs(meta['label'] - all_trues[i]) < 0.01)
+    #     total = len([meta for meta in all_metadata if meta is not None])
+    #     print(f"\nLabel Match Rate: {matches}/{total} ({matches / total * 100:.2f}%)")
+    #     # exit program if match rate is less than 100%
+    #     if matches / total < 1.0:
+    #         print(f"Label match rate is less than 100%. Exiting program: {matches / total}")
+    #         sys.exit(1)
+    #
+    #     # Extract actual price changes from metadata
+    #     actual_changes = []
+    #     timestamps = []
+    #     prices = []
+    #
+    #     for i, meta in enumerate(all_metadata):
+    #         if meta is not None:
+    #             # Extract actual price change as decimal (not percentage)
+    #             actual_changes.append(meta['price_change'] / 100.0)
+    #             # Extract timestamp if available from test_df
+    #             orig_idx = meta['orig_start_idx']
+    #             pred_idx = meta['pred_idx']
+    #             timestamps.append(meta['timestamp'])
+    #             prices.append(meta['pred_price'])
+    #         else:
+    #             actual_changes.append(0.0)
+    #             timestamps.append(f"sample_{i}")
+    #             prices.append(np.nan)
+    #
+    #     # Convert to numpy array
+    #     actual_changes = np.array(actual_changes)
+    #
+    #     # Calculate returns for different trading strategies
+    #     # 1. Long-only strategy (take long positions only when predicting price increases)
+    #     long_only_returns = np.zeros(len(all_preds))
+    #     for i in range(len(all_preds)):
+    #         if all_preds[i] == 1:  # Predicted price increase, take long position
+    #             long_only_returns[i] = actual_changes[i]  # Gain/lose based on actual price change
+    #
+    #     # 2. Short-only strategy (take short positions only when predicting price decreases)
+    #     short_only_returns = np.zeros(len(all_preds))
+    #     for i in range(len(all_preds)):
+    #         if all_preds[i] == 0:  # Predicted price decrease, take short position
+    #             short_only_returns[i] = -actual_changes[i]  # Gain when price falls, lose when price rises
+    #
+    #     # 3. Combined strategy (take long for predicted increases, short for predicted decreases)
+    #     combined_returns = np.zeros(len(all_preds))
+    #     for i in range(len(all_preds)):
+    #         if all_preds[i] == 1:  # Predicted price increase, take long position
+    #             combined_returns[i] = actual_changes[i]
+    #         else:  # Predicted price decrease, take short position
+    #             combined_returns[i] = -actual_changes[i]
+    #
+    #     # Calculate metrics for each strategy
+    #     strategy_names = ["Long-Only", "Short-Only", "Combined (Long+Short)"]
+    #     strategy_returns = [long_only_returns, short_only_returns, combined_returns]
+    #
+    #     # Helper function to calculate trading metrics
+    #     def calculate_trading_metrics(returns):
+    #         if len(returns) == 0:
+    #             return {
+    #                 'trades': 0,
+    #                 'profitable_trades': 0,
+    #                 'unprofitable_trades': 0,
+    #                 'win_rate': 0.0,
+    #                 'avg_return': 0.0,
+    #                 'cumulative_return': 0.0,
+    #                 'uncompounded_return': 0.0,
+    #                 'sharpe_ratio': 0.0,
+    #                 'max_drawdown': 0.0
+    #             }
+    #
+    #         # Calculate standard metrics
+    #         trades = np.sum(returns != 0)
+    #         profitable_trades = np.sum(returns > 0)
+    #         unprofitable_trades = np.sum(returns < 0)
+    #         win_rate = profitable_trades / trades if trades > 0 else 0.0
+    #         avg_return = np.mean(returns[returns != 0]) if trades > 0 else 0.0
+    #
+    #         # Calculate cumulative (compounded) returns
+    #         cumulative_returns = np.cumprod(1 + returns) - 1
+    #         final_cumulative_return = cumulative_returns[-1] if len(cumulative_returns) > 0 else 0.0
+    #
+    #         # Calculate uncompounded returns
+    #         uncompounded_return = np.sum(returns)
+    #
+    #         # Calculate Sharpe Ratio (annualized)
+    #         # Assumes returns are per-period (e.g., hourly or daily)
+    #         # For annualization, adjust based on your data frequency
+    #         ann_factor = 252  # Typical trading days in a year for daily data
+    #         if trades > 1:
+    #             returns_std = np.std(returns, ddof=1)
+    #             sharpe_ratio = (np.mean(returns) / (returns_std + 1e-10)) * np.sqrt(ann_factor)
+    #         else:
+    #             sharpe_ratio = 0.0
+    #
+    #         # Calculate Maximum Drawdown
+    #         if len(cumulative_returns) > 0:
+    #             peak = np.maximum.accumulate(cumulative_returns)
+    #             drawdown = peak - cumulative_returns
+    #             max_drawdown = np.max(drawdown) if len(drawdown) > 0 else 0.0
+    #         else:
+    #             max_drawdown = 0.0
+    #
+    #         return {
+    #             'trades': trades,
+    #             'profitable_trades': profitable_trades,
+    #             'unprofitable_trades': unprofitable_trades,
+    #             'win_rate': win_rate,
+    #             'avg_return': avg_return,
+    #             'cumulative_return': final_cumulative_return,
+    #             'uncompounded_return': uncompounded_return,
+    #             'sharpe_ratio': sharpe_ratio,
+    #             'max_drawdown': max_drawdown
+    #         }
+    #
+    #     # Calculate metrics for each strategy
+    #     strategy_metrics = [calculate_trading_metrics(returns) for returns in strategy_returns]
+    #
+    #     # Print results for each strategy
+    #     print("\n===== COMPARISONS =====")
+    #     for name, returns, metrics in zip(strategy_names, strategy_returns, strategy_metrics):
+    #         print(f"\n{name} Strategy Results:")
+    #         print("-" * 50)
+    #         print(f"Total predictions: {metrics['trades']}")
+    #         print(f"Successful prediction: {metrics['profitable_trades']}")
+    #         print(f"Unsuccessful predictions: {metrics['unprofitable_trades']}")
+    #         print(f"Success rate: {metrics['win_rate']:.2%}")
+    #         print(f"Average percent change per prediction: {metrics['avg_return']:.4%}")
+    #         print(f"Final cumulative percent change (compounded): {metrics['cumulative_return']:.4%}")
+    #         print(f"Final total percent change (uncompounded): {metrics['uncompounded_return']:.4%}")
+    #         print(f"Sharpe Ratio (annualized): {metrics['sharpe_ratio']:.4f}")
+    #         print(f"Maximum Drawdown: {metrics['max_drawdown']:.4%}")
+    #
+    #     # Print detailed trading results for the combined strategy
+    #     print("\nDetailed Analysis (Combined):")
+    #     print("-" * 120)
+    #     print(
+    #         f"{'Sample':<8} | {'Timestamp':<20} | {'Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Actual Chg':<10} | {'Percent Change':>8} | {'Cum Percent Change':>12}")
+    #     print("-" * 120)
+    #
+    #     # Calculate cumulative returns for display
+    #     cum_returns = np.cumprod(1 + combined_returns) - 1
+    #
+    #     for i in range(len(all_preds)):
+    #         # Format timestamp for display
+    #         if isinstance(timestamps[i], pd.Timestamp):
+    #             ts_str = str(timestamps[i])
+    #         else:
+    #             ts_str = str(timestamps[i])
+    #
+    #         print(
+    #             f"{i:<8} | {ts_str:<20} | {prices[i]:<12.2f} | {all_preds[i]:<5.0f} | "
+    #             f"{all_trues[i]:<5.0f} | {all_probs[i]:<8.4f} | {actual_changes[i] * 100:>10.2f}% | {combined_returns[i]:>8.4%} | {cum_returns[i]:>12.4%}")
+    #
+    #     print(f"all preds: {', '.join(str(int(p)) for p in all_preds)}")
+    #     print()
+    #     print(f"all trues: {', '.join(str(int(t)) for t in all_trues)}")
+    #
+    #     # Return the results for further analysis
+    #     return {
+    #         'predictions': all_preds,
+    #         'actual': all_trues,
+    #         'probabilities': all_probs,
+    #         'actual_changes': actual_changes,
+    #         'timestamps': timestamps,
+    #         'prices': prices,
+    #         'strategies': {
+    #             'long_only': {
+    #                 'returns': long_only_returns,
+    #                 'cumulative_returns': np.cumprod(1 + long_only_returns) - 1,
+    #                 'metrics': strategy_metrics[0]
+    #             },
+    #             'short_only': {
+    #                 'returns': short_only_returns,
+    #                 'cumulative_returns': np.cumprod(1 + short_only_returns) - 1,
+    #                 'metrics': strategy_metrics[1]
+    #             },
+    #             'combined': {
+    #                 'returns': combined_returns,
+    #                 'cumulative_returns': cum_returns,
+    #                 'metrics': strategy_metrics[2]
+    #             }
+    #         }
+    #     }
+
     def calculate_returns(self, setting, test=0):
         """
-        Calculates theoretical returns from trading signals and prints detailed results
-        for manual verification, including timestamps, price data, predictions, and returns.
-
-        This enhanced version calculates returns for multiple trading strategies:
-        - Long-only: Only take long positions when predicting price increase
-        - Short-only: Only take short positions when predicting price decrease
-        - Both: Take long positions for predicted increases and short positions for predicted decreases
-
-        Returns are calculated based on actual price changes, not placeholders.
+        Calculates theoretical returns from trading signals based on price predictions
+        and prints detailed results for manual verification, including timestamps,
+        price data, predictions, and returns.
         """
         test_data, test_loader = self._get_data(flag='test')
         if test:
@@ -491,27 +815,18 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         # Debug info about test_data
         print("\n===== TEST DATA INSPECTION =====")
         print(f"test_data type: {type(test_data)}")
-        print(f"Has 'active_indices': {hasattr(test_data, 'active_indices')}")
-        print(f"Has 'sequence_indices': {hasattr(test_data, 'sequence_indices')}")
-        if hasattr(test_data, 'sequence_indices'):
-            print(f"sequence_indices length: {len(test_data.sequence_indices)}")
         if hasattr(test_data, 'active_indices'):
             print(f"active_indices length: {len(test_data.active_indices)}")
             print(f"First 5 active indices: {test_data.active_indices[:5]}")
 
-        # Add integrity check
-        if hasattr(test_data, 'verify_indices_integrity'):
-            print("\n===== VERIFYING TEST DATA INDICES INTEGRITY =====")
-            indices_valid = test_data.verify_indices_integrity()
-            print(f"Test data indices integrity: {'Valid' if indices_valid else 'COMPROMISED'}")
-
         # Prepare for collecting predictions
         all_preds = []
         all_trues = []
-        all_probs = []
-        all_metadata = []
+        all_pred_prices = []
+        all_true_prices = []
+        all_timestamps = []
 
-        print("\n===== COLLECTING PREDICTIONS WITH SEQUENCE TRACKING =====")
+        print("\n===== COLLECTING PREDICTIONS =====")
         self.model.eval()
         with torch.no_grad():
             # Process each sample separately to ensure correct indexing
@@ -538,244 +853,181 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                 # Process outputs
                 outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
 
-                # Get prediction
-                output_prob = torch.sigmoid(outputs_last).detach().cpu().numpy()[0, 0]
-                output_binary = (output_prob > 0.5).astype(np.float32)
-                true_label = batch_y_last.detach().cpu().numpy()[0, 0]
+                # Get prediction and true value
+                pred = outputs_last.detach().cpu().numpy()[0, 0]
+                true = batch_y_last.detach().cpu().numpy()[0, 0]
 
                 # Store results
-                all_preds.append(output_binary)
-                all_trues.append(true_label)
-                all_probs.append(output_prob)
+                all_preds.append(pred)
+                all_trues.append(true)
 
-                # Store metadata if available
-                meta = None
-                if hasattr(test_data, 'sequence_indices') and i in test_data.sequence_indices:
-                    meta = test_data.sequence_indices[i]
-                all_metadata.append(meta)
+                # Get original prices if available
+                if hasattr(test_data, 'inverse_transform'):
+                    # Create full feature vector for inverse transform
+                    f_dim = -1 if self.args.features == 'MS' else 0
+                    last_x = batch_x[:, -1:, :].clone().detach().cpu().numpy()
 
-                # Debug output for first few samples
-                if i < 10:
-                    print(f"Sample {i}: Pred={output_binary:.1f}, True={true_label:.1f}, Prob={output_prob:.4f}")
-                    if meta:
-                        print(
-                            f"  Metadata: orig_idx={meta['orig_start_idx']}, pred_price={meta['pred_price']:.2f}, future_price={meta['future_price']:.2f}, label={meta['label']}")
+                    # Replace the target column with our predictions/ground truth
+                    target_idx = -1  # Update if target is not the last column
+
+                    # For predictions
+                    pred_x = last_x.copy()
+                    pred_x[:, :, target_idx] = pred
+                    pred_price = test_data.inverse_transform(pred_x)[0, 0, target_idx]
+
+                    # For ground truth
+                    true_x = last_x.copy()
+                    true_x[:, :, target_idx] = true
+                    true_price = test_data.inverse_transform(true_x)[0, 0, target_idx]
+
+                    all_pred_prices.append(pred_price)
+                    all_true_prices.append(true_price)
+                else:
+                    # If no inverse_transform, just use the scaled values
+                    all_pred_prices.append(pred)
+                    all_true_prices.append(true)
+
+                # Get timestamp if available
+                if test_df is not None and i < len(test_data.active_indices):
+                    orig_idx = test_data.active_indices[i]
+                    if orig_idx < len(test_df):
+                        timestamp = test_df.iloc[orig_idx]['date']
+                        all_timestamps.append(timestamp)
+                    else:
+                        all_timestamps.append(f"sample_{i}")
+                else:
+                    all_timestamps.append(f"sample_{i}")
 
         # Convert to numpy arrays
         all_preds = np.array(all_preds)
         all_trues = np.array(all_trues)
-        all_probs = np.array(all_probs)
+        all_pred_prices = np.array(all_pred_prices)
+        all_true_prices = np.array(all_true_prices)
 
         print(f"Collected {len(all_preds)} predictions from test set")
 
-        # # Show detailed label verification
-        # print("\nLabel Verification with Detailed Metadata:")
-        # print("-" * 140)
-        # print(
-        #     f"{'Sample':<8} | {'Orig Idx':<8} | {'Pred Idx':<8} | {'Pred Price':<12} | {'Future Price':<12} | {'Change':<10} | {'Stored Label':<12} | {'Model True':<10} | {'Match':<5}")
-        # print("-" * 140)
+        # Calculate price changes and returns
+        true_price_changes = np.diff(all_true_prices)
+        true_returns = true_price_changes / all_true_prices[:-1]
 
-        # for i, meta in enumerate(all_metadata):
-        #     if i >= len(all_trues) or meta is None:
-        #         continue
-        #
-        #     orig_idx = meta['orig_start_idx']
-        #     pred_idx = meta['pred_idx']
-        #     pred_price = meta['pred_price']
-        #     future_price = meta['future_price']
-        #     price_change = meta['price_change']
-        #     stored_label = meta['label']
-        #     model_true = all_trues[i]
-        #     match = "✓" if abs(stored_label - model_true) < 0.01 else "✗"
-        #     timestamp = meta['timestamp']
-        #
-        #     print(
-        #         f"{i:<8} | {orig_idx:<8} | {pred_idx:<8} | {pred_price:<12.2f} | {future_price:<12.2f} | {price_change:<10.2f}% | {stored_label:<12.1f} | {model_true:<10.1f} | {match:<5} | {timestamp:<5}")
+        # Generate trading signals based on predicted price direction
+        pred_price_changes = np.diff(all_pred_prices)
+        signals = np.sign(pred_price_changes)
 
-        # Show summary statistics
-        matches = sum(
-            1 for i, meta in enumerate(all_metadata)
-            if meta is not None and i < len(all_trues) and
-            abs(meta['label'] - all_trues[i]) < 0.01)
-        total = len([meta for meta in all_metadata if meta is not None])
-        print(f"\nLabel Match Rate: {matches}/{total} ({matches / total * 100:.2f}%)")
-        # exit program if match rate is less than 100%
-        if matches / total < 1.0:
-            print(f"Label match rate is less than 100%. Exiting program: {matches / total}")
-            sys.exit(1)
+        # Calculate different trading strategies
+        # 1. Long-only strategy
+        long_only_signals = np.maximum(signals, 0)  # Only take long positions
+        long_only_returns = long_only_signals * true_returns
 
-        # Extract actual price changes from metadata
-        actual_changes = []
-        timestamps = []
-        prices = []
+        # 2. Short-only strategy
+        short_only_signals = np.minimum(signals, 0) * -1  # Only take short positions and convert to positive value
+        short_only_returns = short_only_signals * -true_returns  # Negate returns since we profit when price falls
 
-        for i, meta in enumerate(all_metadata):
-            if meta is not None:
-                # Extract actual price change as decimal (not percentage)
-                actual_changes.append(meta['price_change'] / 100.0)
-                # Extract timestamp if available from test_df
-                orig_idx = meta['orig_start_idx']
-                pred_idx = meta['pred_idx']
-                timestamps.append(meta['timestamp'])
-                prices.append(meta['pred_price'])
-            else:
-                actual_changes.append(0.0)
-                timestamps.append(f"sample_{i}")
-                prices.append(np.nan)
+        # 3. Combined strategy
+        combined_returns = signals * true_returns
 
-        # Convert to numpy array
-        actual_changes = np.array(actual_changes)
-
-        # Calculate returns for different trading strategies
-        # 1. Long-only strategy (take long positions only when predicting price increases)
-        long_only_returns = np.zeros(len(all_preds))
-        for i in range(len(all_preds)):
-            if all_preds[i] == 1:  # Predicted price increase, take long position
-                long_only_returns[i] = actual_changes[i]  # Gain/lose based on actual price change
-
-        # 2. Short-only strategy (take short positions only when predicting price decreases)
-        short_only_returns = np.zeros(len(all_preds))
-        for i in range(len(all_preds)):
-            if all_preds[i] == 0:  # Predicted price decrease, take short position
-                short_only_returns[i] = -actual_changes[i]  # Gain when price falls, lose when price rises
-
-        # 3. Combined strategy (take long for predicted increases, short for predicted decreases)
-        combined_returns = np.zeros(len(all_preds))
-        for i in range(len(all_preds)):
-            if all_preds[i] == 1:  # Predicted price increase, take long position
-                combined_returns[i] = actual_changes[i]
-            else:  # Predicted price decrease, take short position
-                combined_returns[i] = -actual_changes[i]
+        # Calculate cumulative returns
+        long_only_cum_returns = np.cumprod(1 + long_only_returns) - 1
+        short_only_cum_returns = np.cumprod(1 + short_only_returns) - 1
+        combined_cum_returns = np.cumprod(1 + combined_returns) - 1
 
         # Calculate metrics for each strategy
         strategy_names = ["Long-Only", "Short-Only", "Combined (Long+Short)"]
+        strategy_signals = [long_only_signals, short_only_signals, signals]
         strategy_returns = [long_only_returns, short_only_returns, combined_returns]
+        strategy_cum_returns = [long_only_cum_returns, short_only_cum_returns, combined_cum_returns]
 
-        # Helper function to calculate trading metrics
-        def calculate_trading_metrics(returns):
-            if len(returns) == 0:
-                return {
-                    'trades': 0,
-                    'profitable_trades': 0,
-                    'unprofitable_trades': 0,
-                    'win_rate': 0.0,
-                    'avg_return': 0.0,
-                    'cumulative_return': 0.0,
-                    'uncompounded_return': 0.0,
-                    'sharpe_ratio': 0.0,
-                    'max_drawdown': 0.0
-                }
+        # Calculate detailed metrics for each strategy
+        for name, strategy_signal, strategy_return, cum_return in zip(strategy_names, strategy_signals,
+                                                                      strategy_returns, strategy_cum_returns):
+            # Count trades
+            trades = np.sum(strategy_signal != 0)
+            if trades == 0:
+                continue
 
-            # Calculate standard metrics
-            trades = np.sum(returns != 0)
-            profitable_trades = np.sum(returns > 0)
-            unprofitable_trades = np.sum(returns < 0)
-            win_rate = profitable_trades / trades if trades > 0 else 0.0
-            avg_return = np.mean(returns[returns != 0]) if trades > 0 else 0.0
+            # Calculate profitable trades
+            profitable_trades = np.sum((strategy_return > 0) & (strategy_signal != 0))
+            win_rate = profitable_trades / trades if trades > 0 else 0
 
-            # Calculate cumulative (compounded) returns
-            cumulative_returns = np.cumprod(1 + returns) - 1
-            final_cumulative_return = cumulative_returns[-1] if len(cumulative_returns) > 0 else 0.0
+            # Calculate average return per trade
+            avg_return = np.mean(strategy_return[strategy_signal != 0]) if trades > 0 else 0
 
-            # Calculate uncompounded returns
-            uncompounded_return = np.sum(returns)
-
-            # Calculate Sharpe Ratio (annualized)
-            # Assumes returns are per-period (e.g., hourly or daily)
-            # For annualization, adjust based on your data frequency
-            ann_factor = 252  # Typical trading days in a year for daily data
-            if trades > 1:
-                returns_std = np.std(returns, ddof=1)
-                sharpe_ratio = (np.mean(returns) / (returns_std + 1e-10)) * np.sqrt(ann_factor)
+            # Calculate Sharpe ratio (annualized)
+            ann_factor = 252  # Typical trading days in a year
+            if len(strategy_return) > 1:
+                sharpe_ratio = np.mean(strategy_return) / np.std(strategy_return) * np.sqrt(ann_factor)
             else:
-                sharpe_ratio = 0.0
+                sharpe_ratio = 0
 
             # Calculate Maximum Drawdown
-            if len(cumulative_returns) > 0:
-                peak = np.maximum.accumulate(cumulative_returns)
-                drawdown = peak - cumulative_returns
-                max_drawdown = np.max(drawdown) if len(drawdown) > 0 else 0.0
-            else:
-                max_drawdown = 0.0
+            peak = np.maximum.accumulate(1 + np.cumsum(strategy_return))
+            drawdown = (peak - (1 + np.cumsum(strategy_return))) / peak
+            max_drawdown = np.max(drawdown) if len(drawdown) > 0 else 0
 
-            return {
-                'trades': trades,
-                'profitable_trades': profitable_trades,
-                'unprofitable_trades': unprofitable_trades,
-                'win_rate': win_rate,
-                'avg_return': avg_return,
-                'cumulative_return': final_cumulative_return,
-                'uncompounded_return': uncompounded_return,
-                'sharpe_ratio': sharpe_ratio,
-                'max_drawdown': max_drawdown
-            }
-
-        # Calculate metrics for each strategy
-        strategy_metrics = [calculate_trading_metrics(returns) for returns in strategy_returns]
-
-        # Print results for each strategy
-        print("\n===== COMPARISONS =====")
-        for name, returns, metrics in zip(strategy_names, strategy_returns, strategy_metrics):
             print(f"\n{name} Strategy Results:")
             print("-" * 50)
-            print(f"Total predictions: {metrics['trades']}")
-            print(f"Successful prediction: {metrics['profitable_trades']}")
-            print(f"Unsuccessful predictions: {metrics['unprofitable_trades']}")
-            print(f"Success rate: {metrics['win_rate']:.2%}")
-            print(f"Average percent change per prediction: {metrics['avg_return']:.4%}")
-            print(f"Final cumulative percent change (compounded): {metrics['cumulative_return']:.4%}")
-            print(f"Final total percent change (uncompounded): {metrics['uncompounded_return']:.4%}")
-            print(f"Sharpe Ratio (annualized): {metrics['sharpe_ratio']:.4f}")
-            print(f"Maximum Drawdown: {metrics['max_drawdown']:.4%}")
+            print(f"Total trades: {trades}")
+            print(f"Profitable trades: {profitable_trades}")
+            print(f"Win rate: {win_rate:.2%}")
+            print(f"Average return per trade: {avg_return:.4%}")
+            print(f"Final cumulative return: {cum_return[-1]:.4%}")
+            print(f"Sharpe ratio: {sharpe_ratio:.4f}")
+            print(f"Maximum drawdown: {max_drawdown:.4%}")
 
         # Print detailed trading results for the combined strategy
         print("\nDetailed Analysis (Combined):")
         print("-" * 120)
         print(
-            f"{'Sample':<8} | {'Timestamp':<20} | {'Price':<12} | {'Pred':<5} | {'True':<5} | {'Prob':<8} | {'Actual Chg':<10} | {'Percent Change':>8} | {'Cum Percent Change':>12}")
+            f"{'Sample':<8} | {'Timestamp':<20} | {'True Price':<12} | {'Pred Price':<12} | {'Direction Match':<15} | {'Signal':<8} | {'Return':<8} | {'Cum Return':>12}")
         print("-" * 120)
 
-        # Calculate cumulative returns for display
-        cum_returns = np.cumprod(1 + combined_returns) - 1
+        direction_match_count = 0
 
-        for i in range(len(all_preds)):
+        for i in range(min(len(all_true_prices) - 1, 20)):  # Print first 20 samples
             # Format timestamp for display
-            if isinstance(timestamps[i], pd.Timestamp):
-                ts_str = str(timestamps[i])
+            if isinstance(all_timestamps[i], pd.Timestamp):
+                ts_str = str(all_timestamps[i])
             else:
-                ts_str = str(timestamps[i])
+                ts_str = str(all_timestamps[i])
+
+            # Calculate direction match
+            true_direction = np.sign(all_true_prices[i + 1] - all_true_prices[i])
+            pred_direction = np.sign(all_pred_prices[i + 1] - all_pred_prices[i])
+            direction_match = true_direction == pred_direction
+            if direction_match:
+                direction_match_count += 1
 
             print(
-                f"{i:<8} | {ts_str:<20} | {prices[i]:<12.2f} | {all_preds[i]:<5.0f} | "
-                f"{all_trues[i]:<5.0f} | {all_probs[i]:<8.4f} | {actual_changes[i] * 100:>10.2f}% | {combined_returns[i]:>8.4%} | {cum_returns[i]:>12.4%}")
+                f"{i:<8} | {ts_str:<20} | {all_true_prices[i]:<12.4f} | {all_pred_prices[i]:<12.4f} | "
+                f"{str(direction_match):<15} | {signals[i]:<8.0f} | {combined_returns[i]:>8.4%} | {combined_cum_returns[i]:>12.4%}"
+            )
 
-        print(f"all preds: {', '.join(str(int(p)) for p in all_preds)}")
-        print()
-        print(f"all trues: {', '.join(str(int(t)) for t in all_trues)}")
+        # Print direction accuracy
+        direction_accuracy = direction_match_count / (len(all_true_prices) - 1)
+        print(f"\nDirection prediction accuracy: {direction_accuracy:.2%}")
 
         # Return the results for further analysis
         return {
             'predictions': all_preds,
-            'actual': all_trues,
-            'probabilities': all_probs,
-            'actual_changes': actual_changes,
-            'timestamps': timestamps,
-            'prices': prices,
+            'true_values': all_trues,
+            'predicted_prices': all_pred_prices,
+            'true_prices': all_true_prices,
+            'timestamps': all_timestamps,
             'strategies': {
                 'long_only': {
+                    'signals': long_only_signals,
                     'returns': long_only_returns,
-                    'cumulative_returns': np.cumprod(1 + long_only_returns) - 1,
-                    'metrics': strategy_metrics[0]
+                    'cumulative_returns': long_only_cum_returns
                 },
                 'short_only': {
+                    'signals': short_only_signals,
                     'returns': short_only_returns,
-                    'cumulative_returns': np.cumprod(1 + short_only_returns) - 1,
-                    'metrics': strategy_metrics[1]
+                    'cumulative_returns': short_only_cum_returns
                 },
                 'combined': {
+                    'signals': signals,
                     'returns': combined_returns,
-                    'cumulative_returns': cum_returns,
-                    'metrics': strategy_metrics[2]
+                    'cumulative_returns': combined_cum_returns
                 }
             }
         }
@@ -838,20 +1090,38 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         )
         return criterion
 
+    # def _process_outputs(self, outputs, batch_y):
+    #     # Process outputs and targets for binary classification
+    #     f_dim = -1 if self.args.features == 'MS' else 0
+    #     # outputs shape: torch.Size([32, 1, 1])
+    #     # batch_y shape: torch.Size([32, 2, 1])
+    #     outputs = outputs[:, -self.args.pred_len:, f_dim:]
+    #     # batch_y shape: torch.Size([32, 1, 1])
+    #     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+    #
+    #     # For binary classification, we only care about the last timestep prediction
+    #     # outputs_last shape: torch.Size([32, 1])
+    #     outputs_last = outputs[:, -1, :]
+    #     # batch_y_last shape: torch.Size([32, 1]). Values of form [0.] or [1.]
+    #     batch_y_last = batch_y[:, -1, :]
+    #
+    #     return outputs_last, batch_y_last, outputs, batch_y
+
     def _process_outputs(self, outputs, batch_y):
-        # Process outputs and targets for binary classification
+        """Process outputs and targets for regression"""
         f_dim = -1 if self.args.features == 'MS' else 0
-        # outputs shape: torch.Size([32, 1, 1])
-        # batch_y shape: torch.Size([32, 2, 1])
+
+        # Get the predicted values for the specified horizon
         outputs = outputs[:, -self.args.pred_len:, f_dim:]
-        # batch_y shape: torch.Size([32, 1, 1])
         batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
-        # For binary classification, we only care about the last timestep prediction
-        # outputs_last shape: torch.Size([32, 1])
-        outputs_last = outputs[:, -1, :]
-        # batch_y_last shape: torch.Size([32, 1]). Values of form [0.] or [1.]
-        batch_y_last = batch_y[:, -1, :]
+        # For regression, we care about the target column prediction
+        # Get the target column index (assuming it's the last column in MS mode)
+        target_idx = -1  # Could be modified if target_column_index is available
+
+        # Get the last timestep prediction for the target column
+        outputs_last = outputs[:, -1, target_idx:target_idx + 1]
+        batch_y_last = batch_y[:, -1, target_idx:target_idx + 1]
 
         return outputs_last, batch_y_last, outputs, batch_y
 
@@ -867,37 +1137,64 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             accuracy = correct / total
         return accuracy.item()
 
+    # def _calculate_metrics(self, outputs, targets):
+    #     """Calculate multiple metrics for binary predictions"""
+    #     with torch.no_grad():
+    #         # Convert to binary predictions
+    #         predictions = (outputs > 0).float()
+    #         # Calculate metrics
+    #         correct = (predictions == targets).float().sum()
+    #         total = targets.size(0)
+    #
+    #         # Convert to numpy for sklearn metrics
+    #         pred_np = predictions.cpu().numpy()
+    #         target_np = targets.cpu().numpy()
+    #
+    #         # Calculate basic metrics
+    #         accuracy = correct / total
+    #
+    #         # Handle case where all predictions are one class
+    #         if len(np.unique(pred_np)) == 1 or len(np.unique(target_np)) == 1:
+    #             precision = 0.0 if np.sum(pred_np) > 0 else 1.0
+    #             recall = 0.0 if np.sum(target_np) > 0 else 1.0
+    #             f1 = 0.0
+    #         else:
+    #             precision = precision_score(target_np, pred_np)
+    #             recall = recall_score(target_np, pred_np)
+    #             f1 = f1_score(target_np, pred_np)
+    #
+    #     return {
+    #         'accuracy': accuracy.item(),
+    #         'precision': precision,
+    #         'recall': recall,
+    #         'f1': f1
+    #     }
+
     def _calculate_metrics(self, outputs, targets):
-        """Calculate multiple metrics for binary predictions"""
+        """Calculate metrics for regression predictions"""
         with torch.no_grad():
-            # Convert to binary predictions
-            predictions = (outputs > 0).float()
-            # Calculate metrics
-            correct = (predictions == targets).float().sum()
-            total = targets.size(0)
+            # Calculate MSE
+            mse = torch.mean((outputs - targets) ** 2)
 
-            # Convert to numpy for sklearn metrics
-            pred_np = predictions.cpu().numpy()
-            target_np = targets.cpu().numpy()
+            # Calculate MAE
+            mae = torch.mean(torch.abs(outputs - targets))
 
-            # Calculate basic metrics
-            accuracy = correct / total
+            # Calculate RMSE
+            rmse = torch.sqrt(mse)
 
-            # Handle case where all predictions are one class
-            if len(np.unique(pred_np)) == 1 or len(np.unique(target_np)) == 1:
-                precision = 0.0 if np.sum(pred_np) > 0 else 1.0
-                recall = 0.0 if np.sum(target_np) > 0 else 1.0
-                f1 = 0.0
-            else:
-                precision = precision_score(target_np, pred_np)
-                recall = recall_score(target_np, pred_np)
-                f1 = f1_score(target_np, pred_np)
+            # Calculate direction accuracy
+            # For price prediction, we're often interested in directional accuracy
+            # This checks if the predicted direction of change matches the true direction
+            pred_direction = torch.sign(outputs - targets.roll(1, dims=0))
+            true_direction = torch.sign(targets - targets.roll(1, dims=0))
+            direction_match = (pred_direction == true_direction).float()
+            direction_accuracy = torch.mean(direction_match)
 
         return {
-            'accuracy': accuracy.item(),
-            'precision': precision,
-            'recall': recall,
-            'f1': f1
+            'mse': mse.item(),
+            'mae': mae.item(),
+            'rmse': rmse.item(),
+            'direction_accuracy': direction_accuracy.item()
         }
 
     def vali(self, vali_data, vali_loader, criterion):
@@ -982,7 +1279,7 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
                 # Skip empty batches
                 if batch_x.size(0) == 0:
                     continue
@@ -1099,32 +1396,221 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         return self.model
 
+    # def test(self, setting, test=0):
+    #     test_data, test_loader = self._get_data(flag='test')
+    #
+    #     # Directly check the raw label values in test_data
+    #     #TODO HANDLE COMMENTED OUt PRNT STMTS
+    #     # print("\n==== DIRECT LABEL CHECK ====")
+    #     for i in range(min(20, len(test_data))):
+    #         sample_idx = i
+    #         orig_idx = test_data.active_indices[i] if hasattr(test_data, 'active_indices') else None
+    #         pred_idx = orig_idx + test_data.seq_len if orig_idx is not None else None
+    #         raw_label = test_data.data_y[i][0] if i < len(test_data.data_y) else None
+    #
+    #         expected_label = None
+    #         if orig_idx is not None and pred_idx is not None:
+    #             # Calculate expected label from raw data
+    #             try:
+    #                 original_df = pd.read_csv(os.path.join(test_data.root_path, test_data.data_path))
+    #                 pred_price = original_df.iloc[pred_idx][test_data.target]
+    #                 future_price = original_df.iloc[pred_idx + test_data.pred_len][test_data.target]
+    #                 expected_label = 1.0 if future_price > pred_price else 0.0
+    #             except Exception as e:
+    #                 expected_label = f"Error: {e}"
+    #
+    #         # print(
+    #         #     f"Sample {i}: orig_idx={orig_idx}, pred_idx={pred_idx}, raw_label={raw_label}, expected={expected_label}")
+    #
+    #
+    #     if test:
+    #         print('loading model')
+    #         self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+    #
+    #     preds = []
+    #     trues = []
+    #     probs = []  # Store probabilities for ROC curve
+    #
+    #     folder_path = './test_results/' + setting + '/'
+    #     if not os.path.exists(folder_path):
+    #         os.makedirs(folder_path)
+    #
+    #     self.model.eval()
+    #     with torch.no_grad():
+    #         for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+    #             batch_x = batch_x.float().to(self.device)
+    #             batch_y = batch_y.float().to(self.device)
+    #             batch_x_mark = batch_x_mark.float().to(self.device)
+    #             batch_y_mark = batch_y_mark.float().to(self.device)
+    #
+    #             # decoder input
+    #             dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+    #             dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+    #
+    #             # encoder - decoder
+    #             if self.args.use_amp:
+    #                 with torch.cuda.amp.autocast():
+    #                     if self.args.output_attention:
+    #                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+    #                     else:
+    #                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+    #             else:
+    #                 if self.args.output_attention:
+    #                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+    #                 else:
+    #                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+    #
+    #             # Process outputs for binary classification - get only the final prediction
+    #             outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
+    #
+    #             # Convert logits to probabilities with sigmoid
+    #             output_probs = torch.sigmoid(outputs_last).detach().cpu().numpy()
+    #
+    #             # Get binary predictions (threshold at 0.5)
+    #             output_binary = (output_probs > 0.5).astype(np.float32)
+    #
+    #             # Get true labels
+    #             true_labels = batch_y_last.detach().cpu().numpy()
+    #
+    #             preds.append(output_binary)
+    #             probs.append(output_probs)
+    #             trues.append(true_labels)
+    #
+    #     # Concatenate all batches
+    #     preds = np.concatenate(preds, axis=0)
+    #     probs = np.concatenate(probs, axis=0)
+    #     trues = np.concatenate(trues, axis=0)
+    #
+    #     # Create and visualize confusion matrix
+    #     from sklearn.metrics import confusion_matrix
+    #     import matplotlib.pyplot as plt
+    #     import seaborn as sns
+    #
+    #     cm = confusion_matrix(trues, preds)
+    #     plt.figure(figsize=(10, 8))
+    #     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+    #                 xticklabels=['Predicted Down', 'Predicted Up'],
+    #                 yticklabels=['Actual Down', 'Actual Up'])
+    #     plt.ylabel('Actual')
+    #     plt.xlabel('Predicted')
+    #     plt.title('Confusion Matrix - ' + ('Shorting Enabled' if self.is_shorting else 'No Shorting (Long Only)'))
+    #     plt.savefig(folder_path + 'confusion_matrix.png')
+    #     plt.close()
+    #
+    #     # Extract confusion matrix components
+    #     TN, FP = cm[0, 0], cm[0, 1]  # True Negative, False Positive
+    #     FN, TP = cm[1, 0], cm[1, 1]  # False Negative, True Positive
+    #
+    #     # Calculate trading metrics based on confusion matrix
+    #     if self.is_shorting:
+    #         profitable_trades = TP + TN
+    #         unprofitable_trades = FP + FN
+    #     else:
+    #         profitable_trades = TP
+    #         unprofitable_trades = FP
+    #         # TN and FN are ignored in no-shorting strategy as we don't trade on these signals
+    #
+    #     # Print detailed confusion matrix breakdown
+    #     print('\nConfusion Matrix Breakdown:')
+    #     print(f'  True Positives: {TP}')
+    #     print(f'  True Negatives: {TN}')
+    #     print(f'  False Positives: {FP}')
+    #     print(f'  False Negatives: {FN}')
+    #     print(f'  Total Predictions: {TP + TN + FP + FN}')
+    #
+    #     # Calculate domain specific performance metrics
+    #     if self.is_shorting:
+    #         # For shorting strategy: we profit from both correct predictions
+    #         correct_positives = np.logical_and(preds == 1, trues == 1)
+    #         correct_negatives = np.logical_and(preds == 0, trues == 0)
+    #
+    #         incorrect_positives = np.logical_and(preds == 1, trues == 0)
+    #         incorrect_negatives = np.logical_and(preds == 0, trues == 1)
+    #
+    #         # Profit comes from correct predictions in both directions
+    #         profitable_trades = correct_positives.sum() + correct_negatives.sum()
+    #         unprofitable_trades = incorrect_positives.sum() + incorrect_negatives.sum()
+    #     else:
+    #         # For no-shorting strategy: we only profit from correct positive predictions
+    #         # and avoid losses from incorrect negative predictions
+    #         profitable_trades = np.logical_and(preds == 1, trues == 1).sum()
+    #         # We lose on false positives but not on true negatives or false negatives
+    #         unprofitable_trades = np.logical_and(preds == 1, trues == 0).sum()
+
+        # # Calculate win rate and profit metrics
+        # total_trades = profitable_trades + unprofitable_trades
+        # win_rate = profitable_trades / total_trades if total_trades > 0 else 0
+        # profit_factor = profitable_trades / unprofitable_trades if unprofitable_trades > 0 else float('inf')
+        #
+        # # Calculate standard classification metrics
+        # accuracy = accuracy_score(trues, preds)
+        # precision = precision_score(trues, preds, zero_division=0)
+        # recall = recall_score(trues, preds, zero_division=0)
+        # f1 = f1_score(trues, preds, zero_division=0)
+        #
+        # # Print detailed performance metrics
+        # print('\nTest metrics:')
+        # print('Classification Performance:')
+        # print('  Accuracy: {:.2f}%, Precision: {:.2f}%, Recall: {:.2f}%, F1: {:.2f}%'.format(
+        #     accuracy * 100, precision * 100, recall * 100, f1 * 100))
+        #
+        # print('\nPerformance Results:')
+        # print('  Strategy: {}'.format('Short enabled' if self.is_shorting else 'No shorting (holding only)'))
+        # print('  Successful Predictions: {}, Unsuccessful Predictions: {}, Total Predictions: {}'.format(
+        #     profitable_trades, unprofitable_trades, total_trades))
+        # print('  Accuracy: {:.2f}%'.format(win_rate * 100))
+        # print('  P Factor: {:.2f}'.format(profit_factor))
+        #
+        # # Save results
+        # folder_path = './results/' + setting + '/'
+        # if not os.path.exists(folder_path):
+        #     os.makedirs(folder_path)
+        #
+        # # Save all metrics in a structured format
+        # metrics = {
+        #     'classification': {
+        #         'accuracy': accuracy,
+        #         'precision': precision,
+        #         'recall': recall,
+        #         'f1': f1
+        #     },
+        #     'trading': {
+        #         'win_rate': win_rate,
+        #         'profit_factor': profit_factor,
+        #         'profitable_trades': profitable_trades,
+        #         'unprofitable_trades': unprofitable_trades,
+        #         'total_trades': total_trades,
+        #         'is_shorting': self.is_shorting
+        #     }
+        # }
+        #
+        # np.save(folder_path + 'metrics.npy', metrics)
+        # np.save(folder_path + 'pred.npy', preds)
+        # np.save(folder_path + 'prob.npy', probs)
+        # np.save(folder_path + 'true.npy', trues)
+        #
+        # # Write results to file
+        # # f = open("result_logits_forecast.txt", 'a')
+        # # f.write(setting + "  \n")
+        # # f.write(
+        # #     'Trading Strategy: {}\n'.format('Shorting enabled' if self.is_shorting else 'No shorting (holding only)'))
+        # # f.write('Classification - Accuracy: {:.2f}%, Precision: {:.2f}%, Recall: {:.2f}%, F1: {:.2f}%\n'.format(
+        # #     accuracy * 100, precision * 100, recall * 100, f1 * 100))
+        # # f.write('Trading - Win Rate: {:.2f}%, Profit Factor: {:.2f}\n'.format(win_rate * 100, profit_factor))
+        # # f.write('\n\n')
+        # # f.close()
+        #
+        # print("\nPerforming recency effect analysis...")
+        # self.analyze_recency_effect(setting, test=test)
+        #
+        # print("\nAnalyzing performance...")
+        # self.calculate_returns(setting, test=test)
+        #
+        # return
+
     def test(self, setting, test=0):
+        """Test the model and calculate performance metrics for regression"""
         test_data, test_loader = self._get_data(flag='test')
-
-        # Directly check the raw label values in test_data
-        #TODO HANDLE COMMENTED OUt PRNT STMTS
-        # print("\n==== DIRECT LABEL CHECK ====")
-        for i in range(min(20, len(test_data))):
-            sample_idx = i
-            orig_idx = test_data.active_indices[i] if hasattr(test_data, 'active_indices') else None
-            pred_idx = orig_idx + test_data.seq_len if orig_idx is not None else None
-            raw_label = test_data.data_y[i][0] if i < len(test_data.data_y) else None
-
-            expected_label = None
-            if orig_idx is not None and pred_idx is not None:
-                # Calculate expected label from raw data
-                try:
-                    original_df = pd.read_csv(os.path.join(test_data.root_path, test_data.data_path))
-                    pred_price = original_df.iloc[pred_idx][test_data.target]
-                    future_price = original_df.iloc[pred_idx + test_data.pred_len][test_data.target]
-                    expected_label = 1.0 if future_price > pred_price else 0.0
-                except Exception as e:
-                    expected_label = f"Error: {e}"
-
-            # print(
-            #     f"Sample {i}: orig_idx={orig_idx}, pred_idx={pred_idx}, raw_label={raw_label}, expected={expected_label}")
-
 
         if test:
             print('loading model')
@@ -1132,7 +1618,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
         preds = []
         trues = []
-        probs = []  # Store probabilities for ROC curve
+        pred_prices = []
+        true_prices = []
 
         folder_path = './test_results/' + setting + '/'
         if not os.path.exists(folder_path):
@@ -1163,150 +1650,161 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
                     else:
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                # Process outputs for binary classification - get only the final prediction
+                # Process outputs for regression
                 outputs_last, batch_y_last, _, _ = self._process_outputs(outputs, batch_y)
 
-                # Convert logits to probabilities with sigmoid
-                output_probs = torch.sigmoid(outputs_last).detach().cpu().numpy()
+                # Store raw predictions and true values for later processing
+                pred = outputs_last.detach().cpu().numpy()
+                true = batch_y_last.detach().cpu().numpy()
 
-                # Get binary predictions (threshold at 0.5)
-                output_binary = (output_probs > 0.5).astype(np.float32)
+                preds.append(pred)
+                trues.append(true)
 
-                # Get true labels
-                true_labels = batch_y_last.detach().cpu().numpy()
+                # If the test dataset has inverse_transform method, use it to get the original scale prices
+                if hasattr(test_data, 'inverse_transform'):
+                    # Create full feature vector for inverse transform
+                    # We need to create a dummy full feature vector to feed into inverse_transform
+                    # assuming the target is the last column in MS mode
+                    f_dim = -1 if self.args.features == 'MS' else 0
+                    last_x_pred = batch_x[:, -1:, :].clone().detach().cpu().numpy()
+                    last_x_true = batch_x[:, -1:, :].clone().detach().cpu().numpy()
 
-                preds.append(output_binary)
-                probs.append(output_probs)
-                trues.append(true_labels)
+                    # Replace the target column with our predictions/ground truth
+                    target_idx = -1  # Update this if target column is not the last one
+
+                    # For predictions
+                    pred_x = last_x_pred.copy()
+                    pred_x[:, :, target_idx] = pred  # Copy predicted values to the target column
+                    pred_prices_batch = test_data.inverse_transform(pred_x)[:, :, target_idx]
+
+                    # For ground truth
+                    true_x = last_x_true.copy()
+                    true_x[:, :, target_idx] = true  # Copy true values to the target column
+                    true_prices_batch = test_data.inverse_transform(true_x)[:, :, target_idx]
+
+                    pred_prices.append(pred_prices_batch)
+                    true_prices.append(true_prices_batch)
+                else:
+                    # If no inverse_transform, just use the scaled values
+                    pred_prices.append(pred)
+                    true_prices.append(true)
 
         # Concatenate all batches
         preds = np.concatenate(preds, axis=0)
-        probs = np.concatenate(probs, axis=0)
         trues = np.concatenate(trues, axis=0)
+        pred_prices = np.concatenate(pred_prices, axis=0)
+        true_prices = np.concatenate(true_prices, axis=0)
 
-        # Create and visualize confusion matrix
-        from sklearn.metrics import confusion_matrix
-        import matplotlib.pyplot as plt
-        import seaborn as sns
+        # Calculate regression metrics
+        from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+        mse = mean_squared_error(trues, preds)
+        rmse = np.sqrt(mse)
+        mae = mean_absolute_error(trues, preds)
+        r2 = r2_score(trues, preds)
 
-        cm = confusion_matrix(trues, preds)
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                    xticklabels=['Predicted Down', 'Predicted Up'],
-                    yticklabels=['Actual Down', 'Actual Up'])
-        plt.ylabel('Actual')
-        plt.xlabel('Predicted')
-        plt.title('Confusion Matrix - ' + ('Shorting Enabled' if self.is_shorting else 'No Shorting (Long Only)'))
-        plt.savefig(folder_path + 'confusion_matrix.png')
-        plt.close()
+        # Calculate directional accuracy (price movement prediction)
+        true_directions = np.sign(np.diff(true_prices.flatten()))
+        pred_directions = np.sign(np.diff(pred_prices.flatten()))
+        directional_accuracy = np.mean(true_directions == pred_directions)
 
-        # Extract confusion matrix components
-        TN, FP = cm[0, 0], cm[0, 1]  # True Negative, False Positive
-        FN, TP = cm[1, 0], cm[1, 1]  # False Negative, True Positive
+        # Calculate trading metrics - integrated directly
+        # Calculate price changes and returns
+        true_price_changes = np.diff(true_prices.flatten())
+        true_returns = true_price_changes / true_prices[:-1].flatten()
 
-        # Calculate trading metrics based on confusion matrix
-        if self.is_shorting:
-            profitable_trades = TP + TN
-            unprofitable_trades = FP + FN
-        else:
-            profitable_trades = TP
-            unprofitable_trades = FP
-            # TN and FN are ignored in no-shorting strategy as we don't trade on these signals
+        # Generate trading signals based on predicted price movements
+        signals = np.sign(np.diff(pred_prices.flatten()))
 
-        # Print detailed confusion matrix breakdown
-        print('\nConfusion Matrix Breakdown:')
-        print(f'  True Positives: {TP}')
-        print(f'  True Negatives: {TN}')
-        print(f'  False Positives: {FP}')
-        print(f'  False Negatives: {FN}')
-        print(f'  Total Predictions: {TP + TN + FP + FN}')
+        # Calculate strategy returns
+        strategy_returns = signals * true_returns
 
-        # Calculate domain specific performance metrics
-        if self.is_shorting:
-            # For shorting strategy: we profit from both correct predictions
-            correct_positives = np.logical_and(preds == 1, trues == 1)
-            correct_negatives = np.logical_and(preds == 0, trues == 0)
-
-            incorrect_positives = np.logical_and(preds == 1, trues == 0)
-            incorrect_negatives = np.logical_and(preds == 0, trues == 1)
-
-            # Profit comes from correct predictions in both directions
-            profitable_trades = correct_positives.sum() + correct_negatives.sum()
-            unprofitable_trades = incorrect_positives.sum() + incorrect_negatives.sum()
-        else:
-            # For no-shorting strategy: we only profit from correct positive predictions
-            # and avoid losses from incorrect negative predictions
-            profitable_trades = np.logical_and(preds == 1, trues == 1).sum()
-            # We lose on false positives but not on true negatives or false negatives
-            unprofitable_trades = np.logical_and(preds == 1, trues == 0).sum()
-
-        # Calculate win rate and profit metrics
-        total_trades = profitable_trades + unprofitable_trades
+        # Calculate performance metrics
+        total_trades = np.sum(signals != 0)
+        profitable_trades = np.sum((strategy_returns > 0) & (signals != 0))
         win_rate = profitable_trades / total_trades if total_trades > 0 else 0
-        profit_factor = profitable_trades / unprofitable_trades if unprofitable_trades > 0 else float('inf')
 
-        # Calculate standard classification metrics
-        accuracy = accuracy_score(trues, preds)
-        precision = precision_score(trues, preds, zero_division=0)
-        recall = recall_score(trues, preds, zero_division=0)
-        f1 = f1_score(trues, preds, zero_division=0)
+        # Calculate cumulative returns
+        cumulative_return = np.prod(1 + strategy_returns) - 1
 
-        # Print detailed performance metrics
+        # Calculate Sharpe ratio (annualized)
+        ann_factor = 252  # Typical trading days in a year
+        if len(strategy_returns) > 1:
+            mean_return = np.mean(strategy_returns)
+            std_return = np.std(strategy_returns)
+            sharpe_ratio = mean_return / std_return * np.sqrt(ann_factor) if std_return > 0 else 0
+        else:
+            sharpe_ratio = 0
+
+        # Calculate Maximum Drawdown
+        cum_returns = np.cumprod(1 + strategy_returns)
+        peak = np.maximum.accumulate(cum_returns)
+        drawdown = (peak - cum_returns) / peak
+        max_drawdown = np.max(drawdown) if len(drawdown) > 0 else 0
+
+        # Print results
         print('\nTest metrics:')
-        print('Classification Performance:')
-        print('  Accuracy: {:.2f}%, Precision: {:.2f}%, Recall: {:.2f}%, F1: {:.2f}%'.format(
-            accuracy * 100, precision * 100, recall * 100, f1 * 100))
+        print('Regression Performance:')
+        print(f'  MSE: {mse:.6f}, RMSE: {rmse:.6f}, MAE: {mae:.6f}, R²: {r2:.6f}')
+        print(f'  Directional Accuracy: {directional_accuracy:.2%}')
 
-        print('\nPerformance Results:')
-        print('  Strategy: {}'.format('Short enabled' if self.is_shorting else 'No shorting (holding only)'))
-        print('  Successful Predictions: {}, Unsuccessful Predictions: {}, Total Predictions: {}'.format(
-            profitable_trades, unprofitable_trades, total_trades))
-        print('  Accuracy: {:.2f}%'.format(win_rate * 100))
-        print('  P Factor: {:.2f}'.format(profit_factor))
+        print('\nTrading Performance:')
+        print(f'  Win Rate: {win_rate:.2%}')
+        print(f'  Total Trades: {total_trades}')
+        print(f'  Profitable Trades: {profitable_trades}')
+        print(f'  Cumulative Return: {cumulative_return:.2%}')
+        print(f'  Sharpe Ratio: {sharpe_ratio:.2f}')
+        print(f'  Maximum Drawdown: {max_drawdown:.2%}')
+
+        # Create a plot of predicted vs actual prices
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(12, 6))
+        plt.plot(true_prices.flatten(), label='Actual Price')
+        plt.plot(pred_prices.flatten(), label='Predicted Price')
+        plt.legend()
+        plt.title('Predicted vs Actual Prices')
+        plt.savefig(folder_path + 'price_comparison.png')
+        plt.close()
 
         # Save results
         folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
-        # Save all metrics in a structured format
+        # Save metrics
         metrics = {
-            'classification': {
-                'accuracy': accuracy,
-                'precision': precision,
-                'recall': recall,
-                'f1': f1
+            'regression': {
+                'mse': mse,
+                'rmse': rmse,
+                'mae': mae,
+                'r2': r2,
+                'directional_accuracy': directional_accuracy
             },
             'trading': {
                 'win_rate': win_rate,
-                'profit_factor': profit_factor,
-                'profitable_trades': profitable_trades,
-                'unprofitable_trades': unprofitable_trades,
                 'total_trades': total_trades,
-                'is_shorting': self.is_shorting
+                'profitable_trades': profitable_trades,
+                'cumulative_return': cumulative_return,
+                'sharpe_ratio': sharpe_ratio,
+                'max_drawdown': max_drawdown
             }
         }
 
         np.save(folder_path + 'metrics.npy', metrics)
         np.save(folder_path + 'pred.npy', preds)
-        np.save(folder_path + 'prob.npy', probs)
         np.save(folder_path + 'true.npy', trues)
+        np.save(folder_path + 'pred_prices.npy', pred_prices)
+        np.save(folder_path + 'true_prices.npy', true_prices)
 
         # Write results to file
-        # f = open("result_logits_forecast.txt", 'a')
-        # f.write(setting + "  \n")
-        # f.write(
-        #     'Trading Strategy: {}\n'.format('Shorting enabled' if self.is_shorting else 'No shorting (holding only)'))
-        # f.write('Classification - Accuracy: {:.2f}%, Precision: {:.2f}%, Recall: {:.2f}%, F1: {:.2f}%\n'.format(
-        #     accuracy * 100, precision * 100, recall * 100, f1 * 100))
-        # f.write('Trading - Win Rate: {:.2f}%, Profit Factor: {:.2f}\n'.format(win_rate * 100, profit_factor))
-        # f.write('\n\n')
-        # f.close()
+        f = open("result_regression_forecast.txt", 'a')
+        f.write(setting + "  \n")
+        f.write(f'MSE: {mse:.6f}, RMSE: {rmse:.6f}, MAE: {mae:.6f}, R²: {r2:.6f}\n')
+        f.write(f'Directional Accuracy: {directional_accuracy:.2%}\n')
+        f.write(f'Win Rate: {win_rate:.2%}, Cumulative Return: {cumulative_return:.2%}\n')
+        f.write('\n\n')
+        f.close()
 
-        print("\nPerforming recency effect analysis...")
-        self.analyze_recency_effect(setting, test=test)
-
-        print("\nAnalyzing performance...")
+        print("\nAnalyzing trading performance...")
         self.calculate_returns(setting, test=test)
 
         return

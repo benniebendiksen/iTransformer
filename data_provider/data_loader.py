@@ -688,6 +688,283 @@ class Dataset_Crypto(Dataset):
         print(f"  - Effective samples: {effective_samples}")
 
 
+class Dataset_Crypto_2(Dataset):
+    def __init__(self, root_path, flag='train', size=None,
+                 features='MS', data_path='btcusdc_pca_components_44_proper_split.csv',
+                 target='close', scale=True, timeenc=0, freq='15min'):
+        """
+        Dataset for cryptocurrency price forecasting with PCA components that handles regression
+        instead of binary classification
+
+        Args:
+            root_path: root path of the data file
+            flag: 'train', 'test' or 'val'
+            size: [seq_len, label_len, pred_len]
+            features: 'M', 'MS' or 'S'
+            data_path: data file
+            target: target column (e.g., 'close')
+            scale: whether to scale the data
+            timeenc: time encoding method
+            freq: time frequency
+        """
+        # size is: [96, 1, 1] by default for crypto
+        if size == None:
+            self.seq_len = 96  # 24 hours (96 * 15 min)
+            self.label_len = 48
+            self.pred_len = 1  # Predict 1 step ahead
+        else:
+            self.seq_len = size[0]
+            self.label_len = size[1]
+            self.pred_len = size[2]
+
+        assert flag in ['train', 'test', 'val']
+
+        # Store parameters
+        self.features = features
+        self.target = target
+        self.scale = scale
+        self.timeenc = timeenc
+        self.freq = freq
+
+        self.root_path = root_path
+        self.data_path = data_path
+        self.flag = flag
+
+        # Only print detailed information for the training dataset to avoid redundancy
+        self.is_train = (flag == 'train')
+
+        self.__read_data__()
+
+        # Print summary for training dataset only
+        if self.is_train:
+            self.__print_summary__()
+
+    def __read_data__(self):
+        self.scaler = StandardScaler()
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
+
+        # Store dataset properties for summary
+        self.total_rows = len(df_raw)
+        self.has_split_column = 'split' in df_raw.columns
+
+        # Process data splits
+        if self.has_split_column:
+            # Use the split column to filter data
+            train_data = df_raw[df_raw['split'] == 'train']
+            val_data = df_raw[df_raw['split'] == 'val']
+            test_data = df_raw[df_raw['split'] == 'test']
+
+            # Store split information
+            self.split_info = {
+                'train': len(train_data),
+                'val': len(val_data),
+                'test': len(test_data)
+            }
+
+            # Remove the split column before feature processing
+            train_data = train_data.drop(columns=['split'])
+            val_data = val_data.drop(columns=['split'])
+            test_data = test_data.drop(columns=['split'])
+
+            # Set the appropriate dataset based on flag
+            if self.flag == 'train':
+                active_data = train_data
+            elif self.flag == 'val':
+                active_data = val_data
+            else:  # 'test'
+                active_data = test_data
+
+            # Define borders
+            border1 = 0
+            border2 = len(active_data)
+
+        else:
+            # Original split method from before (percentage-based)
+            # Split data into train, validation, test (70%, 10%, 20%)
+            num_train = int(len(df_raw) * 0.7)
+            num_test = int(len(df_raw) * 0.2)
+            num_vali = len(df_raw) - num_train - num_test
+
+            border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len]
+            border2s = [num_train, num_train + num_vali, len(df_raw)]
+
+            # Map set_type to numeric index for backward compatibility
+            type_map = {'train': 0, 'val': 1, 'test': 2}
+            set_type_idx = type_map[self.flag]
+
+            border1 = border1s[set_type_idx]
+            border2 = border2s[set_type_idx]
+
+            # Set active data
+            active_data = df_raw
+            train_data = df_raw.iloc[:num_train]
+
+        # Store active indices before dropping any columns
+        self.active_indices = active_data.index.tolist()
+
+        # Save timestamps if available
+        if 'date' in df_raw.columns:
+            self.timestamps = df_raw['date'].values
+        else:
+            self.timestamps = None
+
+        # Store original prices for evaluation
+        if self.target in df_raw.columns:
+            self.original_prices = df_raw[self.target].values
+
+        # Process columns similarly to Dataset_Custom
+        '''
+        df_raw.columns: ['date', ...(other features), target feature]
+        '''
+        cols = list(df_raw.columns)
+        cols.remove(self.target)
+        cols.remove('date')
+        df_raw = df_raw[['date'] + cols + [self.target]]
+
+        # Save feature list for summary
+        self.feature_list = cols
+
+        if 'split' in df_raw.columns:
+            df_raw = df_raw.drop(columns=['split'])
+
+        # Extract features based on the specified approach
+        if self.features == 'M' or self.features == 'MS':
+            cols_data = df_raw.columns[1:]
+            df_data = df_raw[cols_data]
+            active_df_data = active_data[cols_data]
+            train_df_data = train_data[cols_data]
+        elif self.features == 'S':
+            df_data = df_raw[[self.target]]
+            active_df_data = active_data[[self.target]]
+            train_df_data = train_data[[self.target]]
+        else:
+            raise ValueError(f"Invalid features argument: {self.features}")
+
+        # Scale the features
+        if self.scale:
+            # Always fit scaler on training data only
+            self.scaler.fit(train_df_data.values)
+            # Store scaling stats
+            self.scaling_stats = {
+                'mean_range': [np.min(self.scaler.mean_), np.max(self.scaler.mean_)],
+                'std_range': [np.min(np.sqrt(self.scaler.var_)), np.max(np.sqrt(self.scaler.var_))]
+            }
+            # Transform all data
+            data = self.scaler.transform(df_data.values)
+        else:
+            data = df_data.values
+
+        # Process timestamps
+        if self.has_split_column:
+            # For the new split method, get timestamps from active dataset
+            df_stamp = active_data[['date']].reset_index(drop=True)
+        else:
+            # For traditional split method, get timestamps from the window
+            df_stamp = df_raw[['date']][border1:border2]
+
+        # Convert to datetime
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+
+        # Create time features
+        if self.timeenc == 0:
+            # Manual time encoding
+            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
+            df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
+            df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
+            data_stamp = df_stamp.drop(['date'], 1).values
+            self.time_encoding = 'manual'
+        elif self.timeenc == 1:
+            # Automatic time features
+            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
+            self.time_encoding = 'auto'
+        else:
+            raise ValueError(f"Invalid timeenc argument: {self.timeenc}")
+
+        # Store processed data
+        if self.has_split_column:
+            # For split based method, extract from the active dataset
+            self.data_x = self.scaler.transform(active_df_data.values)
+            # Get corresponding price values directly (no binary conversion)
+            self.data_y = self.data_x.copy()
+        else:
+            # For traditional split method, use the window
+            self.data_x = data[border1:border2]
+            self.data_y = data[border1:border2]
+
+        self.data_stamp = data_stamp
+
+        # Save metadata about target column for easier access during evaluation
+        self.target_column_index = df_raw.columns.get_loc(self.target) - 1  # Adjusted for removed 'date' column
+
+    def __getitem__(self, index):
+        """Get a single sample (input sequence, target sequence, and time features)"""
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        # Get input sequence
+        seq_x = self.data_x[s_begin:s_end]
+
+        # Get target sequence
+        seq_y = self.data_y[r_begin:r_end]
+
+        # Get timestamp features
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+    def __len__(self):
+        """Return the effective length of the dataset after accounting for sequence windows"""
+        return len(self.data_x) - self.seq_len - self.pred_len + 1
+
+    def inverse_transform(self, data):
+        """Inverse transform scaled data back to original scale"""
+        return self.scaler.inverse_transform(data)
+
+    def __print_summary__(self):
+        """Print a concise summary of the dataset (only called for training dataset)"""
+        print(f"\n{'=' * 20} DATASET SUMMARY {'=' * 20}")
+
+        # Basic dataset info
+        print(f"Dataset: {self.data_path}")
+        print(f"Total rows: {self.total_rows}")
+
+        # Split information
+        if hasattr(self, 'split_info'):
+            print(f"\nSplit distribution:")
+            for split, count in self.split_info.items():
+                print(f"  - {split}: {count} samples ({count / self.total_rows:.2%})")
+
+        # Feature configuration
+        if hasattr(self, 'feature_list'):
+            print(f"\nFeature configuration:")
+            print(f"  - Total features: {len(self.feature_list)}")
+            print(f"  - Target column: {self.target}")
+
+        # Feature scaling info
+        if hasattr(self, 'scaling_stats'):
+            print(f"\nFeature scaling statistics:")
+            print(f"  - Mean range: [{self.scaling_stats['mean_range'][0]:.4f}, {self.scaling_stats['mean_range'][1]:.4f}]")
+            print(f"  - Std range: [{self.scaling_stats['std_range'][0]:.4f}, {self.scaling_stats['std_range'][1]:.4f}]")
+
+        # Model parameters vs. data dimensions
+        print(f"\nModel configuration:")
+        print(f"  - Sequence length: {self.seq_len}")
+        print(f"  - Label length: {self.label_len}")
+        print(f"  - Prediction length: {self.pred_len}")
+        print(f"  - Time encoding: {self.time_encoding} ({self.data_stamp.shape[1]} features)")
+
+        # Effective samples after windowing
+        effective_samples = len(self.data_x) - self.seq_len - self.pred_len + 1
+        print(f"  - Effective samples: {effective_samples}")
+
+
 class Dataset_PEMS(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='S', data_path='ETTh1.csv',
