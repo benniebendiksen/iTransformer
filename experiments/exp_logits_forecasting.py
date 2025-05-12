@@ -1115,6 +1115,9 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         outputs = outputs[:, -self.args.pred_len:, f_dim:]
         batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
+        print(f"outputs: {outputs}")
+        print(f"batch_y: {batch_y}")
+
         # For regression, we care about the target column prediction
         # Get the target column index (assuming it's the last column in MS mode)
         target_idx = -1  # Could be modified if target_column_index is available
@@ -1122,6 +1125,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         # Get the last timestep prediction for the target column
         outputs_last = outputs[:, -1, target_idx:target_idx + 1]
         batch_y_last = batch_y[:, -1, target_idx:target_idx + 1]
+        print(f"outputs_last: {outputs_last}")
+        print(f"batch_y_last: {batch_y_last}")
 
         return outputs_last, batch_y_last, outputs, batch_y
 
