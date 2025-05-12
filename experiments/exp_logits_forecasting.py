@@ -1199,7 +1199,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
-        total_metrics = {'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
+        # total_metrics = {'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
+        total_metrics = {'mse': [], 'mae': [], 'rmse': [], 'direction_accuracy': []}
 
         self.model.eval()
         with torch.no_grad():
@@ -1275,7 +1276,8 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         for epoch in range(self.args.train_epochs):
             iter_count = 0
             train_loss = []
-            train_metrics = {'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
+            # train_metrics = {'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
+            train_metrics = {'mse': [], 'mae': [], 'rmse': [], 'direction_accuracy': []}
 
             self.model.train()
             epoch_time = time.time()
@@ -1371,16 +1373,38 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             vali_metrics = {k: v * 100 for k, v in vali_metrics.items()}  # Convert to percentages
             test_metrics = {k: v * 100 for k, v in test_metrics.items()}  # Convert to percentages
 
+            # print(
+            #     "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f}, Train Acc: {3:.2f}%, P: {4:.2f}%, R: {5:.2f}%, F1: {6:.2f}% | "
+            #     "Vali Loss: {7:.7f}, Vali Acc: {8:.2f}%, P: {9:.2f}%, R: {10:.2f}%, F1: {11:.2f}% | "
+            #     "Test Loss: {12:.7f}, Test Acc: {13:.2f}%, P: {14:.2f}%, R: {15:.2f}%, F1: {16:.2f}%".format(
+            #         epoch + 1, train_steps, train_loss,
+            #         train_metrics['accuracy'], train_metrics['precision'], train_metrics['recall'], train_metrics['f1'],
+            #         vali_loss,
+            #         vali_metrics['accuracy'], vali_metrics['precision'], vali_metrics['recall'], vali_metrics['f1'],
+            #         test_loss,
+            #         test_metrics['accuracy'], test_metrics['precision'], test_metrics['recall'], test_metrics['f1']))
+
+            # print(
+            #     "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f}, Train Acc: {3:.2f}%, P: {4:.2f}%, R: {5:.2f}%, F1: {6:.2f}% | "
+            #     "Vali Loss: {7:.7f}, Vali Acc: {8:.2f}%, P: {9:.2f}%, R: {10:.2f}%, F1: {11:.2f}% | "
+            #     "Test Loss: {12:.7f}, Test Acc: {13:.2f}%, P: {14:.2f}%, R: {15:.2f}%, F1: {16:.2f}%".format(
+            #         epoch + 1, train_steps, train_loss,
+            #         train_metrics['accuracy'], train_metrics['precision'], train_metrics['recall'], train_metrics['f1'],
+            #         vali_loss,
+            #         vali_metrics['accuracy'], vali_metrics['precision'], vali_metrics['recall'], vali_metrics['f1'],
+            #         test_loss,
+            #         test_metrics['accuracy'], test_metrics['precision'], test_metrics['recall'], test_metrics['f1']))
+
             print(
-                "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f}, Train Acc: {3:.2f}%, P: {4:.2f}%, R: {5:.2f}%, F1: {6:.2f}% | "
-                "Vali Loss: {7:.7f}, Vali Acc: {8:.2f}%, P: {9:.2f}%, R: {10:.2f}%, F1: {11:.2f}% | "
-                "Test Loss: {12:.7f}, Test Acc: {13:.2f}%, P: {14:.2f}%, R: {15:.2f}%, F1: {16:.2f}%".format(
+                "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f}, mse: {3:.2f}%, mae: {4:.2f}%, rmse: {5:.2f}%, direction_accuracy: {6:.2f}% | "
+                "Vali Loss: {7:.7f}, mse: {8:.2f}%, mae: {9:.2f}%, rmse: {10:.2f}%, direction_accuracy: {11:.2f}% | "
+                "Test Loss: {12:.7f}, mse: {13:.2f}%, mae: {14:.2f}%, rmse: {15:.2f}%, direction_accuracy: {16:.2f}%".format(
                     epoch + 1, train_steps, train_loss,
-                    train_metrics['accuracy'], train_metrics['precision'], train_metrics['recall'], train_metrics['f1'],
+                    train_metrics['mse'], train_metrics['mae'], train_metrics['rmse'], train_metrics['direction_accuracy'],
                     vali_loss,
-                    vali_metrics['accuracy'], vali_metrics['precision'], vali_metrics['recall'], vali_metrics['f1'],
+                    vali_metrics['mse'], vali_metrics['mae'], vali_metrics['rmse'], vali_metrics['direction_accuracy'],
                     test_loss,
-                    test_metrics['accuracy'], test_metrics['precision'], test_metrics['recall'], test_metrics['f1']))
+                    test_metrics['mse'], test_metrics['mae'], test_metrics['rmse'], test_metrics['direction_accuracy']))
 
             # Pass both validation loss and training loss to early stopping
             # early_stopping(vali_loss, self.model, path, train_loss)
