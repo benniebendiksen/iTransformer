@@ -1115,18 +1115,22 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
         outputs = outputs[:, -self.args.pred_len:, f_dim:]
         batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
-        print(f"outputs: {outputs}")
-        print(f"batch_y: {batch_y}")
 
         # For regression, we care about the target column prediction
         # Get the target column index (assuming it's the last column in MS mode)
         target_idx = -1  # Could be modified if target_column_index is available
 
         # Get the last timestep prediction for the target column
-        outputs_last = outputs[:, -1, target_idx:target_idx + 1]
-        batch_y_last = batch_y[:, -1, target_idx:target_idx + 1]
-        print(f"outputs_last: {outputs_last}")
-        print(f"batch_y_last: {batch_y_last}")
+        # Change this line to properly access the last element
+        outputs_last = outputs[:, -1:, target_idx].unsqueeze(-1)  # Add dim back with unsqueeze
+        batch_y_last = batch_y[:, -1:, target_idx].unsqueeze(-1)  # Add dim back with unsqueeze
+
+        # OR alternatively, you can simply do:
+        # outputs_last = outputs[:, -1:, :]  # This keeps the last timestep with all features
+        # batch_y_last = batch_y[:, -1:, :]  # This keeps the last timestep with all features
+
+        # print(f"outputs_last: {outputs_last}")
+        # print(f"batch_y_last: {batch_y_last}")
 
         return outputs_last, batch_y_last, outputs, batch_y
 
@@ -1175,6 +1179,33 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
     #         'f1': f1
     #     }
 
+    # def _calculate_metrics(self, outputs, targets):
+    #     """Calculate metrics for regression predictions"""
+    #     with torch.no_grad():
+    #         # Calculate MSE
+    #         mse = torch.mean((outputs - targets) ** 2)
+    #
+    #         # Calculate MAE
+    #         mae = torch.mean(torch.abs(outputs - targets))
+    #
+    #         # Calculate RMSE
+    #         rmse = torch.sqrt(mse)
+    #
+    #         # Calculate direction accuracy
+    #         # For price prediction, we're often interested in directional accuracy
+    #         # This checks if the predicted direction of change matches the true direction
+    #         pred_direction = torch.sign(outputs - targets.roll(1, dims=0))
+    #         true_direction = torch.sign(targets - targets.roll(1, dims=0))
+    #         direction_match = (pred_direction == true_direction).float()
+    #         direction_accuracy = torch.mean(direction_match)
+    #
+    #     return {
+    #         'mse': mse.item(),
+    #         'mae': mae.item(),
+    #         'rmse': rmse.item(),
+    #         'direction_accuracy': direction_accuracy.item()
+    #     }
+
     def _calculate_metrics(self, outputs, targets):
         """Calculate metrics for regression predictions"""
         with torch.no_grad():
@@ -1188,12 +1219,35 @@ class Exp_Logits_Forecast(Exp_Long_Term_Forecast):
             rmse = torch.sqrt(mse)
 
             # Calculate direction accuracy
-            # For price prediction, we're often interested in directional accuracy
-            # This checks if the predicted direction of change matches the true direction
-            pred_direction = torch.sign(outputs - targets.roll(1, dims=0))
-            true_direction = torch.sign(targets - targets.roll(1, dims=0))
-            direction_match = (pred_direction == true_direction).float()
-            direction_accuracy = torch.mean(direction_match)
+            # This is for the current batch only - you need sequential data
+            # Check if the model predicts the correct direction of change
+            batch_size = outputs.shape[0]
+
+            # Skip direction accuracy if batch size is too small
+            if batch_size <= 1:
+                direction_accuracy = torch.tensor(0.0)
+            else:
+                # Compare the direction of change predicted by the model vs actual
+                # First get the direction of predicted and true values
+                outputs_flat = outputs.view(-1)
+                targets_flat = targets.view(-1)
+
+                # Calculate directions (up or down) - using consecutive samples
+                pred_directions = []
+                true_directions = []
+
+                for i in range(1, batch_size):
+                    pred_dir = torch.sign(outputs_flat[i] - outputs_flat[i - 1])
+                    true_dir = torch.sign(targets_flat[i] - targets_flat[i - 1])
+                    pred_directions.append(pred_dir)
+                    true_directions.append(true_dir)
+
+                pred_directions = torch.stack(pred_directions)
+                true_directions = torch.stack(true_directions)
+
+                # Calculate matches and accuracy
+                direction_matches = (pred_directions == true_directions).float()
+                direction_accuracy = torch.mean(direction_matches)
 
         return {
             'mse': mse.item(),
